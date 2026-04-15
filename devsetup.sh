@@ -1,0 +1,1 @@
+npm install @bufbuild/buf

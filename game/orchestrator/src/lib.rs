@@ -1,8 +1,3 @@
 pub mod proto {
     include!("proto/game/game.rs");
 }
-
-mod entity;
-mod client;
-mod set;
-mod game;

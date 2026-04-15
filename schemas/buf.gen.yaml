@@ -1,0 +1,8 @@
+version: v1
+
+plugins:
+  # Rust
+  - plugin: buf.build/community/neoeinstein-prost
+    out: ../game/engine/src/proto
+  - plugin: buf.build/community/neoeinstein-prost
+    out: ../game/orchestrator/src/proto

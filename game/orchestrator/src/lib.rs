@@ -1,3 +1,3 @@
 pub mod proto {
-    include!("proto/game/game.rs");
+    include!("proto/v1/proto.v1.rs");
 }

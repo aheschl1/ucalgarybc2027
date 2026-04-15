@@ -1,4 +1,1 @@
-
-pub struct Game {
-
-}
+pub use crate::proto::{GameState};

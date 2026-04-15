@@ -1,25 +1,43 @@
-use crate::client::Client;
-
 pub enum EntityType {
-    Bot
+    Bot = 0
 }
 
-pub struct Entity {
-    client: Client,
+pub struct ClientEntity {
     id: u32,
+    position: (u32, u32),
     entity_type: EntityType,
+
 }
 
-impl Entity {
-    pub fn new(client: Client, id: u32, entity_type: EntityType) -> Self {
+impl ClientEntity {
+    pub fn new(id: u32, position: (u32, u32), entity_type: EntityType) -> Self {
         Self {
-            client,
             id,
-            entity_type
+            position,
+            entity_type,
         }
     }
 
-    pub fn step(&mut self) {
-        self.client.step_entity(self.id);
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+}
+
+impl From<EntityType> for crate::proto::EntityType {
+    fn from(value: EntityType) -> Self {
+        match value {
+            EntityType::Bot => Self::Bot,
+        }
+    }
+}
+
+impl From<ClientEntity> for crate::proto::Entity {
+    fn from(value: ClientEntity) -> Self {
+        let etype: crate::proto::EntityType = value.entity_type.into();
+        crate::proto::Entity { 
+            id: value.id, 
+            position: Some(value.position.into()), 
+            entity_type: etype.into()
+        }
     }
 }

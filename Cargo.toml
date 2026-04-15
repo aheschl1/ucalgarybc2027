@@ -1,3 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["game/engine", "game/orchestrator"]
+members = ["game/common","game/engine", "game/orchestrator"]

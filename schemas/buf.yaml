@@ -3,7 +3,7 @@ name: ucbc/game/schemas
 
 lint:
   use:
-    - DEFAULT
+    - STANDARD
 
 breaking:
   use:

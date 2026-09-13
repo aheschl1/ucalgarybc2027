@@ -142,9 +142,9 @@ W9 to W13 (Nov 9 to Dec 11): finish M2 scope, integration weeks, bug bash, freez
 
 ## Linear structure
 
-**Team:** one team, `UCBC`.
+**Team:** one team, UCalgary Battlecode, key `UCBC`. Issues are numbered UCBC-n.
 
-**Projects:** the ten workstreams above, each with a lead, a description linking the requirements doc and this document, and a target date at its "Done at" milestone.
+**Projects:** the ten workstreams above, each with a lead, a description linking the requirements doc and this document, and a target date at its "Done at" milestone. Tracking issues are UCBC-1 through UCBC-10 in the order listed below.
 
 **Milestones:** M0 to M5 as project milestones in every project they apply to, with the dates above.
 

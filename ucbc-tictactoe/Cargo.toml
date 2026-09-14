@@ -1,0 +1,15 @@
+[package]
+name = "ucbc-tictactoe"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Tic-tac-toe implementation of the ucbc-engine Game trait, plus Rust reference bots"
+
+[dependencies]
+ucbc-engine = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

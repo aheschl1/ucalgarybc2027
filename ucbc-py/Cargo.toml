@@ -1,0 +1,22 @@
+[package]
+name = "ucbc-py"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "PyO3 extension module `ucbc._engine`"
+
+[lib]
+name = "_engine"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+pyo3 = { workspace = true, features = ["extension-module"] }
+ucbc-engine = { workspace = true, features = ["python"] }
+ucbc-tictactoe = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

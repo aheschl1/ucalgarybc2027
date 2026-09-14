@@ -1,0 +1,20 @@
+[package]
+name = "ucbc-engine"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Game-agnostic match engine: bot registry, tick loop, replay writer"
+
+[features]
+default = []
+# Enables PyBot: Python bots executed in-process via PyO3.
+python = ["dep:pyo3"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+pyo3 = { workspace = true, optional = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "ucbc-cli"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Developer CLI: run Rust-vs-Rust matches and inspect replays (no Python)"
+
+[[bin]]
+name = "ucbc-dev"
+path = "src/main.rs"
+
+[dependencies]
+ucbc-engine = { workspace = true }
+ucbc-tictactoe = { workspace = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+
+[lints]
+workspace = true

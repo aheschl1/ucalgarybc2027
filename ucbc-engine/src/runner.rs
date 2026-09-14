@@ -14,13 +14,12 @@ use crate::step::{StepCtx, StepResult};
 use crate::summary::{Summary, summarize, write_summary};
 
 pub struct MatchSpec {
-    pub match_id: String,
-    pub config: MatchConfig,
-    pub teams: Vec<TeamSpec>,
-    pub replay_path: Option<PathBuf>,
-    pub summary_path: Option<PathBuf>,
-    /// Echo captured bot output to stderr as it happens.
-    pub echo_bot_output: bool,
+    match_id: String,
+    config: MatchConfig,
+    teams: Vec<TeamSpec>,
+    replay_path: Option<PathBuf>,
+    summary_path: Option<PathBuf>,
+    echo_bot_output: bool,
 }
 
 impl MatchSpec {
@@ -33,6 +32,24 @@ impl MatchSpec {
             summary_path: None,
             echo_bot_output: false,
         }
+    }
+
+    /// Write the replay here when the match ends.
+    pub fn replay_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.replay_path = Some(path.into());
+        self
+    }
+
+    /// Write the summary here when the match ends.
+    pub fn summary_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.summary_path = Some(path.into());
+        self
+    }
+
+    /// Echo captured bot output to stderr as it happens.
+    pub fn echo_bot_output(mut self, echo: bool) -> Self {
+        self.echo_bot_output = echo;
+        self
     }
 }
 
@@ -48,7 +65,7 @@ impl MatchReport {
 }
 
 pub struct MatchRunner<'r> {
-    factory: &'r dyn GameFactory,
+    factory: &'r GameFactory,
     match_id: String,
     config: MatchConfig,
     bots: BotRegistry,
@@ -118,7 +135,7 @@ impl<'r> MatchRunner<'r> {
 }
 
 fn run_set(
-    factory: &dyn GameFactory,
+    factory: &GameFactory,
     config: &MatchConfig,
     bots: &mut BotRegistry,
     echo: bool,
@@ -135,7 +152,7 @@ fn run_set(
         seed,
         config.game_config.clone(),
     );
-    let mut game = factory.create(&setup)?;
+    let mut game = factory(&setup)?;
     let initial_state = game.snapshot();
     let mut ticks: Vec<Tick> = Vec::new();
 

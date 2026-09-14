@@ -1,0 +1,682 @@
+{
+  "match_id": "dev",
+  "engine_version": "0.1.0",
+  "config": {
+    "game": "tictactoe",
+    "sets": 3,
+    "seed": 7,
+    "teams": 2,
+    "max_ticks": 1000
+  },
+  "teams": [
+    {
+      "id": 0,
+      "name": "first-empty"
+    },
+    {
+      "id": 1,
+      "name": "random"
+    }
+  ],
+  "sets": [
+    {
+      "index": 0,
+      "first_team": 0,
+      "initial_state": {
+        "cells": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ticks": [
+        {
+          "number": 0,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 0,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 1,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 0,
+                  "row": 1,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              0,
+              0,
+              2,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 2,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 1,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              0,
+              2,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 3,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 1,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              0,
+              2,
+              0,
+              2,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 4,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              1,
+              2,
+              0,
+              2,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "result": {
+        "index": 0,
+        "first_team": 0,
+        "winner_team": 0,
+        "reason": "win",
+        "ticks": 5
+      }
+    },
+    {
+      "index": 1,
+      "first_team": 1,
+      "initial_state": {
+        "cells": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ticks": [
+        {
+          "number": 0,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 2,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "number": 1,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 0,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              2,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "number": 2,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 1,
+                  "row": 1,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              2,
+              0,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "number": 3,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 1,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              2,
+              2,
+              0,
+              0,
+              1,
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "number": 4,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 0,
+                  "row": 2,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              2,
+              2,
+              0,
+              0,
+              1,
+              0,
+              1,
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "number": 5,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              2,
+              2,
+              2,
+              0,
+              1,
+              0,
+              1,
+              0,
+              1
+            ]
+          }
+        }
+      ],
+      "result": {
+        "index": 1,
+        "first_team": 1,
+        "winner_team": 0,
+        "reason": "win",
+        "ticks": 6
+      }
+    },
+    {
+      "index": 2,
+      "first_team": 0,
+      "initial_state": {
+        "cells": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "ticks": [
+        {
+          "number": 0,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 0,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 1,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              0,
+              2,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 2,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 1,
+                  "row": 0,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              2,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 3,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 1,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              2,
+              0,
+              0,
+              2,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 4,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 0,
+                  "row": 1,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              2,
+              1,
+              0,
+              2,
+              0,
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "number": 5,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 1,
+                  "row": 2,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              2,
+              1,
+              0,
+              2,
+              0,
+              2,
+              0
+            ]
+          }
+        },
+        {
+          "number": 6,
+          "steps": [
+            {
+              "bot": 0,
+              "team": 0,
+              "actions": [
+                {
+                  "col": 1,
+                  "row": 1,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              2,
+              1,
+              1,
+              2,
+              0,
+              2,
+              0
+            ]
+          }
+        },
+        {
+          "number": 7,
+          "steps": [
+            {
+              "bot": 1,
+              "team": 1,
+              "actions": [
+                {
+                  "col": 2,
+                  "row": 2,
+                  "type": "place"
+                }
+              ]
+            }
+          ],
+          "state_after": {
+            "cells": [
+              1,
+              1,
+              2,
+              1,
+              1,
+              2,
+              0,
+              2,
+              2
+            ]
+          }
+        }
+      ],
+      "result": {
+        "index": 2,
+        "first_team": 0,
+        "winner_team": 1,
+        "reason": "win",
+        "ticks": 8
+      }
+    }
+  ],
+  "result": {
+    "sets": [
+      {
+        "index": 0,
+        "first_team": 0,
+        "winner_team": 0,
+        "reason": "win",
+        "ticks": 5
+      },
+      {
+        "index": 1,
+        "first_team": 1,
+        "winner_team": 0,
+        "reason": "win",
+        "ticks": 6
+      },
+      {
+        "index": 2,
+        "first_team": 0,
+        "winner_team": 1,
+        "reason": "win",
+        "ticks": 8
+      }
+    ],
+    "set_wins": [
+      2,
+      1
+    ],
+    "winner_team": 0
+  }
+}

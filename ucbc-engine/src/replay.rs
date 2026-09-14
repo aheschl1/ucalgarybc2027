@@ -45,6 +45,16 @@ impl MatchConfig {
             game_config: None,
         }
     }
+
+    pub fn max_ticks(mut self, max_ticks: u32) -> Self {
+        self.max_ticks = max_ticks;
+        self
+    }
+
+    pub fn game_config(mut self, game_config: Value) -> Self {
+        self.game_config = Some(game_config);
+        self
+    }
 }
 
 /// How a set ended.

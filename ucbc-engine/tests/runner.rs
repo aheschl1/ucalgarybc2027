@@ -2,7 +2,7 @@ mod support;
 
 use rand::{RngExt as _, SeedableRng};
 use serde_json::json;
-use support::counting_game::CountingFactory;
+use support::counting_game::CountingGame;
 use support::scripted;
 use ucbc_engine::GameStatus;
 use ucbc_engine::replay::read_replay;
@@ -14,12 +14,16 @@ use ucbc_engine::{
 
 fn registry() -> GameRegistry {
     let mut r = GameRegistry::new();
-    r.register(Box::new(CountingFactory));
+    r.register::<CountingGame>();
     r
 }
 
+fn config(sets: u32, seed: u64) -> MatchConfig {
+    MatchConfig::new("counting", sets, seed, 0)
+}
+
 fn spec(teams: Vec<TeamSpec>, sets: u32, seed: u64) -> MatchSpec {
-    MatchSpec::new("test", MatchConfig::new("counting", sets, seed, 0), teams)
+    MatchSpec::new("test", config(sets, seed), teams)
 }
 
 /// Every bot of the team increments by 1.
@@ -77,8 +81,8 @@ fn teams_own_several_bots_and_the_game_interleaves_them() {
             })
         })
     };
-    let mut s = spec(vec![make_team("a"), make_team("b")], 1, 1);
-    s.config.game_config = Some(json!({"bots_per_team": 2, "target": 4}));
+    let cfg = config(1, 1).game_config(json!({"bots_per_team": 2, "target": 4}));
+    let s = MatchSpec::new("test", cfg, vec![make_team("a"), make_team("b")]);
     let report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
     let set = &report.replay.sets[0];
 
@@ -227,8 +231,8 @@ fn a_failed_bot_is_removed_but_its_team_plays_on() {
             StepResult::ok()
         }
     });
-    let mut s = spec(vec![flaky, plus_one("b")], 1, 1);
-    s.config.game_config = Some(json!({"bots_per_team": 2, "target": 6}));
+    let cfg = config(1, 1).game_config(json!({"bots_per_team": 2, "target": 6}));
+    let s = MatchSpec::new("test", cfg, vec![flaky, plus_one("b")]);
     let report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
     let set = &report.replay.sets[0];
     assert_eq!(
@@ -266,8 +270,7 @@ fn tick_limit_ends_the_set_as_a_draw() {
     let reg = registry();
     let idle = scripted("idle", |_ctx| StepResult::ok());
     let lazy = scripted("lazy", |_ctx| StepResult::ok());
-    let mut s = spec(vec![idle, lazy], 1, 1);
-    s.config.max_ticks = 7;
+    let s = MatchSpec::new("test", config(1, 1).max_ticks(7), vec![idle, lazy]);
     let report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
     let set = &report.replay.sets[0];
     assert_eq!(set.result.reason, Reason::Draw);
@@ -313,27 +316,22 @@ fn seeded_bots_replay_identically() {
 #[test]
 fn config_validation() {
     let reg = registry();
-    let mut s = spec(vec![plus_one("a"), plus_one("b")], 0, 1);
+    let pair = || vec![plus_one("a"), plus_one("b")];
+    let with = |cfg: MatchConfig, teams| MatchRunner::new(&reg, MatchSpec::new("test", cfg, teams));
     assert!(matches!(
-        MatchRunner::new(&reg, s).err(),
+        with(config(0, 1), pair()).err(),
         Some(EngineError::Config(_))
     ));
-    s = spec(vec![plus_one("a"), plus_one("b")], 1, 1);
-    s.config.teams = 3;
     assert!(matches!(
-        MatchRunner::new(&reg, s).err(),
+        with(MatchConfig::new("counting", 1, 1, 3), pair()).err(),
         Some(EngineError::Config(_))
     ));
-    s = spec(vec![plus_one("a"), plus_one("b")], 1, 1);
-    s.config.max_ticks = 0;
     assert!(matches!(
-        MatchRunner::new(&reg, s).err(),
+        with(config(1, 1).max_ticks(0), pair()).err(),
         Some(EngineError::Config(_))
     ));
-    s = spec(vec![plus_one("a")], 1, 1);
-    s.config.game = "chess".into();
     assert!(matches!(
-        MatchRunner::new(&reg, s).err(),
+        with(MatchConfig::new("chess", 1, 1, 0), vec![plus_one("a")]).err(),
         Some(EngineError::UnknownGame(_))
     ));
 }
@@ -345,9 +343,9 @@ fn replay_and_summary_files_round_trip() {
     std::fs::create_dir_all(&dir).unwrap();
     let replay_path = dir.join("replay.json");
     let summary_path = dir.join("summary.json");
-    let mut s = spec(vec![plus_one("a"), plus_one("b")], 2, 5);
-    s.replay_path = Some(replay_path.clone());
-    s.summary_path = Some(summary_path.clone());
+    let s = spec(vec![plus_one("a"), plus_one("b")], 2, 5)
+        .replay_path(&replay_path)
+        .summary_path(&summary_path);
     let report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
 
     let read_back = read_replay(&replay_path).unwrap();

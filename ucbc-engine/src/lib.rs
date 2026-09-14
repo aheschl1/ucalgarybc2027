@@ -15,7 +15,7 @@ pub mod summary;
 
 pub use bot::{Bot, SpawnCtx, TeamKind, TeamSpec, registry::BotRegistry};
 pub use error::{ActionError, BotFailure, DecodeError, EngineError, QueryError};
-pub use game::{Game, GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
+pub use game::{DynGame, Game, GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
 pub use ids::{BotId, BotRef, TeamId, TeamInfo};
 pub use replay::{MatchConfig, MatchResult, Reason, Replay, SetReplay, SetResult, Step, Tick};
 pub use runner::{MatchReport, MatchRunner, MatchSpec};

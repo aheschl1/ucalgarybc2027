@@ -9,8 +9,7 @@ pub fn kind(payload: &Value) -> Option<&str> {
     payload.get("type").and_then(Value::as_str)
 }
 
-/// Deserialize a tagged payload into a `#[serde(tag = "type")]` enum. `?` converts the
-/// error into `ActionError` or `QueryError`.
+/// Deserialize a tagged payload into a `#[serde(tag = "type")]` enum.
 pub fn decode<T: DeserializeOwned>(payload: &Value) -> Result<T, DecodeError> {
     let Some(kind) = kind(payload) else {
         return Err(DecodeError::Malformed("missing `type` field".into()));

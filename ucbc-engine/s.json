@@ -1,0 +1,45 @@
+{
+  "match_id": "dev",
+  "engine_version": "0.1.0",
+  "game": "tictactoe",
+  "created_at_unix_ms": 1789395345062,
+  "teams": [
+    {
+      "id": 0,
+      "name": "first-empty"
+    },
+    {
+      "id": 1,
+      "name": "random"
+    }
+  ],
+  "sets": [
+    {
+      "index": 0,
+      "first_team": 0,
+      "winner_team": 0,
+      "reason": "win",
+      "ticks": 5
+    },
+    {
+      "index": 1,
+      "first_team": 1,
+      "winner_team": 0,
+      "reason": "win",
+      "ticks": 6
+    },
+    {
+      "index": 2,
+      "first_team": 0,
+      "winner_team": 1,
+      "reason": "win",
+      "ticks": 8
+    }
+  ],
+  "set_wins": [
+    2,
+    1
+  ],
+  "winner_team": 0,
+  "replay_path": "r.json"
+}

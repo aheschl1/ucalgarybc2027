@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::error::{ActionError, BotFailure, QueryError};
-use crate::game::{Game, GameStatus};
+use crate::game::{DynGame, GameStatus};
 use crate::ids::{BotRef, TeamInfo};
 
 /// A bot's handle on the game during its own step.
@@ -12,7 +12,7 @@ pub struct StepCtx<'a> {
     pub tick: u32,
     /// Per bot, per set; stable for a given match seed.
     pub seed: u64,
-    game: &'a mut dyn Game,
+    game: &'a mut dyn DynGame,
     accepted: &'a mut Vec<Value>,
 }
 
@@ -23,7 +23,7 @@ impl<'a> StepCtx<'a> {
         set_index: u32,
         tick: u32,
         seed: u64,
-        game: &'a mut dyn Game,
+        game: &'a mut dyn DynGame,
         accepted: &'a mut Vec<Value>,
     ) -> Self {
         Self {

@@ -1,1 +1,140 @@
-fn main() {}
+//! Developer CLI: Rust-vs-Rust tic-tac-toe matches and replay inspection, no Python.
+
+mod bots;
+
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use clap::{Parser, Subcommand};
+use ucbc_engine::replay::read_replay;
+use ucbc_engine::{
+    Game, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Replay, SetReplay, TeamId, TeamInfo,
+};
+use ucbc_tictactoe::{Board, TicTacToe};
+
+#[derive(Parser)]
+#[command(name = "ucbc-dev", about = "Run and inspect matches without Python")]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Play two built-in Rust bots against each other.
+    Run {
+        /// Bot kind for team a.
+        #[arg(long, default_value = "first-empty", value_parser = bots::KINDS)]
+        a: String,
+        /// Bot kind for team b.
+        #[arg(long, default_value = "random", value_parser = bots::KINDS)]
+        b: String,
+        #[arg(long, default_value_t = 3)]
+        sets: u32,
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+        #[arg(long)]
+        replay: Option<PathBuf>,
+        #[arg(long)]
+        summary: Option<PathBuf>,
+    },
+    /// Print the sets and final boards of a replay file.
+    Inspect { replay: PathBuf },
+}
+
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+    match cli.command {
+        Command::Run {
+            a,
+            b,
+            sets,
+            seed,
+            replay,
+            summary,
+        } => {
+            let mut registry = GameRegistry::new();
+            registry.register::<TicTacToe>();
+
+            let teams = vec![
+                bots::team(&a, &a).expect("validated by clap"),
+                bots::team(&b, &b).expect("validated by clap"),
+            ];
+            let mut spec = MatchSpec::new(
+                "dev",
+                MatchConfig::new(TicTacToe::NAME, sets, seed, 2),
+                teams,
+            );
+            if let Some(path) = replay {
+                spec = spec.replay_path(path);
+            }
+            if let Some(path) = summary {
+                spec = spec.summary_path(path);
+            }
+            let report = MatchRunner::new(&registry, spec)?.run()?;
+            print_replay(&report.replay);
+            Ok(())
+        }
+        Command::Inspect { replay } => {
+            let replay = read_replay(&replay)?;
+            println!(
+                "match {} (engine {})",
+                replay.match_id, replay.engine_version
+            );
+            print_replay(&replay);
+            Ok(())
+        }
+    }
+}
+
+fn print_replay(replay: &Replay) {
+    let name = |team: TeamId| replay.teams[team.0 as usize].name.as_str();
+    for set in &replay.sets {
+        print_set(set, &replay.teams);
+    }
+    let scores: Vec<String> = replay
+        .result
+        .set_wins
+        .iter()
+        .enumerate()
+        .map(|(i, w)| format!("{} {w}", replay.teams[i].name))
+        .collect();
+    match replay.result.winner_team {
+        Some(t) => println!("Result: {} wins ({})", name(t), scores.join(", ")),
+        None => println!("Result: tie ({})", scores.join(", ")),
+    }
+}
+
+fn print_set(set: &SetReplay, teams: &[TeamInfo]) {
+    let r = &set.result;
+    let verdict = match r.winner_team {
+        Some(t) => format!("{} wins by {}", teams[t.0 as usize].name, r.reason),
+        None => "draw".to_string(),
+    };
+    let detail = if r.detail.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", r.detail)
+    };
+    println!(
+        "Set {}: {verdict} after {} ticks{detail}",
+        set.index + 1,
+        r.ticks
+    );
+    if let Some(last) = set.ticks.last()
+        && let Ok(board) = serde_json::from_value::<Board>(last.state_after.clone())
+    {
+        for line in board.render().lines() {
+            println!("  {line}");
+        }
+    }
+}

@@ -1,65 +1,90 @@
-//! The two C functions a bot's interpreter calls to reach the engine, and the token
-//! that gates them.
+//! The bot thread's end of the channel to the runner, the C functions a bot's
+//! interpreter calls to reach it, and the token that gates them.
 
 #![allow(unsafe_code)]
 
+use std::cell::RefCell;
 use std::ffi::{CStr, c_char, c_void};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, Sender};
 
 use pyo3::ffi;
 use serde_json::{Value, json};
 use ucbc_engine::ActionError;
 
-use super::{FromBot, Link, ToBot};
+use super::{FromBot, ToBot};
 
 /// The one way to reach the game during a step. Not `Clone`: the runner creates one
-/// per step, the bot thread holds it while the bot runs, and it goes back with `Done`.
+/// per step, the bridge holds it while the bot runs, and it goes back with `Done`.
 /// Outside a step no token exists, so nothing the bot stashed can reach the engine.
 pub(super) struct StepToken {
-    link: Arc<Link>,
     pub(super) set_index: u32,
     pub(super) tick: u32,
 }
 
 impl StepToken {
-    pub(super) fn new(link: Arc<Link>, set_index: u32, tick: u32) -> Self {
+    pub(super) fn new(set_index: u32, tick: u32) -> Self {
+        Self { set_index, tick }
+    }
+}
+
+/// The bot thread's channel pair.
+pub(super) struct Link {
+    to_runner: Sender<FromBot>,
+    from_runner: Receiver<ToBot>,
+}
+
+impl Link {
+    pub(super) fn new(to_runner: Sender<FromBot>, from_runner: Receiver<ToBot>) -> Self {
         Self {
-            link,
-            set_index,
-            tick,
+            to_runner,
+            from_runner,
         }
     }
 }
 
-/// Per-bot state behind the bridge functions. Lives as long as the interpreter.
-#[derive(Default)]
+/// Per-bot state behind the bridge functions. Owned by the bot thread; the C
+/// functions reach it through a capsule. Round trips hold the interpreter's GIL,
+/// which is fine because stepping is serial.
 pub(super) struct Bridge {
-    token: Mutex<Option<StepToken>>,
+    link: Link,
+    token: RefCell<Option<StepToken>>,
 }
 
 impl Bridge {
+    pub(super) fn new(link: Link) -> Self {
+        Self {
+            link,
+            token: RefCell::new(None),
+        }
+    }
+
+    pub(super) fn send(&self, msg: FromBot) -> bool {
+        self.link.to_runner.send(msg).is_ok()
+    }
+
+    pub(super) fn recv(&self) -> Option<ToBot> {
+        self.link.from_runner.recv().ok()
+    }
+
     pub(super) fn begin_step(&self, token: StepToken) {
-        *self.token.lock().expect("token lock") = Some(token);
+        *self.token.borrow_mut() = Some(token);
     }
 
     pub(super) fn end_step(&self) -> Option<StepToken> {
-        self.token.lock().expect("token lock").take()
+        self.token.borrow_mut().take()
     }
 
     /// One round trip to the runner, as the JSON reply the Python side expects:
     /// `{"ok": value}` or `{"err": {"kind", "message"}}`.
     fn exchange(&self, msg: FromBot) -> Result<String, &'static str> {
-        let guard = self.token.lock().expect("token lock");
-        let token = guard
-            .as_ref()
-            .ok_or("no step in progress for this handle")?;
-        let reply = (|| {
-            let receiver = token.link.from_runner.lock().ok()?;
-            token.link.to_runner.send(msg).ok()?;
-            receiver.recv().ok()
-        })()
-        .ok_or("engine link closed")?;
-        let reply = match reply {
+        let token = self.token.try_borrow().map_err(|_| "handle is busy")?;
+        if token.is_none() {
+            return Err("no step in progress for this handle");
+        }
+        if !self.send(msg) {
+            return Err("engine link closed");
+        }
+        let reply = match self.recv().ok_or("engine link closed")? {
             ToBot::QueryReply(Ok(v)) | ToBot::ActReply(Ok(v)) => json!({ "ok": v }),
             ToBot::QueryReply(Err(e)) => error("query", e.to_string()),
             ToBot::ActReply(Err(e @ ActionError::SetOver)) => error("set_over", e.to_string()),
@@ -81,57 +106,52 @@ struct MethodDef(ffi::PyMethodDef);
 
 unsafe impl Sync for MethodDef {}
 
-static QUERY_DEF: MethodDef = MethodDef(ffi::PyMethodDef {
-    ml_name: c"query".as_ptr(),
-    ml_meth: ffi::PyMethodDefPointer { PyCFunction: query },
-    ml_flags: ffi::METH_O,
-    ml_doc: std::ptr::null(),
-});
+const fn method(name: &'static CStr, f: ffi::PyCFunction) -> MethodDef {
+    MethodDef(ffi::PyMethodDef {
+        ml_name: name.as_ptr(),
+        ml_meth: ffi::PyMethodDefPointer { PyCFunction: f },
+        ml_flags: ffi::METH_O,
+        ml_doc: std::ptr::null(),
+    })
+}
 
-static ACT_DEF: MethodDef = MethodDef(ffi::PyMethodDef {
-    ml_name: c"act".as_ptr(),
-    ml_meth: ffi::PyMethodDefPointer { PyCFunction: act },
-    ml_flags: ffi::METH_O,
-    ml_doc: std::ptr::null(),
-});
+/// Every function the bot's interpreter gets, by the name Python sees.
+static TABLE: [MethodDef; 2] = [method(c"query", query), method(c"act", act)];
 
-/// Builtin `query` and `act` functions bound to `bridge`. Must be called with the
-/// bot's interpreter attached. Returns new references.
+/// A dict of the bridge functions bound to `bridge`. Must be called with the bot's
+/// interpreter attached. Returns a new reference.
 ///
 /// # Safety
 /// `bridge` must outlive the interpreter the functions are installed in.
-pub(super) unsafe fn functions(
-    bridge: &Bridge,
-) -> Result<(*mut ffi::PyObject, *mut ffi::PyObject), ()> {
-    let capsule = unsafe {
-        ffi::PyCapsule_New(
+pub(super) unsafe fn functions(bridge: &Bridge) -> Result<*mut ffi::PyObject, ()> {
+    unsafe {
+        let capsule = ffi::PyCapsule_New(
             bridge as *const Bridge as *mut c_void,
             CAPSULE_NAME.as_ptr(),
             None,
-        )
-    };
-    if capsule.is_null() {
-        return Err(());
+        );
+        if capsule.is_null() {
+            return Err(());
+        }
+        let dict = ffi::PyDict_New();
+        let mut ok = !dict.is_null();
+        for def in &TABLE {
+            if !ok {
+                break;
+            }
+            let f =
+                ffi::PyCFunction_NewEx(&def.0 as *const _ as *mut _, capsule, std::ptr::null_mut());
+            ok = !f.is_null() && ffi::PyDict_SetItemString(dict, def.0.ml_name, f) == 0;
+            ffi::Py_DecRef(f);
+        }
+        ffi::Py_DecRef(capsule);
+        if ok {
+            Ok(dict)
+        } else {
+            ffi::Py_DecRef(dict);
+            Err(())
+        }
     }
-    let query = unsafe {
-        ffi::PyCFunction_NewEx(
-            &QUERY_DEF.0 as *const _ as *mut _,
-            capsule,
-            std::ptr::null_mut(),
-        )
-    };
-    let act = unsafe {
-        ffi::PyCFunction_NewEx(
-            &ACT_DEF.0 as *const _ as *mut _,
-            capsule,
-            std::ptr::null_mut(),
-        )
-    };
-    unsafe { ffi::Py_DecRef(capsule) };
-    if query.is_null() || act.is_null() {
-        return Err(());
-    }
-    Ok((query, act))
 }
 
 unsafe extern "C" fn query(slf: *mut ffi::PyObject, arg: *mut ffi::PyObject) -> *mut ffi::PyObject {

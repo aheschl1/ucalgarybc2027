@@ -58,7 +58,7 @@ fn run_match(
     let teams = names
         .into_iter()
         .zip(bot_dirs)
-        .map(|(name, dir)| match PyTeam::compile(py, &dir, game) {
+        .map(|(name, dir)| match PyTeam::read(&dir, game) {
             Ok(team) => {
                 let team = Arc::new(team);
                 TeamSpec::new(name, Box::new(move |ctx| team.spawn(ctx)))

@@ -164,8 +164,8 @@ Lifecycle of a bot thread:
 
 ```text
 Interp::create()           PyGILState_Ensure -> Py_NewInterpreterFromConfig -> swap back -> Release
-attached(load)             import ucbc._bootstrap; _b.load(SOURCE, PATH, IDENTITY, QUERY, ACT)
-loop recv Step             attached(run_step)
+attached(load)             import ucbc._bootstrap; _b.load(SOURCE, PATH, IDENTITY, BRIDGE)
+loop recv Step             attached(_b.run_step(SET_INDEX, TICK))
 Shutdown                   Interp::destroy() -> Py_EndInterpreter
 ```
 
@@ -176,7 +176,7 @@ PyInterpreterConfig {
     use_main_obmalloc: 0,
     allow_fork: 0,
     allow_exec: 0,
-    allow_threads: 1,
+    allow_threads: 0,
     allow_daemon_threads: 0,
     check_multi_interp_extensions: 1,
     gil: PyInterpreterConfig_OWN_GIL,
@@ -200,13 +200,15 @@ At most one token exists in the process at a time.
 ## Inside the interpreter
 
 ```text
-ucbc/_bootstrap.py   load(source, path, identity, query, act) -> json
+ucbc/_bootstrap.py   load(source, path, identity, bridge) -> failure json | null
                      run_step(set_index, tick) -> json {"stdout", "error"}
-ucbc/_raw.py         RawHandle(query, act, bot_id, team, team_name, seed, game)
-ucbc/handle.py       Handle(raw): _query(dict) -> dict, _act(dict) -> dict
+ucbc/handle.py       Identity(bot_id, team, team_name, seed, game)
+                     Handle(identity, bridge): _query(dict) -> dict, _act(dict) -> dict
                      QueryError, ActionError, SetOver
 ucbc/games/<g>.py    class <G>Handle(Handle); HANDLE = <G>Handle
 ```
+
+`bridge` is a dict `{"query": fn, "act": fn}` of C functions bound to the bot's `Bridge`.
 
 Bridge reply format:
 

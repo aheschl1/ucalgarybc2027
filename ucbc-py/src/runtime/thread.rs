@@ -4,35 +4,14 @@
 
 #![allow(unsafe_code)]
 
-use std::ffi::CString;
 use std::sync::Arc;
 
 use serde::Deserialize;
-use serde_json::json;
-use ucbc_engine::{BotFailure, BotRef, SpawnCtx, StepResult};
+use ucbc_engine::{BotFailure, StepResult};
 
-use super::bridge::{self, Bridge};
+use super::bridge::{self, Bridge, Link};
 use super::ffi::{Globals, Interp};
-use super::{FromBot, Link, PyTeam, ToBot};
-
-/// Everything the thread needs, copied out of the spawn context.
-pub(super) struct BotSpawn {
-    bot: BotRef,
-    team_name: String,
-    seed: u64,
-    team: Arc<PyTeam>,
-}
-
-impl BotSpawn {
-    pub(super) fn new(ctx: &SpawnCtx, team: Arc<PyTeam>) -> Self {
-        Self {
-            bot: ctx.bot,
-            team_name: ctx.team.name.clone(),
-            seed: ctx.seed,
-            team,
-        }
-    }
-}
+use super::{FromBot, PyTeam, ToBot};
 
 #[derive(Deserialize)]
 struct Failure {
@@ -48,98 +27,82 @@ impl From<Failure> for BotFailure {
 }
 
 #[derive(Deserialize)]
-struct LoadReply {
-    error: Option<Failure>,
-}
-
-#[derive(Deserialize)]
 struct StepReply {
     stdout: String,
     error: Option<Failure>,
 }
 
-pub(super) fn run(spawn: BotSpawn, link: Arc<Link>) {
-    let bridge = Box::new(Bridge::default());
+pub(super) fn run(identity: String, team: Arc<PyTeam>, link: Link) {
+    let bridge = Bridge::new(link);
     let mut interp = match Interp::create() {
         Ok(interp) => interp,
         Err(msg) => {
-            let _ = link
-                .to_runner
-                .send(FromBot::Loaded(Err(BotFailure::Crash(msg.into()))));
+            bridge.send(FromBot::Loaded(Err(BotFailure::Crash(msg.into()))));
             return;
         }
     };
 
-    let loaded = interp.attached(|| load(&spawn, &bridge));
+    let loaded = interp.attached(|| load(&identity, &team, &bridge));
     let outcome = loaded.as_ref().map(|_| ()).map_err(Clone::clone);
-    if link.to_runner.send(FromBot::Loaded(outcome)).is_err() || loaded.is_err() {
+    let Ok(globals) = loaded else {
+        bridge.send(FromBot::Loaded(outcome));
         interp.destroy();
         return;
-    }
-
-    while let Some(ToBot::Step(token)) = link.recv() {
-        let (set_index, tick) = (token.set_index, token.tick);
-        bridge.begin_step(token);
-        let result = interp.attached(|| run_step(set_index, tick));
-        let token = bridge.end_step().expect("token was slotted in above");
-        if link.to_runner.send(FromBot::Done(result, token)).is_err() {
-            break;
+    };
+    if bridge.send(FromBot::Loaded(outcome)) {
+        while let Some(ToBot::Step(token)) = bridge.recv() {
+            let (set_index, tick) = (token.set_index, token.tick);
+            bridge.begin_step(token);
+            let result = interp.attached(|| run_step(&globals, set_index, tick));
+            let token = bridge.end_step().expect("token was slotted in above");
+            if !bridge.send(FromBot::Done(result, token)) {
+                break;
+            }
         }
     }
+    interp.attached(|| drop(globals));
     interp.destroy();
-    drop(bridge);
 }
 
-/// Runs `ucbc._bootstrap.load` in the interpreter.
-fn load(spawn: &BotSpawn, bridge: &Bridge) -> Result<(), BotFailure> {
-    let identity = json!({
-        "bot_id": spawn.bot.id.0,
-        "team": spawn.bot.team.0,
-        "team_name": spawn.team_name,
-        "seed": spawn.seed,
-        "game": spawn.team.game,
-    })
-    .to_string();
-    let (query, act) = unsafe { bridge::functions(bridge) }
+/// Imports the bootstrap and runs `load` in the interpreter. The returned globals
+/// hold the bootstrap module for the steps.
+fn load(identity: &str, team: &PyTeam, bridge: &Bridge) -> Result<Globals, BotFailure> {
+    let crash = |what: &str, e: String| BotFailure::Crash(format!("bootstrap {what}: {e}"));
+    let functions = unsafe { bridge::functions(bridge) }
         .map_err(|()| BotFailure::Crash("could not create bridge functions".into()))?;
     let globals = Globals::new().ok_or_else(|| BotFailure::Crash("no globals".into()))?;
-    globals.set_str("SOURCE", &spawn.team.source);
-    globals.set_str("PATH", &spawn.team.path.to_string_lossy());
-    globals.set_str("IDENTITY", &identity);
-    globals.set_obj("QUERY", query);
-    globals.set_obj("ACT", act);
+    globals.set_str("SOURCE", &team.source);
+    globals.set_str("PATH", &team.path.to_string_lossy());
+    globals.set_str("IDENTITY", identity);
+    globals.set_obj("BRIDGE", functions);
     globals
         .run(c"import ucbc._bootstrap as _b")
-        .map_err(|e| BotFailure::Crash(format!("bootstrap import failed: {e}")))?;
+        .map_err(|e| crash("import failed", e))?;
     let reply = globals
-        .eval(c"_b.load(SOURCE, PATH, IDENTITY, QUERY, ACT)")
-        .map_err(|e| BotFailure::Crash(format!("bootstrap load failed: {e}")))?;
-    let reply: LoadReply = serde_json::from_str(&reply)
-        .map_err(|e| BotFailure::Crash(format!("bad load reply: {e}")))?;
-    match reply.error {
+        .eval(c"_b.load(SOURCE, PATH, IDENTITY, BRIDGE)")
+        .map_err(|e| crash("load failed", e))?;
+    let failure: Option<Failure> =
+        serde_json::from_str(&reply).map_err(|e| crash("bad load reply", e.to_string()))?;
+    match failure {
         Some(f) => Err(f.into()),
-        None => Ok(()),
+        None => Ok(globals),
     }
 }
 
-/// Runs `ucbc._bootstrap.run_step` in the interpreter.
-fn run_step(set_index: u32, tick: u32) -> StepResult {
-    let Some(globals) = Globals::new() else {
-        return StepResult::failed(BotFailure::Crash("no globals".into()));
+/// Runs `run_step` in the interpreter.
+fn run_step(globals: &Globals, set_index: u32, tick: u32) -> StepResult {
+    let crash = |what: &str, e: String| {
+        StepResult::failed(BotFailure::Crash(format!("bootstrap {what}: {e}")))
     };
-    let code = CString::new(format!(
-        "__import__('ucbc._bootstrap')._bootstrap.run_step({set_index}, {tick})"
-    ))
-    .expect("no NUL");
-    let reply = match globals.eval(&code) {
+    globals.set_int("SET_INDEX", set_index);
+    globals.set_int("TICK", tick);
+    let reply = match globals.eval(c"_b.run_step(SET_INDEX, TICK)") {
         Ok(reply) => reply,
-        Err(e) => {
-            return StepResult::failed(BotFailure::Crash(format!("bootstrap step failed: {e}")));
-        }
+        Err(e) => return crash("step failed", e),
     };
     let reply: StepReply = match serde_json::from_str(&reply) {
         Ok(r) => r,
-        Err(e) => return StepResult::failed(BotFailure::Crash(format!("bad step reply: {e}"))),
+        Err(e) => return crash("bad step reply", e.to_string()),
     };
     match reply.error {
         Some(f) => StepResult::failed(f.into()).with_stdout(reply.stdout),

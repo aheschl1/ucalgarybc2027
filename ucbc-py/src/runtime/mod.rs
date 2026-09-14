@@ -4,22 +4,20 @@
 //! `Step`, services the bot's queries and actions over a channel while the bot
 //! runs Python, and returns when the bot reports `Done`.
 //!
-//! The runner thread only ever attaches to the main interpreter, and only while no
-//! bot is mid-step. A bot thread attaches to its own interpreter only while loading
-//! or stepping, and to the main interpreter only to create and destroy its own.
+//! The runner thread never attaches to any interpreter. A bot thread attaches to
+//! its own interpreter only while loading or stepping, and to the main interpreter
+//! only to create and destroy its own.
 
 mod bridge;
 mod ffi;
 mod thread;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
-use pyo3::prelude::*;
-use pyo3::types::PyModule;
-use serde_json::Value;
+use serde_json::{Value, json};
 use ucbc_engine::{ActionError, Bot, BotFailure, QueryError, SpawnCtx, StepCtx, StepResult};
 
 use bridge::StepToken;
@@ -39,19 +37,7 @@ enum FromBot {
     Done(StepResult, StepToken),
 }
 
-/// The bot thread's end of the channel pair, shared with its bridge.
-struct Link {
-    to_runner: Sender<FromBot>,
-    from_runner: Mutex<Receiver<ToBot>>,
-}
-
-impl Link {
-    fn recv(&self) -> Option<ToBot> {
-        self.from_runner.lock().ok()?.recv().ok()
-    }
-}
-
-/// A Python team: `main.py` checked once, executed afresh in every bot's interpreter.
+/// A Python team: `main.py` read once, executed afresh in every bot's interpreter.
 pub struct PyTeam {
     path: PathBuf,
     source: String,
@@ -59,20 +45,11 @@ pub struct PyTeam {
 }
 
 impl PyTeam {
-    /// Reads `dir/main.py` and checks that it compiles. Must run attached to the
-    /// main interpreter; a failure is the team's load error.
-    pub fn compile(py: Python<'_>, dir: &Path, game: &str) -> Result<Self, BotFailure> {
+    pub fn read(dir: &Path, game: &str) -> Result<Self, BotFailure> {
         let path = dir.join("main.py");
         let source = std::fs::read_to_string(&path).map_err(|e| {
             BotFailure::exception("FileNotFoundError", format!("{}: {e}", path.display()))
         })?;
-        let check = || -> PyResult<()> {
-            PyModule::import(py, "builtins")?
-                .getattr("compile")?
-                .call1((source.as_str(), path.to_string_lossy(), "exec"))?;
-            Ok(())
-        };
-        check().map_err(|e| failure_from(py, &e))?;
         Ok(Self {
             path,
             source,
@@ -87,7 +64,6 @@ impl PyTeam {
 }
 
 pub struct PyBot {
-    link: Arc<Link>,
     to_bot: Sender<ToBot>,
     from_bot: Receiver<FromBot>,
     thread: Option<JoinHandle<()>>,
@@ -99,18 +75,20 @@ impl PyBot {
     fn spawn(ctx: &SpawnCtx, team: Arc<PyTeam>) -> Result<Self, BotFailure> {
         let (to_bot, from_runner) = channel();
         let (to_runner, from_bot) = channel();
-        let link = Arc::new(Link {
-            to_runner,
-            from_runner: Mutex::new(from_runner),
-        });
-        let spawn = thread::BotSpawn::new(ctx, team);
-        let thread_link = link.clone();
+        let identity = json!({
+            "bot_id": ctx.bot.id.0,
+            "team": ctx.bot.team.0,
+            "team_name": ctx.team.name,
+            "seed": ctx.seed,
+            "game": team.game,
+        })
+        .to_string();
+        let link = bridge::Link::new(to_runner, from_runner);
         let thread = std::thread::Builder::new()
             .name(format!("bot-{}", ctx.bot.id))
-            .spawn(move || thread::run(spawn, thread_link))
+            .spawn(move || thread::run(identity, team, link))
             .map_err(|e| BotFailure::Crash(format!("could not start bot thread: {e}")))?;
         let mut bot = Self {
-            link,
             to_bot,
             from_bot,
             thread: Some(thread),
@@ -131,7 +109,7 @@ impl PyBot {
 
 impl Bot for PyBot {
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> StepResult {
-        let token = StepToken::new(self.link.clone(), ctx.set_index, ctx.tick);
+        let token = StepToken::new(ctx.set_index, ctx.tick);
         if self.to_bot.send(ToBot::Step(token)).is_err() {
             return StepResult::failed(BotFailure::Crash("bot thread is gone".into()));
         }
@@ -159,22 +137,4 @@ impl Bot for PyBot {
             let _ = thread.join();
         }
     }
-}
-
-pub(super) fn failure_from(py: Python<'_>, err: &PyErr) -> BotFailure {
-    let kind = err
-        .get_type(py)
-        .qualname()
-        .map(|q| q.to_string())
-        .unwrap_or_else(|_| "Exception".into());
-    let message = err
-        .value(py)
-        .str()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let traceback = err
-        .traceback(py)
-        .and_then(|tb| tb.format().ok())
-        .unwrap_or_default();
-    BotFailure::exception(kind, message).with_traceback(traceback)
 }

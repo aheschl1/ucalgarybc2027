@@ -113,6 +113,4 @@ pub enum EngineError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
-    #[error("interrupted: {0}")]
-    Interrupted(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

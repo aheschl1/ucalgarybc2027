@@ -22,6 +22,7 @@ tictactoe = ["dep:ucbc-tictactoe"]
 pyo3 = { workspace = true, features = ["extension-module"] }
 ucbc-engine = { workspace = true }
 ucbc-tictactoe = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 [lints]

@@ -29,7 +29,12 @@ def run(
     show_bot_output: bool,
 ) -> None:
     """Play BOT_A against BOT_B. Each is a directory containing main.py."""
+    import signal
+
     from ucbc.runner import run_match
+
+    # The match runs in Rust; let Ctrl-C end the process instead of waiting for it.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     names = [bot_a.name, bot_b.name]
     try:

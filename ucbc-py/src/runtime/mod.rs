@@ -1,15 +1,15 @@
-//! Python teams executed in-process. Each bot is one OS thread with its own copy of
-//! the team's `main.py` executed into a fresh namespace and an engine-owned memory
-//! dict. Steps are strictly serial: the runner thread sends `Step`, services the
-//! bot's queries and actions over a channel while the bot thread runs Python, and
-//! returns when the bot reports `Done`.
+//! Python teams executed in-process, one subinterpreter per bot. Each bot is one OS
+//! thread owning an interpreter with its own GIL, modules, and namespace; the
+//! team's `main.py` runs there. Steps are strictly serial: the runner thread sends
+//! `Step`, services the bot's queries and actions over a channel while the bot
+//! runs Python, and returns when the bot reports `Done`.
 //!
-//! Thread rules: the runner thread attaches only while no bot is mid-step. The bot
-//! thread attaches only while loading `main.py` or running a step. `RawHandle` detaches
-//! while it waits for the runner's reply. Breaking any of these deadlocks the match.
+//! The runner thread only ever attaches to the main interpreter, and only while no
+//! bot is mid-step. A bot thread attaches to its own interpreter only while loading
+//! or stepping, and to the main interpreter only to create and destroy its own.
 
-mod api;
-mod stdout;
+mod bridge;
+mod ffi;
 mod thread;
 
 use std::path::{Path, PathBuf};
@@ -22,8 +22,7 @@ use pyo3::types::PyModule;
 use serde_json::Value;
 use ucbc_engine::{ActionError, Bot, BotFailure, QueryError, SpawnCtx, StepCtx, StepResult};
 
-use api::StepToken;
-pub use api::{Api, PyActionError, PyQueryError, PySetOver};
+use bridge::StepToken;
 
 enum ToBot {
     Step(StepToken),
@@ -40,7 +39,7 @@ enum FromBot {
     Done(StepResult, StepToken),
 }
 
-/// The bot thread's end of the channel pair, shared with its `Api`.
+/// The bot thread's end of the channel pair, shared with its bridge.
 struct Link {
     to_runner: Sender<FromBot>,
     from_runner: Mutex<Receiver<ToBot>>,
@@ -52,33 +51,31 @@ impl Link {
     }
 }
 
-/// A Python team: `main.py` compiled once, executed afresh for every bot.
+/// A Python team: `main.py` checked once, executed afresh in every bot's interpreter.
 pub struct PyTeam {
     path: PathBuf,
-    code: Py<PyAny>,
+    source: String,
     game: String,
 }
 
 impl PyTeam {
-    /// Reads and compiles `dir/main.py`. Must run attached; a failure is the team's
-    /// load error.
+    /// Reads `dir/main.py` and checks that it compiles. Must run attached to the
+    /// main interpreter; a failure is the team's load error.
     pub fn compile(py: Python<'_>, dir: &Path, game: &str) -> Result<Self, BotFailure> {
         let path = dir.join("main.py");
         let source = std::fs::read_to_string(&path).map_err(|e| {
             BotFailure::exception("FileNotFoundError", format!("{}: {e}", path.display()))
         })?;
-        let compile = || -> PyResult<Py<PyAny>> {
-            let builtins = PyModule::import(py, "builtins")?;
-            let code =
-                builtins
-                    .getattr("compile")?
-                    .call1((source, path.to_string_lossy(), "exec"))?;
-            Ok(code.unbind())
+        let check = || -> PyResult<()> {
+            PyModule::import(py, "builtins")?
+                .getattr("compile")?
+                .call1((source.as_str(), path.to_string_lossy(), "exec"))?;
+            Ok(())
         };
-        let code = compile().map_err(|e| thread::failure_from(py, &e))?;
+        check().map_err(|e| failure_from(py, &e))?;
         Ok(Self {
             path,
-            code,
+            source,
             game: game.to_string(),
         })
     }
@@ -97,8 +94,8 @@ pub struct PyBot {
 }
 
 impl PyBot {
-    /// Starts the bot thread and runs `main.py`. A failure is returned here and no
-    /// thread is left behind.
+    /// Starts the bot thread, which creates the interpreter and runs `main.py`. A
+    /// failure is returned here and no thread is left behind.
     fn spawn(ctx: &SpawnCtx, team: Arc<PyTeam>) -> Result<Self, BotFailure> {
         let (to_bot, from_runner) = channel();
         let (to_runner, from_bot) = channel();
@@ -162,4 +159,22 @@ impl Bot for PyBot {
             let _ = thread.join();
         }
     }
+}
+
+pub(super) fn failure_from(py: Python<'_>, err: &PyErr) -> BotFailure {
+    let kind = err
+        .get_type(py)
+        .qualname()
+        .map(|q| q.to_string())
+        .unwrap_or_else(|_| "Exception".into());
+    let message = err
+        .value(py)
+        .str()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let traceback = err
+        .traceback(py)
+        .and_then(|tb| tb.format().ok())
+        .unwrap_or_default();
+    BotFailure::exception(kind, message).with_traceback(traceback)
 }

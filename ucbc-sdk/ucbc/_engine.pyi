@@ -1,21 +1,3 @@
-from typing import Any
-
-class RawHandle:
-    bot_id: int
-    team: int
-    team_name: str
-    set_index: int
-    tick: int
-    seed: int
-    game: str
-    memory: dict[str, Any]
-    def query(self, json: str) -> str: ...
-    def act(self, json: str) -> str: ...
-
-class QueryError(Exception): ...
-class ActionError(Exception): ...
-class SetOver(ActionError): ...
-
 GAMES: list[str]
 __version__: str
 

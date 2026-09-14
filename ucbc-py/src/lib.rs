@@ -5,11 +5,11 @@ mod runtime;
 
 use std::path::PathBuf;
 
-use pyo3::exceptions::{PyKeyboardInterrupt, PyRuntimeError};
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use std::sync::Arc;
 
-use runtime::{Api, PyActionError, PyQueryError, PySetOver, PyTeam};
+use runtime::PyTeam;
 use ucbc_engine::{EngineError, GameRegistry, MatchConfig, MatchRunner, MatchSpec, TeamSpec};
 
 /// Every game compiled into this wheel.
@@ -23,13 +23,7 @@ fn registry() -> GameRegistry {
 }
 
 fn to_pyerr(e: EngineError) -> PyErr {
-    match e {
-        EngineError::Interrupted(source) => match source.downcast::<PyErr>() {
-            Ok(err) => *err,
-            Err(other) => PyKeyboardInterrupt::new_err(other.to_string()),
-        },
-        other => PyRuntimeError::new_err(other.to_string()),
-    }
+    PyRuntimeError::new_err(e.to_string())
 }
 
 /// Runs a match between Python teams and returns the match result as JSON.
@@ -73,12 +67,7 @@ fn run_match(
         })
         .collect();
     let config = MatchConfig::new(game, sets, seed, 0);
-    let mut spec = MatchSpec::new(match_id, config, teams)
-        .echo_bot_output(echo_bot_output)
-        .between_steps(Box::new(|| {
-            Python::attach(|py| py.check_signals())
-                .map_err(|e| EngineError::Interrupted(Box::new(e)))
-        }));
+    let mut spec = MatchSpec::new(match_id, config, teams).echo_bot_output(echo_bot_output);
     if let Some(path) = replay_path {
         spec = spec.replay_path(path);
     }
@@ -95,10 +84,6 @@ fn run_match(
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_match, m)?)?;
-    m.add_class::<Api>()?;
-    m.add("QueryError", m.py().get_type::<PyQueryError>())?;
-    m.add("ActionError", m.py().get_type::<PyActionError>())?;
-    m.add("SetOver", m.py().get_type::<PySetOver>())?;
     m.add("GAMES", registry().names())?;
     m.add("__version__", ucbc_engine::ENGINE_VERSION)?;
     Ok(())

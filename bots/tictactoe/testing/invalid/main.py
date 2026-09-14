@@ -1,13 +1,13 @@
 """Insists on the centre, then retries elsewhere: rejected moves are recoverable."""
 
-from ucbc.game import ActionError
-from ucbc.games.tictactoe import TicTacToeGame
+from ucbc.games.tictactoe import TicTacToeHandle
+from ucbc.handle import ActionError
 
 
-def step(game: TicTacToeGame) -> None:
+def step(handle: TicTacToeHandle) -> None:
     try:
-        game.place(1, 1)
+        handle.place(1, 1)
     except ActionError as e:
         print(f"rejected: {e}")
-        row, col = game.empty_cells()[0]
-        game.place(row, col)
+        row, col = handle.empty_cells()[0]
+        handle.place(row, col)

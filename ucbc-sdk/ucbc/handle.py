@@ -1,17 +1,17 @@
-"""The game-agnostic side of what a bot's ``step(game)`` receives."""
+"""The game-agnostic side of what a bot's ``step(handle)`` receives: a handle to the one game the engine runs."""
 
 import json
 from typing import Any
 
-from ucbc._engine import ActionError, QueryError, RawGame, SetOver
+from ucbc._engine import ActionError, QueryError, RawHandle, SetOver
 
-__all__ = ["ActionError", "Game", "QueryError", "SetOver"]
+__all__ = ["ActionError", "Handle", "QueryError", "SetOver"]
 
 
-class Game:
+class Handle:
     """Wraps the engine's raw handle. Each game subclasses this with typed methods."""
 
-    def __init__(self, raw: RawGame) -> None:
+    def __init__(self, raw: RawHandle) -> None:
         self._raw = raw
 
     @property

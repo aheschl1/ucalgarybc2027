@@ -1,14 +1,14 @@
-"""Module globals and game.memory are per bot, per set."""
+"""Module globals and handle.memory are per bot, per set."""
 
-from ucbc.games.tictactoe import TicTacToeGame
+from ucbc.games.tictactoe import TicTacToeHandle
 
 calls: int = 0
 
 
-def step(game: TicTacToeGame) -> None:
+def step(handle: TicTacToeHandle) -> None:
     global calls
     calls += 1
-    game.memory["n"] = game.memory.get("n", 0) + 1
-    print(f"team={game.team} calls={calls} memory={game.memory['n']}")
-    row, col = game.empty_cells()[0]
-    game.place(row, col)
+    handle.memory["n"] = handle.memory.get("n", 0) + 1
+    print(f"team={handle.team} calls={calls} memory={handle.memory['n']}")
+    row, col = handle.empty_cells()[0]
+    handle.place(row, col)

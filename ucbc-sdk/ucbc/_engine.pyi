@@ -1,6 +1,6 @@
 from typing import Any
 
-class RawGame:
+class RawHandle:
     bot_id: int
     team: int
     team_name: str

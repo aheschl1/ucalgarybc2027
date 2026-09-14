@@ -1,10 +1,10 @@
-"""Tic-tac-toe as a bot sees it. A bot's ``step`` receives a :class:`TicTacToeGame`."""
+"""Tic-tac-toe as a bot sees it. A bot's ``step`` receives a :class:`TicTacToeHandle`."""
 
 from enum import IntEnum
 
-from ucbc.game import Game
+from ucbc.handle import Handle
 
-__all__ = ["GAME", "Cell", "TicTacToeGame"]
+__all__ = ["HANDLE", "Cell", "TicTacToeHandle"]
 
 
 class Cell(IntEnum):
@@ -13,7 +13,7 @@ class Cell(IntEnum):
     O = 2
 
 
-class TicTacToeGame(Game):
+class TicTacToeHandle(Handle):
     def board(self) -> list[list[Cell]]:
         """The board as three rows of three cells."""
         cells = [Cell(c) for c in self._query({"type": "board"})["cells"]]
@@ -41,8 +41,8 @@ class TicTacToeGame(Game):
         return int(self._query({"type": "board"})["turn"])
 
     def place(self, row: int, col: int) -> None:
-        """Place this bot's mark. Raises :class:`ucbc.game.ActionError` if refused."""
+        """Place this bot's mark. Raises :class:`ucbc.handle.ActionError` if refused."""
         self._act({"type": "place", "row": row, "col": col})
 
 
-GAME = TicTacToeGame
+HANDLE = TicTacToeHandle

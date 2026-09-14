@@ -38,18 +38,18 @@ Rust-only game: `cargo run -p ucbc-cli -- run --a first-empty --b random`.
 
 ## Writing a bot
 
-A bot is a directory with a `main.py` that defines `step`. The engine calls it once per step with a game object.
+A bot is a directory with a `main.py` that defines `step`. The engine calls it once per step with a handle.
 
 ```python
 # bots/tictactoe/mine/main.py
-from ucbc.games.tictactoe import TicTacToeGame
+from ucbc.games.tictactoe import TicTacToeHandle
 
 
-def step(game: TicTacToeGame) -> None:
-    if (1, 1) in game.empty_cells():
-        game.place(1, 1)
+def step(handle: TicTacToeHandle) -> None:
+    if (1, 1) in handle.empty_cells():
+        handle.place(1, 1)
     else:
-        game.place(*game.empty_cells()[0])
+        handle.place(*handle.empty_cells()[0])
 ```
 
 ```bash
@@ -64,8 +64,8 @@ Copy the shape of tic-tac-toe.
 2. In `ucbc-py/Cargo.toml`, an optional dependency and a feature `foo = ["dep:ucbc-foo"]`
    in `default`; in `ucbc-py/src/lib.rs`, `registry.register::<ucbc_foo::Foo>()` under
    `#[cfg(feature = "foo")]`.
-3. `ucbc-sdk/ucbc/games/foo.py`: a subclass of `ucbc.game.Game` with typed methods over
-   `self._query` and `self._act`, ending with `GAME = FooGame`.
+3. `ucbc-sdk/ucbc/games/foo.py`: a subclass of `ucbc.handle.Handle` with typed methods over
+   `self._query` and `self._act`, ending with `HANDLE = FooHandle`.
 4. Bots under `bots/foo/`.
 
 `make dev`, then `uv run ucbc run bots/foo/a bots/foo/b`. A wheel with one game only:

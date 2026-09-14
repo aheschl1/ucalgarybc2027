@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use pyo3::exceptions::{PyException, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -28,65 +27,87 @@ pyo3::create_exception!(
     "The set is already over."
 );
 
-/// The raw, game-agnostic handle a bot's Python code receives. `ucbc._runtime` wraps
-/// it in the typed class for the game being played.
-#[pyclass(module = "ucbc._engine", name = "RawGame", frozen)]
-pub struct Api {
+/// The one way to reach the game during a step. Not `Clone`: the runner creates one
+/// per step, the bot thread holds it while the bot runs, and it goes back with `Done`.
+/// Outside a step no token exists, so a stashed handle cannot reach the engine.
+pub(super) struct StepToken {
     link: Arc<Link>,
+    set_index: u32,
+    tick: u32,
+}
+
+impl StepToken {
+    pub(super) fn new(link: Arc<Link>, set_index: u32, tick: u32) -> Self {
+        Self {
+            link,
+            set_index,
+            tick,
+        }
+    }
+}
+
+/// The raw, game-agnostic handle a bot's Python code receives. One per bot; the
+/// engine slots a [`StepToken`] into it for the duration of each step.
+#[pyclass(module = "ucbc._engine", name = "RawHandle", frozen)]
+pub struct Api {
     bot: BotRef,
     #[pyo3(get)]
     team_name: String,
-    #[pyo3(get)]
-    set_index: u32,
-    #[pyo3(get)]
-    tick: u32,
     #[pyo3(get)]
     seed: u64,
     #[pyo3(get)]
     game: String,
     memory: Py<PyDict>,
-    active: AtomicBool,
+    token: Mutex<Option<StepToken>>,
 }
 
 impl Api {
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        link: Arc<Link>,
         bot: BotRef,
         team_name: String,
-        set_index: u32,
-        tick: u32,
         seed: u64,
         game: String,
         memory: Py<PyDict>,
     ) -> Self {
         Self {
-            link,
             bot,
             team_name,
-            set_index,
-            tick,
             seed,
             game,
             memory,
-            active: AtomicBool::new(true),
+            token: Mutex::new(None),
         }
     }
 
-    /// The step is over; a stashed handle must not reach the engine.
-    pub(super) fn deactivate(&self) {
-        self.active.store(false, Ordering::SeqCst);
+    pub(super) fn begin_step(&self, token: StepToken) {
+        *self.token.lock().expect("token lock") = Some(token);
     }
 
+    /// Takes the token back. `None` only if `begin_step` was never called.
+    pub(super) fn end_step(&self) -> Option<StepToken> {
+        self.token.lock().expect("token lock").take()
+    }
+
+    /// Runs `f` with the step's token, or fails if no step is in progress. The lock
+    /// is held throughout, so calls from a bot's own threads serialize.
+    fn with_token<T>(&self, f: impl FnOnce(&StepToken) -> Option<T>) -> PyResult<T> {
+        let guard = self.token.lock().expect("token lock");
+        let token = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("no step in progress for this handle"))?;
+        f(token).ok_or_else(|| PyRuntimeError::new_err("engine link closed"))
+    }
+
+    /// One round trip to the runner. Holds the token for the whole exchange, so calls
+    /// from a bot's own threads serialize instead of crossing replies.
     fn exchange(&self, py: Python<'_>, msg: FromBot) -> PyResult<ToBot> {
-        if !self.active.load(Ordering::SeqCst) {
-            return Err(PyRuntimeError::new_err(
-                "this api handle belongs to a finished step",
-            ));
-        }
+        let guard = self.token.lock().expect("token lock");
+        let token = guard
+            .as_ref()
+            .ok_or_else(|| PyRuntimeError::new_err("no step in progress for this handle"))?;
         py.detach(|| {
-            let receiver = self.link.from_runner.lock().ok()?;
-            self.link.to_runner.send(msg).ok()?;
+            let receiver = token.link.from_runner.lock().ok()?;
+            token.link.to_runner.send(msg).ok()?;
             receiver.recv().ok()
         })
         .ok_or_else(|| PyRuntimeError::new_err("engine link closed"))
@@ -107,6 +128,16 @@ impl Api {
     #[getter]
     fn team(&self) -> u32 {
         self.bot.team.0
+    }
+
+    #[getter]
+    fn set_index(&self) -> PyResult<u32> {
+        self.with_token(|t| Some(t.set_index))
+    }
+
+    #[getter]
+    fn tick(&self) -> PyResult<u32> {
+        self.with_token(|t| Some(t.tick))
     }
 
     #[getter]

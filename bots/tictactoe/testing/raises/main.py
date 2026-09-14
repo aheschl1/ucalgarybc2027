@@ -1,5 +1,5 @@
-from ucbc.games.tictactoe import TicTacToeGame
+from ucbc.games.tictactoe import TicTacToeHandle
 
 
-def step(game: TicTacToeGame) -> None:
+def step(handle: TicTacToeHandle) -> None:
     raise ValueError("boom")

@@ -5,7 +5,7 @@
 //! returns when the bot reports `Done`.
 //!
 //! Thread rules: the runner thread attaches only while no bot is mid-step. The bot
-//! thread attaches only while loading `main.py` or running a step. `RawGame` detaches
+//! thread attaches only while loading `main.py` or running a step. `RawHandle` detaches
 //! while it waits for the runner's reply. Breaking any of these deadlocks the match.
 
 mod api;
@@ -22,10 +22,11 @@ use pyo3::types::PyModule;
 use serde_json::Value;
 use ucbc_engine::{ActionError, Bot, BotFailure, QueryError, SpawnCtx, StepCtx, StepResult};
 
+use api::StepToken;
 pub use api::{Api, PyActionError, PyQueryError, PySetOver};
 
 enum ToBot {
-    Step { set_index: u32, tick: u32 },
+    Step(StepToken),
     QueryReply(Result<Value, QueryError>),
     ActReply(Result<Value, ActionError>),
     Shutdown,
@@ -35,7 +36,8 @@ enum FromBot {
     Loaded(Result<(), BotFailure>),
     Query(Value),
     Act(Value),
-    Done(StepResult),
+    /// The step's result and its token, returned so the runner owns it again.
+    Done(StepResult, StepToken),
 }
 
 /// The bot thread's end of the channel pair, shared with its `Api`.
@@ -88,6 +90,7 @@ impl PyTeam {
 }
 
 pub struct PyBot {
+    link: Arc<Link>,
     to_bot: Sender<ToBot>,
     from_bot: Receiver<FromBot>,
     thread: Option<JoinHandle<()>>,
@@ -104,11 +107,13 @@ impl PyBot {
             from_runner: Mutex::new(from_runner),
         });
         let spawn = thread::BotSpawn::new(ctx, team);
+        let thread_link = link.clone();
         let thread = std::thread::Builder::new()
             .name(format!("bot-{}", ctx.bot.id))
-            .spawn(move || thread::run(spawn, link))
+            .spawn(move || thread::run(spawn, thread_link))
             .map_err(|e| BotFailure::Crash(format!("could not start bot thread: {e}")))?;
         let mut bot = Self {
+            link,
             to_bot,
             from_bot,
             thread: Some(thread),
@@ -129,11 +134,8 @@ impl PyBot {
 
 impl Bot for PyBot {
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> StepResult {
-        let sent = self.to_bot.send(ToBot::Step {
-            set_index: ctx.set_index,
-            tick: ctx.tick,
-        });
-        if sent.is_err() {
+        let token = StepToken::new(self.link.clone(), ctx.set_index, ctx.tick);
+        if self.to_bot.send(ToBot::Step(token)).is_err() {
             return StepResult::failed(BotFailure::Crash("bot thread is gone".into()));
         }
         loop {
@@ -144,7 +146,7 @@ impl Bot for PyBot {
                 Ok(FromBot::Act(a)) => {
                     let _ = self.to_bot.send(ToBot::ActReply(ctx.act(&a)));
                 }
-                Ok(FromBot::Done(result)) => return result,
+                Ok(FromBot::Done(result, _token)) => return result,
                 Ok(FromBot::Loaded(_)) | Err(_) => {
                     return StepResult::failed(BotFailure::Crash(
                         "bot thread exited mid-step".into(),

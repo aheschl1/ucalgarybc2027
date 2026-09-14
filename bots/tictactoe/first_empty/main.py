@@ -1,8 +1,8 @@
 """Places on the first empty cell, row-major."""
 
-from ucbc.games.tictactoe import TicTacToeGame
+from ucbc.games.tictactoe import TicTacToeHandle
 
 
-def step(game: TicTacToeGame) -> None:
-    row, col = game.empty_cells()[0]
-    game.place(row, col)
+def step(handle: TicTacToeHandle) -> None:
+    row, col = handle.empty_cells()[0]
+    handle.place(row, col)

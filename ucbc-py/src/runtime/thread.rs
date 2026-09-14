@@ -6,7 +6,7 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyModule};
 
-use super::api::Api;
+use super::api::{Api, StepToken};
 use super::stdout::CapturedStream;
 use super::{FromBot, Link, PyTeam, ToBot};
 use ucbc_engine::{BotFailure, BotRef, SpawnCtx, StepResult};
@@ -32,8 +32,8 @@ impl BotSpawn {
 
 struct Loaded {
     step_fn: Py<PyAny>,
-    make_game: Py<PyAny>,
-    memory: Py<PyDict>,
+    raw: Py<Api>,
+    handle: Py<PyAny>,
     stream: Py<CapturedStream>,
 }
 
@@ -47,20 +47,32 @@ pub(super) fn run(spawn: BotSpawn, link: Arc<Link>) {
         return;
     };
 
-    while let Some(ToBot::Step { set_index, tick }) = link.recv() {
-        let result = Python::attach(|py| run_step(py, &spawn, &loaded, &link, set_index, tick));
-        if link.to_runner.send(FromBot::Done(result)).is_err() {
+    while let Some(ToBot::Step(token)) = link.recv() {
+        let (result, token) = Python::attach(|py| run_step(py, &loaded, token));
+        if link.to_runner.send(FromBot::Done(result, token)).is_err() {
             break;
         }
     }
     Python::attach(|_py| drop(loaded));
 }
 
-/// Executes the team's code into a fresh namespace. Output written while loading
-/// stays in the stream and is reported with the first step.
+/// Executes the team's code into a fresh namespace and builds the bot's one handle.
+/// Output written while loading stays in the stream and is reported with the first
+/// step.
 fn load(py: Python<'_>, spawn: &BotSpawn) -> PyResult<Loaded> {
     let stream = Py::new(py, CapturedStream::default())?;
-    let make_game = PyModule::import(py, "ucbc._runtime")?.getattr("make_game")?;
+    let make_handle = PyModule::import(py, "ucbc._runtime")?.getattr("make_handle")?;
+    let raw = Py::new(
+        py,
+        Api::new(
+            spawn.bot,
+            spawn.team_name.clone(),
+            spawn.seed,
+            spawn.team.game.clone(),
+            PyDict::new(py).unbind(),
+        ),
+    )?;
+    let handle = make_handle.call1((spawn.team.game.as_str(), &raw))?;
     let step_fn = with_captured_output(py, &stream, || {
         let builtins = PyModule::import(py, "builtins")?;
         let globals = PyDict::new(py);
@@ -71,56 +83,33 @@ fn load(py: Python<'_>, spawn: &BotSpawn) -> PyResult<Loaded> {
             .getattr("exec")?
             .call1((spawn.team.code.bind(py), &globals))?;
         globals.get_item("step")?.ok_or_else(|| {
-            pyo3::exceptions::PyAttributeError::new_err("main.py must define step(game)")
+            pyo3::exceptions::PyAttributeError::new_err("main.py must define step(handle)")
         })
     })?;
     Ok(Loaded {
         step_fn: step_fn.unbind(),
-        make_game: make_game.unbind(),
-        memory: PyDict::new(py).unbind(),
+        raw,
+        handle: handle.unbind(),
         stream,
     })
 }
 
-fn run_step(
-    py: Python<'_>,
-    spawn: &BotSpawn,
-    loaded: &Loaded,
-    link: &Arc<Link>,
-    set_index: u32,
-    tick: u32,
-) -> StepResult {
-    let raw = match Py::new(
-        py,
-        Api::new(
-            link.clone(),
-            spawn.bot,
-            spawn.team_name.clone(),
-            set_index,
-            tick,
-            spawn.seed,
-            spawn.team.game.clone(),
-            loaded.memory.clone_ref(py),
-        ),
-    ) {
-        Ok(raw) => raw,
-        Err(e) => return StepResult::failed(failure_from(py, &e)),
-    };
-
+/// Runs one step with the token slotted into the bot's handle, then takes it back.
+fn run_step(py: Python<'_>, loaded: &Loaded, token: StepToken) -> (StepResult, StepToken) {
+    let raw = loaded.raw.get();
+    raw.begin_step(token);
     let outcome = with_captured_output(py, &loaded.stream, || {
-        let game = loaded
-            .make_game
-            .call1(py, (spawn.team.game.as_str(), &raw))?;
-        loaded.step_fn.call1(py, (game,))?;
+        loaded.step_fn.call1(py, (&loaded.handle,))?;
         Ok(())
     });
-    raw.get().deactivate();
+    let token = raw.end_step().expect("token was slotted in above");
     let stdout = loaded.stream.get().take();
 
-    match outcome {
+    let result = match outcome {
         Ok(()) => StepResult::ok().with_stdout(stdout),
         Err(e) => StepResult::failed(failure_from(py, &e)).with_stdout(stdout),
-    }
+    };
+    (result, token)
 }
 
 /// Runs `f` with `sys.stdout` and `sys.stderr` redirected into `stream`.

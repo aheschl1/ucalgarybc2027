@@ -2,10 +2,10 @@
 
 import random
 
-from ucbc.games.tictactoe import TicTacToeGame
+from ucbc.games.tictactoe import TicTacToeHandle
 
 
-def step(game: TicTacToeGame) -> None:
-    rng: random.Random = game.memory.setdefault("rng", random.Random(game.seed))
-    row, col = rng.choice(game.empty_cells())
-    game.place(row, col)
+def step(handle: TicTacToeHandle) -> None:
+    rng: random.Random = handle.memory.setdefault("rng", random.Random(handle.seed))
+    row, col = rng.choice(handle.empty_cells())
+    handle.place(row, col)

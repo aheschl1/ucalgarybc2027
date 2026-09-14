@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::bot::{Bot, BotFactory, SpawnCtx, TeamSpec};
+use crate::bot::{Bot, BotFactory, BotResourceLimit, SpawnCtx, TeamSpec};
 use crate::error::BotFailure;
 use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
 use crate::rng::bot_seed;
@@ -25,10 +25,11 @@ pub struct BotRegistry {
     bots: HashMap<BotId, BotHandle>,
     dead: HashSet<BotId>,
     set_seed: u64,
+    limits: BotResourceLimit,
 }
 
 impl BotRegistry {
-    pub fn new(specs: Vec<TeamSpec>) -> Self {
+    pub fn new(specs: Vec<TeamSpec>, limits: BotResourceLimit) -> Self {
         let teams = specs
             .into_iter()
             .enumerate()
@@ -42,6 +43,7 @@ impl BotRegistry {
             bots: HashMap::new(),
             dead: HashSet::new(),
             set_seed: 0,
+            limits,
         }
     }
 
@@ -74,7 +76,12 @@ impl BotRegistry {
     pub fn bot_mut(&mut self, bot: BotRef) -> Result<&mut BotHandle, BotFailure> {
         if !self.bots.contains_key(&bot.id) {
             let entry = &mut self.teams[bot.team.0 as usize];
-            let ctx = SpawnCtx::new(bot, entry.info.clone(), bot_seed(self.set_seed, bot));
+            let ctx = SpawnCtx::new(
+                bot,
+                entry.info.clone(),
+                bot_seed(self.set_seed, bot),
+                self.limits,
+            );
             let created = (entry.factory)(&ctx)?;
             let handle = BotHandle {
                 bot: created,

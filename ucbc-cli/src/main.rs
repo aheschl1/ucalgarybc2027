@@ -8,7 +8,8 @@ use std::process::ExitCode;
 use clap::{Parser, Subcommand};
 use ucbc_engine::replay::read_replay;
 use ucbc_engine::{
-    Game, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Replay, SetReplay, TeamId, TeamInfo,
+    BotResourceLimit, Game, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Replay, SetReplay,
+    TeamId, TeamInfo,
 };
 use ucbc_tictactoe::{Board, TicTacToe};
 
@@ -33,6 +34,12 @@ enum Command {
         sets: u32,
         #[arg(long, default_value_t = 0)]
         seed: u64,
+        /// Time budget per bot step, in milliseconds.
+        #[arg(long, default_value_t = 500)]
+        step_ms: u64,
+        /// Memory budget per bot, in mebibytes.
+        #[arg(long, default_value_t = 1024)]
+        memory_mb: u64,
         #[arg(long)]
         replay: Option<PathBuf>,
         #[arg(long)]
@@ -59,6 +66,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             b,
             sets,
             seed,
+            step_ms,
+            memory_mb,
             replay,
             summary,
         } => {
@@ -71,7 +80,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             ];
             let mut spec = MatchSpec::new(
                 "dev",
-                MatchConfig::new(TicTacToe::NAME, sets, seed, 2),
+                MatchConfig::new(
+                    TicTacToe::NAME,
+                    sets,
+                    seed,
+                    2,
+                    BotResourceLimit::new(step_ms, memory_mb << 20),
+                ),
                 teams,
             );
             if let Some(path) = replay {

@@ -424,6 +424,7 @@ dependencies = [
 name = "ucbc-py"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "pyo3",
  "serde",
  "serde_json",

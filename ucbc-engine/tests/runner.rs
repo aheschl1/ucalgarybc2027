@@ -8,8 +8,8 @@ use ucbc_engine::GameStatus;
 use ucbc_engine::replay::read_replay;
 use ucbc_engine::rng::ChaCha8Rng;
 use ucbc_engine::{
-    ActionError, BotFailure, BotId, EngineError, GameRegistry, MatchConfig, MatchRunner, MatchSpec,
-    Reason, StepResult, TeamId, TeamSpec,
+    ActionError, BotFailure, BotId, BotResourceLimit, EngineError, GameRegistry, MatchConfig,
+    MatchRunner, MatchSpec, Reason, StepResult, TeamId, TeamSpec,
 };
 
 fn registry() -> GameRegistry {
@@ -18,8 +18,10 @@ fn registry() -> GameRegistry {
     r
 }
 
+const LIMITS: BotResourceLimit = BotResourceLimit::new(5, 1 << 20);
+
 fn config(sets: u32, seed: u64) -> MatchConfig {
-    MatchConfig::new("counting", sets, seed, 0)
+    MatchConfig::new("counting", sets, seed, 0, LIMITS)
 }
 
 fn spec(teams: Vec<TeamSpec>, sets: u32, seed: u64) -> MatchSpec {
@@ -300,17 +302,63 @@ fn seeded_bots_replay_identically() {
         .unwrap()
         .replay
     };
+    // Everything but the measured step times must repeat.
+    let states = |replay: &ucbc_engine::Replay| {
+        replay
+            .sets
+            .iter()
+            .flat_map(|s| s.ticks.iter())
+            .map(|t| {
+                (
+                    t.state_after.clone(),
+                    t.steps.iter().map(|s| s.actions.clone()).collect(),
+                )
+            })
+            .collect::<Vec<(serde_json::Value, Vec<Vec<serde_json::Value>>)>>()
+    };
     let one = run(42);
     let two = run(42);
     let other = run(43);
-    assert_eq!(
-        serde_json::to_string(&one).unwrap(),
-        serde_json::to_string(&two).unwrap()
-    );
-    assert_ne!(
-        serde_json::to_string(&one).unwrap(),
-        serde_json::to_string(&other).unwrap()
-    );
+    assert_eq!(one.result, two.result);
+    assert_eq!(states(&one), states(&two));
+    assert_ne!(states(&one), states(&other));
+}
+
+#[test]
+fn bots_spawn_with_the_matchs_limits_and_steps_record_usage() {
+    let reg = registry();
+    let team = TeamSpec::rust("a", |ctx: &ucbc_engine::SpawnCtx| {
+        assert_eq!(ctx.limits, LIMITS);
+        support::ScriptedBotWith::new(|ctx| {
+            ctx.act(&json!({"type": "increment", "by": 1})).unwrap();
+            StepResult::ok().with_memory(4096)
+        })
+    });
+    let report = MatchRunner::new(&reg, spec(vec![team, plus_one("b")], 1, 0))
+        .unwrap()
+        .run()
+        .unwrap();
+    let steps = &report.replay.sets[0].ticks[0].steps;
+    assert_eq!(steps[0].usage.memory, Some(4096));
+    assert_eq!(steps[1].usage.memory, None);
+    assert_eq!(report.replay.config.limits, LIMITS);
+}
+
+#[test]
+fn engine_time_answering_a_bot_is_not_the_bots() {
+    let reg = registry();
+    let waits = scripted("waits", |ctx| {
+        ctx.query(&json!({"type": "slow", "ms": 20})).unwrap();
+        assert!(ctx.engine_time() >= std::time::Duration::from_millis(20));
+        ctx.act(&json!({"type": "increment", "by": 1})).unwrap();
+        StepResult::ok()
+    });
+    let report = MatchRunner::new(&reg, spec(vec![waits, plus_one("b")], 1, 0))
+        .unwrap()
+        .run()
+        .unwrap();
+    let step = &report.replay.sets[0].ticks[0].steps[0];
+    assert!(step.usage.time_us < 20_000, "{}", step.usage.time_us);
 }
 
 #[test]
@@ -323,7 +371,7 @@ fn config_validation() {
         Some(EngineError::Config(_))
     ));
     assert!(matches!(
-        with(MatchConfig::new("counting", 1, 1, 3), pair()).err(),
+        with(MatchConfig::new("counting", 1, 1, 3, LIMITS), pair()).err(),
         Some(EngineError::Config(_))
     ));
     assert!(matches!(
@@ -331,7 +379,11 @@ fn config_validation() {
         Some(EngineError::Config(_))
     ));
     assert!(matches!(
-        with(MatchConfig::new("chess", 1, 1, 0), vec![plus_one("a")]).err(),
+        with(
+            MatchConfig::new("chess", 1, 1, 0, LIMITS),
+            vec![plus_one("a")]
+        )
+        .err(),
         Some(EngineError::UnknownGame(_))
     ));
 }

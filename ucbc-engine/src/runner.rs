@@ -2,13 +2,14 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use crate::bot::TeamSpec;
 use crate::bot::registry::{BotHandle, BotRegistry};
 use crate::error::{BotFailure, EngineError};
 use crate::game::{GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
 use crate::ids::{BotRef, TeamId};
-use crate::replay::{MatchConfig, Replay, SetReplay, SetResult, Step, Tick, write_replay};
+use crate::replay::{MatchConfig, Replay, SetReplay, SetResult, Step, Tick, Usage, write_replay};
 use crate::rng::set_seed;
 use crate::step::{StepCtx, StepResult};
 use crate::summary::{Summary, summarize, write_summary};
@@ -98,7 +99,7 @@ impl<'r> MatchRunner<'r> {
             )));
         }
         let factory = registry.get(&config.game)?;
-        let bots = BotRegistry::new(spec.teams);
+        let bots = BotRegistry::new(spec.teams, config.limits);
         Ok(Self {
             factory,
             match_id: spec.match_id,
@@ -176,7 +177,7 @@ fn run_set(
                 continue;
             }
             let mut actions = Vec::new();
-            let (result, team) = match bots.bot_mut(bot_ref) {
+            let (result, team, time) = match bots.bot_mut(bot_ref) {
                 Ok(BotHandle { bot, team, seed }) => {
                     let mut ctx = StepCtx::new(
                         bot_ref,
@@ -187,10 +188,18 @@ fn run_set(
                         game.as_mut(),
                         &mut actions,
                     );
-                    (bot.step(&mut ctx), team.clone())
+                    let started = Instant::now();
+                    let result = bot.step(&mut ctx);
+                    let time = started.elapsed().saturating_sub(ctx.engine_time());
+                    (result, team.clone(), time)
                 }
-                Err(failure) => (StepResult::failed(failure), bots.team_info(bot_ref.team)),
+                Err(failure) => (
+                    StepResult::failed(failure),
+                    bots.team_info(bot_ref.team),
+                    Duration::ZERO,
+                ),
             };
+            let usage = Usage::new(time, result.memory);
 
             if echo && !result.stdout.is_empty() {
                 for line in result.stdout.lines() {
@@ -225,7 +234,7 @@ fn run_set(
                 bots.despawn(id);
             }
             let failure = failure.as_ref().map(BotFailure::record);
-            steps.push(Step::new(bot_ref, actions, result.stdout, failure));
+            steps.push(Step::new(bot_ref, actions, result.stdout, failure, usage));
         }
 
         if !matches!(game.status(), GameStatus::Complete(_)) {

@@ -32,17 +32,20 @@ def make_handle(game: str, identity: Identity, bridge: dict[str, BridgeFn]) -> H
 
 
 def _describe(e: BaseException) -> dict[str, str]:
-    return {
-        "kind": type(e).__qualname__,
-        "message": str(e),
-        "traceback": "".join(traceback.format_exception(e)),
-    }
+    # Whatever filled the memory budget is still alive here, so formatting may fail too.
+    try:
+        formatted = "".join(traceback.format_exception(e))
+    except MemoryError:
+        formatted = ""
+    return {"kind": type(e).__qualname__, "message": str(e), "traceback": formatted}
 
 
 def load(source: str, path: str, identity: str, bridge: dict[str, BridgeFn]) -> str:
     """Executes the team's code into a fresh namespace and builds the bot's handle.
     Returns the failure as JSON, or ``null``."""
     global _bot
+    # The runtime freezes a bot by waiting one switch interval for its GIL.
+    del sys.setswitchinterval
     sys.stdout = sys.stderr = _output
     sys.__stdout__ = sys.__stderr__ = _output  # type: ignore[misc]
     try:

@@ -8,4 +8,4 @@ is captured into the replay and shown with `ucbc run --show-bot-output`.
 
 `main.py` may not import sibling files yet. `tictactoe/random` and
 `tictactoe/first_empty` are the reference bots; everything under `testing/` exists to
-exercise failure paths.
+exercise failure paths, including the time and memory limits.

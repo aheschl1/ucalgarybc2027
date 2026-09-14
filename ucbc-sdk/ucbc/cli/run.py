@@ -1,6 +1,10 @@
+import os
+import sys
 from pathlib import Path
 
 import click
+
+from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 
 
 @click.command()
@@ -17,6 +21,12 @@ import click
     "--summary", type=click.Path(dir_okay=False, path_type=Path), help="Write the summary here."
 )
 @click.option("--show-bot-output", is_flag=True, help="Echo bot output as the match runs.")
+@click.option(
+    "--step-ms", default=DEFAULT_STEP_MS, show_default=True, help="Time budget per bot step."
+)
+@click.option(
+    "--memory-mb", default=DEFAULT_MEMORY_BYTES >> 20, show_default=True, help="Memory per bot."
+)
 def run(
     bot_a: Path,
     bot_b: Path,
@@ -27,6 +37,8 @@ def run(
     replay: Path | None,
     summary: Path | None,
     show_bot_output: bool,
+    step_ms: int,
+    memory_mb: int,
 ) -> None:
     """Play BOT_A against BOT_B. Each is a directory containing main.py."""
     import signal
@@ -49,6 +61,8 @@ def run(
             replay_path=replay,
             summary_path=summary,
             echo_bot_output=show_bot_output,
+            step_ms=step_ms,
+            memory_bytes=memory_mb * 2**20,
         )
     except (RuntimeError, ValueError) as e:
         raise click.ClickException(str(e)) from e
@@ -70,3 +84,12 @@ def run(
         click.echo(f"Replay: {replay}")
     if summary:
         click.echo(f"Summary: {summary}")
+
+    from ucbc import _engine
+
+    # A bot that would not stop still runs in its interpreter; finalizing Python with
+    # it alive aborts the process, so leave without.
+    if _engine.abandoned_bots():
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)

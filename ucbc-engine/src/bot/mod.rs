@@ -5,6 +5,9 @@
 pub mod registry;
 
 use std::sync::Arc;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
 
 use crate::error::BotFailure;
 use crate::ids::{BotRef, TeamInfo};
@@ -18,16 +21,45 @@ pub trait Bot: Send {
     fn shutdown(&mut self) {}
 }
 
+/// What one bot may use, set per match. The engine hands it to the bot's runtime at
+/// spawn; enforcement is the runtime's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BotResourceLimit {
+    /// Wall-clock budget, in milliseconds, for loading the team's code and for each step.
+    pub step_ms: u64,
+    /// Bytes the bot's runtime may hold.
+    pub memory_bytes: u64,
+}
+
+impl BotResourceLimit {
+    pub const fn new(step_ms: u64, memory_bytes: u64) -> Self {
+        Self {
+            step_ms,
+            memory_bytes,
+        }
+    }
+
+    pub fn step_time(&self) -> Duration {
+        Duration::from_millis(self.step_ms)
+    }
+}
+
 /// What the engine knows about a bot when it creates it.
 pub struct SpawnCtx {
     pub bot: BotRef,
     pub team: Arc<TeamInfo>,
     pub seed: u64,
+    pub limits: BotResourceLimit,
 }
 
 impl SpawnCtx {
-    pub fn new(bot: BotRef, team: Arc<TeamInfo>, seed: u64) -> Self {
-        Self { bot, team, seed }
+    pub fn new(bot: BotRef, team: Arc<TeamInfo>, seed: u64, limits: BotResourceLimit) -> Self {
+        Self {
+            bot,
+            team,
+            seed,
+            limits,
+        }
     }
 }
 

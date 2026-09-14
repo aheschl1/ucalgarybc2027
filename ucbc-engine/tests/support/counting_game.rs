@@ -29,6 +29,10 @@ pub struct Incremented {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Query {
     Counts,
+    /// Answered after `ms` milliseconds; engine time, not the bot's.
+    Slow {
+        ms: u64,
+    },
 }
 
 #[derive(Serialize)]
@@ -95,6 +99,10 @@ impl Game for CountingGame {
                 you: bot.team,
                 bot: bot.id,
             }),
+            Query::Slow { ms } => {
+                std::thread::sleep(std::time::Duration::from_millis(ms));
+                Self::handle_query(self, bot, Query::Counts)
+            }
         }
     }
 

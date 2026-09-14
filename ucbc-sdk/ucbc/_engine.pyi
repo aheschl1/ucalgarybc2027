@@ -1,10 +1,13 @@
 GAMES: list[str]
 __version__: str
 
+def abandoned_bots() -> int: ...
 def run_match(
     game: str,
     bot_dirs: list[str],
     *,
+    step_ms: int,
+    memory_bytes: int,
     sets: int = 3,
     seed: int = 0,
     match_id: str = "local",

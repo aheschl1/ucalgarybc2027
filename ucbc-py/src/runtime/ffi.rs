@@ -1,6 +1,6 @@
 //! Thin wrappers over the parts of the CPython C API this runtime needs: a
-//! subinterpreter's lifecycle and running bootstrap code in it. Everything
-//! `unsafe` in the runtime lives here and in `bridge`.
+//! subinterpreter's lifecycle, its warden, and running bootstrap code in it.
+//! Everything `unsafe` in the runtime lives here and in `bridge`.
 //!
 //! Nothing in the runtime may use PyO3 while a bot's interpreter is attached: the
 //! thread's GIL-state slot is bound to the main interpreter, so `PyGILState_Ensure`
@@ -8,7 +8,11 @@
 
 #![allow(unsafe_code)]
 
-use std::ffi::{CStr, CString, c_char, c_int};
+use std::ffi::{CStr, CString, c_char, c_int, c_long, c_ulong};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::{Receiver, Sender, channel};
+use std::thread::JoinHandle;
 
 use pyo3::ffi;
 
@@ -20,8 +24,9 @@ pub(super) struct Interp {
 
 impl Interp {
     /// Creates the interpreter. Attaches to the main interpreter only for the call
-    /// and leaves the thread detached from everything. `PyGILState_Ensure` must
-    /// come first so the thread's GIL-state slot binds to main, not to the new one.
+    /// and leaves the thread detached from everything. `PyGILState_Ensure` comes
+    /// first so the new interpreter's thread state never becomes this thread's
+    /// GIL-state binding.
     pub(super) fn create() -> Result<Self, &'static str> {
         let config = ffi::PyInterpreterConfig {
             use_main_obmalloc: 0,
@@ -49,6 +54,23 @@ impl Interp {
         }
     }
 
+    /// Starts this interpreter's warden. Call on the owning thread.
+    pub(super) fn warden(&self) -> Warden {
+        let remote = Remote {
+            interp: unsafe { ffi::PyThreadState_GetInterpreter(self.tstate) },
+            thread: unsafe { PyThread_get_thread_ident() },
+        };
+        let (commands, receiver) = channel();
+        let landed = Arc::new(AtomicUsize::new(0));
+        let counter = landed.clone();
+        let thread = std::thread::spawn(move || remote.serve(&receiver, &counter));
+        Warden {
+            commands,
+            thread: Some(thread),
+            landed,
+        }
+    }
+
     /// Runs `f` with this interpreter attached (holding its GIL).
     pub(super) fn attached<T>(&mut self, f: impl FnOnce() -> T) -> T {
         unsafe { ffi::PyEval_RestoreThread(self.tstate) };
@@ -58,11 +80,130 @@ impl Interp {
     }
 
     /// Ends the interpreter. With threads disallowed, this thread's is the only
-    /// thread state, which `Py_EndInterpreter` requires.
+    /// thread state, which `Py_EndInterpreter` requires. An interrupt that arrived
+    /// after the bot had already returned is dropped so it cannot fire during
+    /// finalization.
     pub(super) fn destroy(self) {
         unsafe {
             ffi::PyEval_RestoreThread(self.tstate);
+            ffi::PyThreadState_SetAsyncExc(
+                PyThread_get_thread_ident() as c_long,
+                std::ptr::null_mut(),
+            );
             ffi::Py_EndInterpreter(self.tstate);
+        }
+    }
+}
+
+unsafe extern "C" {
+    fn PyThread_get_thread_ident() -> c_ulong;
+}
+
+pub(super) enum Command {
+    /// Take the bot's GIL and keep it: the bot stops at its next bytecode boundary,
+    /// or when the C call it is inside returns.
+    Freeze,
+    /// Let go of the GIL: the bot carries on where it stopped.
+    Thaw,
+    Interrupt,
+    Stop,
+}
+
+/// The one thread besides the bot's own that touches its interpreter. It runs the
+/// runner's commands in order; each needs the bot's GIL, so a `Freeze` waits for
+/// the bot to hand it over and everything queued behind it waits too.
+pub(super) struct Warden {
+    commands: Sender<Command>,
+    thread: Option<JoinHandle<()>>,
+    landed: Arc<AtomicUsize>,
+}
+
+impl Warden {
+    pub(super) fn freeze(&self) {
+        let _ = self.commands.send(Command::Freeze);
+    }
+
+    pub(super) fn thaw(&self) {
+        let _ = self.commands.send(Command::Thaw);
+    }
+
+    pub(super) fn interrupt(&self) {
+        let _ = self.commands.send(Command::Interrupt);
+    }
+
+    /// How many freezes have actually taken the GIL so far.
+    pub(super) fn landed(&self) -> usize {
+        self.landed.load(Ordering::Acquire)
+    }
+
+    /// Waits for the warden to finish. Only while the bot is idle: its thread state
+    /// must be gone before the interpreter ends, and the wait would never end if the
+    /// bot held its GIL.
+    pub(super) fn stop(&mut self) {
+        let _ = self.commands.send(Command::Stop);
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+    }
+}
+
+/// A bot's interpreter as the warden sees it.
+struct Remote {
+    interp: *mut ffi::PyInterpreterState,
+    thread: c_ulong,
+}
+
+// Raw pointers to an interpreter that outlives every use.
+unsafe impl Send for Remote {}
+
+impl Remote {
+    fn serve(self, commands: &Receiver<Command>, landed: &AtomicUsize) {
+        let mut tstate: Option<*mut ffi::PyThreadState> = None;
+        loop {
+            match commands.recv() {
+                Ok(Command::Freeze) => {
+                    tstate = unsafe { self.attach() };
+                    landed.fetch_add(1, Ordering::Release);
+                }
+                Ok(Command::Thaw) => {
+                    if let Some(tstate) = tstate.take() {
+                        unsafe {
+                            ffi::PyThreadState_Clear(tstate);
+                            ffi::PyThreadState_DeleteCurrent();
+                        }
+                    }
+                }
+                Ok(Command::Interrupt) => {
+                    if tstate.is_some() {
+                        unsafe {
+                            ffi::PyThreadState_SetAsyncExc(
+                                self.thread as c_long,
+                                ffi::PyExc_SystemExit,
+                            )
+                        };
+                    }
+                }
+                Ok(Command::Stop) | Err(_) => {
+                    if tstate.is_none() {
+                        return;
+                    }
+                    loop {
+                        std::thread::park();
+                    }
+                }
+            }
+        }
+    }
+
+    /// Attaches a thread state of its own, which means taking the bot's GIL.
+    unsafe fn attach(&self) -> Option<*mut ffi::PyThreadState> {
+        unsafe {
+            let tstate = ffi::PyThreadState_New(self.interp);
+            if tstate.is_null() {
+                return None;
+            }
+            ffi::PyEval_RestoreThread(tstate);
+            Some(tstate)
         }
     }
 }

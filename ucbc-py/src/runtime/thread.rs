@@ -11,7 +11,7 @@ use ucbc_engine::{BotFailure, StepResult};
 
 use super::bridge::{self, Bridge, Link};
 use super::ffi::{Globals, Interp};
-use super::{FromBot, PyTeam, ToBot};
+use super::{FromBot, PyTeam, ToBot, memory};
 
 #[derive(Deserialize)]
 struct Failure {
@@ -32,52 +32,77 @@ struct StepReply {
     error: Option<Failure>,
 }
 
-pub(super) fn run(identity: String, team: Arc<PyTeam>, link: Link) {
+pub(super) fn run(identity: String, team: Arc<PyTeam>, link: Link, memory_limit: u64) {
+    memory::enter(memory_limit);
     let bridge = Bridge::new(link);
     let mut interp = match Interp::create() {
         Ok(interp) => interp,
         Err(msg) => {
-            bridge.send(FromBot::Loaded(Err(BotFailure::Crash(msg.into()))));
+            bridge.send(FromBot::Started(Err(BotFailure::Crash(msg.into()))));
             return;
         }
     };
-
-    let loaded = interp.attached(|| load(&identity, &team, &bridge));
-    let outcome = loaded.as_ref().map(|_| ()).map_err(Clone::clone);
-    let Ok(globals) = loaded else {
-        bridge.send(FromBot::Loaded(outcome));
-        interp.destroy();
-        return;
+    let globals = match interp.attached(|| boot(&bridge)) {
+        Ok(globals) => globals,
+        Err(failure) => {
+            bridge.send(FromBot::Started(Err(failure)));
+            return teardown(interp, None);
+        }
     };
-    if bridge.send(FromBot::Loaded(outcome)) {
-        while let Some(ToBot::Step(token)) = bridge.recv() {
-            let (set_index, tick) = (token.set_index, token.tick);
-            bridge.begin_step(token);
-            let result = interp.attached(|| run_step(&globals, set_index, tick));
-            let token = bridge.end_step().expect("token was slotted in above");
-            if !bridge.send(FromBot::Done(result, token)) {
-                break;
+    if !bridge.send(FromBot::Started(Ok(interp.warden()))) {
+        return;
+    }
+    let loaded = interp.attached(|| load(&globals, &identity, &team));
+    if bridge.send(FromBot::Loaded(loaded)) {
+        serve(interp, globals, &bridge);
+    }
+}
+
+/// Steps until told to shut down. If the runner is gone instead, the bot was
+/// abandoned: the interpreter stays alive, since its warden holds its GIL.
+fn serve(mut interp: Interp, globals: Globals, bridge: &Bridge) {
+    loop {
+        match bridge.recv() {
+            Some(ToBot::Step(token)) => {
+                let (set_index, tick) = (token.set_index, token.tick);
+                bridge.begin_step(token);
+                let result = interp.attached(|| run_step(&globals, set_index, tick));
+                let token = bridge.end_step().expect("token was slotted in above");
+                if !bridge.send(FromBot::Done(result, token)) {
+                    return;
+                }
             }
+            Some(ToBot::Shutdown) => return teardown(interp, Some(globals)),
+            Some(_) | None => return,
         }
     }
+}
+
+fn teardown(mut interp: Interp, globals: Option<Globals>) {
+    memory::leave();
     interp.attached(|| drop(globals));
     interp.destroy();
 }
 
-/// Imports the bootstrap and runs `load` in the interpreter. The returned globals
-/// hold the bootstrap module for the steps.
-fn load(identity: &str, team: &PyTeam, bridge: &Bridge) -> Result<Globals, BotFailure> {
-    let crash = |what: &str, e: String| BotFailure::Crash(format!("bootstrap {what}: {e}"));
+/// Imports the bootstrap and installs the bridge functions. Engine code only; a
+/// failure here is a broken installation, not the team's fault.
+fn boot(bridge: &Bridge) -> Result<Globals, BotFailure> {
     let functions = unsafe { bridge::functions(bridge) }
         .map_err(|()| BotFailure::Crash("could not create bridge functions".into()))?;
     let globals = Globals::new().ok_or_else(|| BotFailure::Crash("no globals".into()))?;
-    globals.set_str("SOURCE", &team.source);
-    globals.set_str("PATH", &team.path.to_string_lossy());
-    globals.set_str("IDENTITY", identity);
     globals.set_obj("BRIDGE", functions);
     globals
         .run(c"import ucbc._bootstrap as _b")
-        .map_err(|e| crash("import failed", e))?;
+        .map_err(|e| BotFailure::Crash(format!("bootstrap import failed: {e}")))?;
+    Ok(globals)
+}
+
+/// Runs the team's `main.py` through the bootstrap.
+fn load(globals: &Globals, identity: &str, team: &PyTeam) -> Result<(), BotFailure> {
+    let crash = |what: &str, e: String| BotFailure::Crash(format!("bootstrap {what}: {e}"));
+    globals.set_str("SOURCE", &team.source);
+    globals.set_str("PATH", &team.path.to_string_lossy());
+    globals.set_str("IDENTITY", identity);
     let reply = globals
         .eval(c"_b.load(SOURCE, PATH, IDENTITY, BRIDGE)")
         .map_err(|e| crash("load failed", e))?;
@@ -85,7 +110,7 @@ fn load(identity: &str, team: &PyTeam, bridge: &Bridge) -> Result<Globals, BotFa
         serde_json::from_str(&reply).map_err(|e| crash("bad load reply", e.to_string()))?;
     match failure {
         Some(f) => Err(f.into()),
-        None => Ok(globals),
+        None => Ok(()),
     }
 }
 
@@ -104,8 +129,13 @@ fn run_step(globals: &Globals, set_index: u32, tick: u32) -> StepResult {
         Ok(r) => r,
         Err(e) => return crash("bad step reply", e.to_string()),
     };
-    match reply.error {
-        Some(f) => StepResult::failed(f.into()).with_stdout(reply.stdout),
-        None => StepResult::ok().with_stdout(reply.stdout),
+    let result = match reply.error {
+        Some(f) => StepResult::failed(f.into()),
+        None => StepResult::ok(),
+    };
+    let result = result.with_stdout(reply.stdout);
+    match memory::used() {
+        Some(bytes) => result.with_memory(bytes),
+        None => result,
     }
 }

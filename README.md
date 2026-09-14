@@ -32,7 +32,11 @@ uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty
 uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --seed 7 --sets 5
 uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --show-bot-output
 uv run ucbc run bots/tictactoe/random bots/tictactoe/random --replay r.json --summary s.json
+uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --step-ms 50 --memory-mb 256
 ```
+
+Each bot gets 500 ms per step and 1 GiB unless the flags say otherwise; see
+[docs/resourcelimits.md](docs/resourcelimits.md).
 
 Rust-only game: `cargo run -p ucbc-cli -- run --a first-empty --b random`.
 
@@ -75,6 +79,8 @@ Copy the shape of tic-tac-toe.
 
 A match is sets; a set is ticks; a tick is one run of the game's schedule; a step is
 one bot's turn within it. A team is one code submission and may own many bots; the
-game decides which bots exist, who owns them, and the step order. Each bot runs on
-its own thread with its own copy of the team's `main.py`, stepped serially. A bot's
-runtime failure is reported to the game, which decides the consequence.
+game decides which bots exist, who owns them, and the step order. Each bot runs in
+its own interpreter on its own thread with its own copy of the team's `main.py`,
+stepped serially, within the time and memory the match sets. A bot's runtime
+failure, including running out of either, is reported to the game, which decides the
+consequence. Every recorded step carries the time and memory it used.

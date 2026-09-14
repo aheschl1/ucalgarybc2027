@@ -6,7 +6,10 @@ from typing import Any
 
 from ucbc import _engine
 
-__all__ = ["default_game", "run_match"]
+__all__ = ["DEFAULT_MEMORY_BYTES", "DEFAULT_STEP_MS", "default_game", "run_match"]
+
+DEFAULT_STEP_MS = 500
+DEFAULT_MEMORY_BYTES = 2**30
 
 
 def default_game() -> str:
@@ -26,8 +29,11 @@ def run_match(
     replay_path: str | Path | None = None,
     summary_path: str | Path | None = None,
     echo_bot_output: bool = False,
+    step_ms: int = DEFAULT_STEP_MS,
+    memory_bytes: int = DEFAULT_MEMORY_BYTES,
 ) -> dict[str, Any]:
-    """Play a match between the given bot directories and return the match result."""
+    """Play a match between the given bot directories and return the match result.
+    ``step_ms`` and ``memory_bytes`` are each bot's budget."""
     result = _engine.run_match(
         game or default_game(),
         [str(d) for d in bot_dirs],
@@ -38,6 +44,8 @@ def run_match(
         replay_path=None if replay_path is None else str(replay_path),
         summary_path=None if summary_path is None else str(summary_path),
         echo_bot_output=echo_bot_output,
+        step_ms=step_ms,
+        memory_bytes=memory_bytes,
     )
     match_result: dict[str, Any] = json.loads(result)
     return match_result

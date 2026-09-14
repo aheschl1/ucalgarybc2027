@@ -10,7 +10,9 @@ use pyo3::prelude::*;
 use std::sync::Arc;
 
 use runtime::PyTeam;
-use ucbc_engine::{EngineError, GameRegistry, MatchConfig, MatchRunner, MatchSpec, TeamSpec};
+use ucbc_engine::{
+    BotResourceLimit, EngineError, GameRegistry, MatchConfig, MatchRunner, MatchSpec, TeamSpec,
+};
 
 /// Every game compiled into this wheel.
 fn registry() -> GameRegistry {
@@ -28,12 +30,14 @@ fn to_pyerr(e: EngineError) -> PyErr {
 
 /// Runs a match between Python teams and returns the match result as JSON.
 #[pyfunction]
-#[pyo3(signature = (game, bot_dirs, *, sets = 3, seed = 0, match_id = "local", names = None, replay_path = None, summary_path = None, echo_bot_output = false))]
+#[pyo3(signature = (game, bot_dirs, *, step_ms, memory_bytes, sets = 3, seed = 0, match_id = "local", names = None, replay_path = None, summary_path = None, echo_bot_output = false))]
 #[allow(clippy::too_many_arguments)]
 fn run_match(
     py: Python<'_>,
     game: &str,
     bot_dirs: Vec<PathBuf>,
+    step_ms: u64,
+    memory_bytes: u64,
     sets: u32,
     seed: u64,
     match_id: &str,
@@ -66,7 +70,9 @@ fn run_match(
             Err(failure) => TeamSpec::unavailable(name, failure),
         })
         .collect();
-    let config = MatchConfig::new(game, sets, seed, 0);
+    let registry = registry();
+    let limits = BotResourceLimit::new(step_ms, memory_bytes);
+    let config = MatchConfig::new(game, sets, seed, 0, limits);
     let mut spec = MatchSpec::new(match_id, config, teams).echo_bot_output(echo_bot_output);
     if let Some(path) = replay_path {
         spec = spec.replay_path(path);
@@ -74,16 +80,24 @@ fn run_match(
     if let Some(path) = summary_path {
         spec = spec.summary_path(path);
     }
-    let registry = registry();
+    runtime::install().map_err(PyRuntimeError::new_err)?;
     let report = py
         .detach(|| MatchRunner::new(&registry, spec)?.run())
         .map_err(to_pyerr)?;
     serde_json::to_string(&report.replay.result).map_err(|e| PyRuntimeError::new_err(e.to_string()))
 }
 
+/// Bots that would not stop after their time limit. Their threads live on, so a
+/// process with any must exit without finalizing Python.
+#[pyfunction]
+fn abandoned_bots() -> usize {
+    runtime::abandoned_bots()
+}
+
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_match, m)?)?;
+    m.add_function(wrap_pyfunction!(abandoned_bots, m)?)?;
     m.add("GAMES", registry().names())?;
     m.add("__version__", ucbc_engine::ENGINE_VERSION)?;
     Ok(())

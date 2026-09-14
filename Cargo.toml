@@ -13,6 +13,7 @@ edition = "2024"
 repository = "https://github.com/aheschl1/ucalgarybc2027"
 
 [workspace.dependencies]
+libc = "0.2"
 # Shared dependency versions. Crates opt in with `dep = { workspace = true }`.
 ucbc-engine = { path = "ucbc-engine" }
 ucbc-tictactoe = { path = "ucbc-tictactoe" }

@@ -2,12 +2,12 @@
 
 use serde_json::json;
 use ucbc_engine::{
-    ActionError, Bot, BotFailure, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Reason,
-    SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
+    ActionError, Bot, BotFailure, BotResourceLimit, GameRegistry, MatchConfig, MatchRunner,
+    MatchSpec, Reason, SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
 };
 use ucbc_tictactoe::{BoardView, Cell, TicTacToe};
 
-fn board(ctx: &StepCtx<'_>) -> BoardView {
+fn board(ctx: &mut StepCtx<'_>) -> BoardView {
     serde_json::from_value(ctx.query(&json!({"type": "board"})).unwrap()).unwrap()
 }
 
@@ -67,12 +67,14 @@ impl Default for Idle {
     }
 }
 
+const LIMITS: BotResourceLimit = BotResourceLimit::new(500, 1 << 30);
+
 fn run(a: TeamSpec, b: TeamSpec, sets: u32, seed: u64) -> ucbc_engine::Replay {
     let mut reg = GameRegistry::new();
     reg.register::<TicTacToe>();
     let spec = MatchSpec::new(
         "t",
-        MatchConfig::new("tictactoe", sets, seed, 2),
+        MatchConfig::new("tictactoe", sets, seed, 2, LIMITS),
         vec![a, b],
     );
     MatchRunner::new(&reg, spec).unwrap().run().unwrap().replay
@@ -228,7 +230,7 @@ fn needs_exactly_two_teams() {
     reg.register::<TicTacToe>();
     let spec = MatchSpec::new(
         "t",
-        MatchConfig::new("tictactoe", 1, 0, 3),
+        MatchConfig::new("tictactoe", 1, 0, 3, LIMITS),
         vec![team::<Idle>("a"), team::<Idle>("b"), team::<Idle>("c")],
     );
     let err = MatchRunner::new(&reg, spec).unwrap().run().err().unwrap();

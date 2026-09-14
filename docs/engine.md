@@ -163,11 +163,19 @@ sequenceDiagram
 Lifecycle of a bot thread:
 
 ```text
+memory::enter(limit)       this thread's allocations count against the bot
 Interp::create()           PyGILState_Ensure -> Py_NewInterpreterFromConfig -> swap back -> Release
-attached(load)             import ucbc._bootstrap; _b.load(SOURCE, PATH, IDENTITY, BRIDGE)
-loop recv Step             attached(_b.run_step(SET_INDEX, TICK))
+attached(boot)             import ucbc._bootstrap; bridge functions
+send Started(Warden)       the warden thread, through which the runner freezes and thaws the bot
+attached(load)             _b.load(SOURCE, PATH, IDENTITY, BRIDGE)      under the step budget
+loop recv Step             attached(_b.run_step(SET_INDEX, TICK))       under the step budget
 Shutdown                   Interp::destroy() -> Py_EndInterpreter
+runner gone                return; the interpreter stays alive (abandoned bot, warden holds its GIL)
 ```
+
+The runner waits `step_time` for `Loaded`/`Done`, then has the warden freeze the bot by
+taking its GIL. The bot's next turn thaws it and ends when that work returns.
+See [resourcelimits.md](resourcelimits.md).
 
 Interpreter config:
 
@@ -195,7 +203,8 @@ stateDiagram-v2
 ```
 
 No token in the bridge: `query`/`act` raise `RuntimeError("no step in progress")`.
-At most one token exists in the process at a time.
+While a set ends the runner answers every call with `StepOver`: `RuntimeError("the step
+is over")`. At most one live token exists in the process at a time.
 
 ## Inside the interpreter
 
@@ -220,16 +229,16 @@ Bridge reply format:
 ## Replay
 
 ```text
-Replay { match_id, engine_version, config, teams, sets[], result }
+Replay { match_id, engine_version, config { game, sets, seed, teams, max_ticks, limits, game_config? }, teams, sets[], result }
   SetReplay { index, first_team, initial_state, ticks[], result }
     Tick { number, steps[], state_after }
-      Step { bot, team, actions[], stdout, failure? }
+      Step { bot, team, actions[], stdout, failure?, usage: { time_us, memory? } }
     SetResult { index, first_team, winner_team?, reason: win|draw|forfeit, detail, ticks }
   MatchResult { sets[], set_wins[], winner_team? }
 ```
 
-Deterministic for a fixed seed: no timestamps, sorted JSON keys, ChaCha8 seeds
-(`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
+Deterministic for a fixed seed except `usage`: no timestamps, sorted JSON keys, ChaCha8
+seeds (`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
 
 ## Adding a game
 

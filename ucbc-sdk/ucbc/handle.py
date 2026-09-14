@@ -6,7 +6,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["ActionError", "BridgeFn", "Handle", "Identity", "QueryError", "SetOver"]
+__all__ = [
+    "ActionError",
+    "BridgeFn",
+    "Handle",
+    "Identity",
+    "QueryError",
+    "SetOver",
+]
 
 BridgeFn = Callable[[str], str]
 

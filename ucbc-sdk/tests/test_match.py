@@ -1,6 +1,7 @@
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from ucbc.runner import run_match
 
@@ -29,8 +30,18 @@ def test_same_seed_gives_identical_replays(bot: BotPath, tmp_path: Path) -> None
     run_match(bot("random"), bot("random"), seed=42, replay_path=paths[0])
     run_match(bot("random"), bot("random"), seed=42, replay_path=paths[1])
     run_match(bot("random"), bot("random"), seed=43, replay_path=paths[2])
-    assert paths[0].read_bytes() == paths[1].read_bytes()
-    assert paths[0].read_bytes() != paths[2].read_bytes()
+
+    # Everything but the measured step times must repeat.
+    def played(path: Path) -> list[Any]:
+        replay = json.loads(path.read_text())
+        return [
+            (tick["state_after"], [step["actions"] for step in tick["steps"]])
+            for s in replay["sets"]
+            for tick in s["ticks"]
+        ]
+
+    assert played(paths[0]) == played(paths[1])
+    assert played(paths[0]) != played(paths[2])
 
 
 def test_games_lists_what_is_compiled_in() -> None:

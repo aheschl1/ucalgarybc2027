@@ -3,10 +3,12 @@
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::bot::BotResourceLimit;
 use crate::error::EngineError;
 use crate::game::Outcome;
 use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
@@ -32,10 +34,18 @@ pub struct MatchConfig {
     /// Opaque to the engine; handed to the game factory.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub game_config: Option<Value>,
+    /// What each bot may use.
+    pub limits: BotResourceLimit,
 }
 
 impl MatchConfig {
-    pub fn new(game: impl Into<String>, sets: u32, seed: u64, teams: u32) -> Self {
+    pub fn new(
+        game: impl Into<String>,
+        sets: u32,
+        seed: u64,
+        teams: u32,
+        limits: BotResourceLimit,
+    ) -> Self {
         Self {
             game: game.into(),
             sets,
@@ -43,6 +53,7 @@ impl MatchConfig {
             teams,
             max_ticks: DEFAULT_MAX_TICKS,
             game_config: None,
+            limits,
         }
     }
 
@@ -99,6 +110,26 @@ impl FailureRecord {
     }
 }
 
+/// What a step used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Usage {
+    /// Wall-clock time the bot had control during the step: the engine's own time
+    /// answering its calls is excluded.
+    pub time_us: u64,
+    /// Bytes the bot's runtime held after the step; absent when the runtime cannot tell.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory: Option<u64>,
+}
+
+impl Usage {
+    pub fn new(time: Duration, memory: Option<u64>) -> Self {
+        Self {
+            time_us: time.as_micros() as u64,
+            memory,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Step {
     pub bot: BotId,
@@ -109,6 +140,7 @@ pub struct Step {
     pub stdout: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<FailureRecord>,
+    pub usage: Usage,
 }
 
 impl Step {
@@ -117,6 +149,7 @@ impl Step {
         actions: Vec<Value>,
         stdout: String,
         failure: Option<FailureRecord>,
+        usage: Usage,
     ) -> Self {
         Self {
             bot: bot.id,
@@ -124,6 +157,7 @@ impl Step {
             actions,
             stdout,
             failure,
+            usage,
         }
     }
 }
@@ -310,8 +344,10 @@ mod tests {
 
     #[test]
     fn config_defaults_max_ticks() {
-        let c: MatchConfig =
-            serde_json::from_str(r#"{"game":"x","sets":1,"seed":0,"teams":2}"#).unwrap();
+        let c: MatchConfig = serde_json::from_str(
+            r#"{"game":"x","sets":1,"seed":0,"teams":2,"limits":{"step_ms":1,"memory_bytes":1}}"#,
+        )
+        .unwrap();
         assert_eq!(c.max_ticks, DEFAULT_MAX_TICKS);
     }
 }

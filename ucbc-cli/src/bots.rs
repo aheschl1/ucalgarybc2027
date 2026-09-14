@@ -20,7 +20,7 @@ pub fn team(kind: &str, name: &str) -> Option<TeamSpec> {
     Some(spec)
 }
 
-fn empty_cells(ctx: &StepCtx<'_>) -> Vec<(u32, u32)> {
+fn empty_cells(ctx: &mut StepCtx<'_>) -> Vec<(u32, u32)> {
     let view: BoardView =
         serde_json::from_value(ctx.query(&json!({"type": "board"})).expect("board query"))
             .expect("board shape");

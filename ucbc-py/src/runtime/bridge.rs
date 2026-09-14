@@ -85,6 +85,7 @@ impl Bridge {
             return Err("engine link closed");
         }
         let reply = match self.recv().ok_or("engine link closed")? {
+            ToBot::StepOver => return Err("the step is over"),
             ToBot::QueryReply(Ok(v)) | ToBot::ActReply(Ok(v)) => json!({ "ok": v }),
             ToBot::QueryReply(Err(e)) => error("query", e.to_string()),
             ToBot::ActReply(Err(e @ ActionError::SetOver)) => error("set_over", e.to_string()),

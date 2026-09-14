@@ -13,11 +13,13 @@ pub mod runner;
 pub mod step;
 pub mod summary;
 
-pub use bot::{Bot, BotFactory, SpawnCtx, TeamSpec, registry::BotRegistry};
+pub use bot::{Bot, BotFactory, BotResourceLimit, SpawnCtx, TeamSpec, registry::BotRegistry};
 pub use error::{ActionError, BotFailure, DecodeError, EngineError, QueryError};
 pub use game::{DynGame, Game, GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
 pub use ids::{BotId, BotRef, TeamId, TeamInfo};
-pub use replay::{MatchConfig, MatchResult, Reason, Replay, SetReplay, SetResult, Step, Tick};
+pub use replay::{
+    MatchConfig, MatchResult, Reason, Replay, SetReplay, SetResult, Step, Tick, Usage,
+};
 pub use runner::{MatchReport, MatchRunner, MatchSpec};
 pub use step::{StepCtx, StepResult};
 pub use summary::Summary;

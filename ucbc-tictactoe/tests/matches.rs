@@ -1,30 +1,18 @@
 //! Full matches through the engine, with minimal bots defined here.
 
-use serde::Deserialize;
 use serde_json::json;
 use ucbc_engine::{
     ActionError, Bot, BotFailure, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Reason,
     SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
 };
-use ucbc_tictactoe::{Cell, TicTacToe};
-
-#[derive(Deserialize)]
-struct BoardView {
-    cells: [Cell; 9],
-    you: Cell,
-    to_move: Cell,
-    turn: u32,
-}
+use ucbc_tictactoe::{BoardView, Cell, TicTacToe};
 
 fn board(ctx: &StepCtx<'_>) -> BoardView {
     serde_json::from_value(ctx.query(&json!({"type": "board"})).unwrap()).unwrap()
 }
 
 fn empty_cells(b: &BoardView) -> Vec<(u32, u32)> {
-    (0..9u32)
-        .filter(|&i| b.cells[i as usize] == Cell::Empty)
-        .map(|i| (i / 3, i % 3))
-        .collect()
+    b.board.empty_cells()
 }
 
 fn place(ctx: &mut StepCtx<'_>, row: u32, col: u32) -> Result<(), ActionError> {
@@ -130,6 +118,32 @@ fn failing_bot_forfeits_to_the_opponent() {
     assert_eq!(s0[1].failure.as_ref().unwrap().kind, "RuntimeError");
     assert_eq!(replay.sets[1].result.ticks, 1);
     assert_eq!(replay.sets[1].ticks[0].steps.len(), 1);
+}
+
+/// First-empty play, but raises right after the move that wins set 0 (tick 3).
+struct WinThenRaise;
+
+impl Bot for WinThenRaise {
+    fn step(&mut self, ctx: &mut StepCtx<'_>) -> StepResult {
+        let (r, c) = empty_cells(&board(ctx))[0];
+        place(ctx, r, c).unwrap();
+        if ctx.set_index == 0 && ctx.tick == 3 {
+            return StepResult::failed(BotFailure::exception("ValueError", "after winning"));
+        }
+        StepResult::ok()
+    }
+}
+
+#[test]
+fn an_exception_after_the_winning_move_does_not_undo_the_win() {
+    let team_a = TeamSpec::rust("a", |_: &SpawnCtx| WinThenRaise);
+    let replay = run(team_a, team::<FirstEmpty>("b"), 1, 1);
+    let set = &replay.sets[0];
+    assert_eq!(set.result.reason, Reason::Win);
+    assert_eq!(set.result.winner_team, Some(TeamId(0)));
+    let last = set.ticks.last().unwrap().steps.last().unwrap();
+    assert_eq!(last.actions.len(), 1);
+    assert_eq!(last.failure.as_ref().unwrap().kind, "ValueError");
 }
 
 #[test]

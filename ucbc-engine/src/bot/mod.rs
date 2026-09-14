@@ -31,35 +31,36 @@ impl SpawnCtx {
     }
 }
 
-pub type RustBotFactory = Box<dyn Fn(&SpawnCtx) -> Box<dyn Bot> + Send + Sync>;
-
-pub enum TeamKind {
-    Rust(RustBotFactory),
-    /// Every bot this team owns fails with this failure.
-    Unavailable(BotFailure),
-}
+/// Creates a team's bots. An `Err` fails that bot at its first step.
+pub type BotFactory = Box<dyn FnMut(&SpawnCtx) -> Result<Box<dyn Bot>, BotFailure> + Send>;
 
 pub struct TeamSpec {
     pub name: String,
-    pub kind: TeamKind,
+    pub factory: BotFactory,
 }
 
 impl TeamSpec {
-    pub fn rust<F, B>(name: impl Into<String>, make: F) -> Self
-    where
-        F: Fn(&SpawnCtx) -> B + Send + Sync + 'static,
-        B: Bot + 'static,
-    {
+    pub fn new(name: impl Into<String>, factory: BotFactory) -> Self {
         Self {
             name: name.into(),
-            kind: TeamKind::Rust(Box::new(move |ctx| Box::new(make(ctx)) as Box<dyn Bot>)),
+            factory,
         }
     }
 
+    /// A team whose bots are plain Rust values.
+    pub fn rust<F, B>(name: impl Into<String>, mut make: F) -> Self
+    where
+        F: FnMut(&SpawnCtx) -> B + Send + 'static,
+        B: Bot + 'static,
+    {
+        Self::new(
+            name,
+            Box::new(move |ctx| Ok(Box::new(make(ctx)) as Box<dyn Bot>)),
+        )
+    }
+
+    /// A team whose code cannot run; every bot it owns fails with `failure`.
     pub fn unavailable(name: impl Into<String>, failure: BotFailure) -> Self {
-        Self {
-            name: name.into(),
-            kind: TeamKind::Unavailable(failure),
-        }
+        Self::new(name, Box::new(move |_| Err(failure.clone())))
     }
 }

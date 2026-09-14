@@ -1,14 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::bot::{Bot, SpawnCtx, TeamKind, TeamSpec};
+use crate::bot::{Bot, BotFactory, SpawnCtx, TeamSpec};
 use crate::error::BotFailure;
 use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
 use crate::rng::bot_seed;
 
 struct TeamEntry {
     info: Arc<TeamInfo>,
-    kind: TeamKind,
+    factory: BotFactory,
 }
 
 /// A live bot and what the engine derived for it at spawn.
@@ -34,7 +34,7 @@ impl BotRegistry {
             .enumerate()
             .map(|(i, spec)| TeamEntry {
                 info: Arc::new(TeamInfo::new(TeamId(i as u32), spec.name)),
-                kind: spec.kind,
+                factory: spec.factory,
             })
             .collect();
         Self {
@@ -73,12 +73,9 @@ impl BotRegistry {
     /// exist and the bot must not be dead.
     pub fn bot_mut(&mut self, bot: BotRef) -> Result<&mut BotHandle, BotFailure> {
         if !self.bots.contains_key(&bot.id) {
-            let entry = &self.teams[bot.team.0 as usize];
+            let entry = &mut self.teams[bot.team.0 as usize];
             let ctx = SpawnCtx::new(bot, entry.info.clone(), bot_seed(self.set_seed, bot));
-            let created = match &entry.kind {
-                TeamKind::Rust(make) => make(&ctx),
-                TeamKind::Unavailable(failure) => return Err(failure.clone()),
-            };
+            let created = (entry.factory)(&ctx)?;
             let handle = BotHandle {
                 bot: created,
                 team: ctx.team,

@@ -13,6 +13,9 @@ use crate::rng::set_seed;
 use crate::step::{StepCtx, StepResult};
 use crate::summary::{Summary, summarize, write_summary};
 
+/// Runs before every step with no bot executing. `Err` aborts the match.
+pub type BetweenSteps = Box<dyn FnMut() -> Result<(), EngineError> + Send>;
+
 pub struct MatchSpec {
     match_id: String,
     config: MatchConfig,
@@ -20,6 +23,7 @@ pub struct MatchSpec {
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    between_steps: Option<BetweenSteps>,
 }
 
 impl MatchSpec {
@@ -31,7 +35,14 @@ impl MatchSpec {
             replay_path: None,
             summary_path: None,
             echo_bot_output: false,
+            between_steps: None,
         }
+    }
+
+    /// Called before every step; the Python host uses it to check for Ctrl-C.
+    pub fn between_steps(mut self, hook: BetweenSteps) -> Self {
+        self.between_steps = Some(hook);
+        self
     }
 
     /// Write the replay here when the match ends.
@@ -72,6 +83,7 @@ pub struct MatchRunner<'r> {
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    between_steps: Option<BetweenSteps>,
 }
 
 impl<'r> MatchRunner<'r> {
@@ -98,7 +110,7 @@ impl<'r> MatchRunner<'r> {
             )));
         }
         let factory = registry.get(&config.game)?;
-        let bots: BotRegistry = BotRegistry::new(spec.teams);
+        let bots = BotRegistry::new(spec.teams);
         Ok(Self {
             factory,
             match_id: spec.match_id,
@@ -107,6 +119,7 @@ impl<'r> MatchRunner<'r> {
             replay_path: spec.replay_path,
             summary_path: spec.summary_path,
             echo_bot_output: spec.echo_bot_output,
+            between_steps: spec.between_steps,
         })
     }
 
@@ -118,6 +131,7 @@ impl<'r> MatchRunner<'r> {
                 &self.config,
                 &mut self.bots,
                 self.echo_bot_output,
+                &mut self.between_steps,
                 set_index,
             )?;
             sets.push(set);
@@ -139,6 +153,7 @@ fn run_set(
     config: &MatchConfig,
     bots: &mut BotRegistry,
     echo: bool,
+    between_steps: &mut Option<BetweenSteps>,
     set_index: u32,
 ) -> Result<SetReplay, EngineError> {
     let teams = config.teams;
@@ -175,6 +190,9 @@ fn run_set(
             if bots.is_dead(bot_ref.id) {
                 continue;
             }
+            if let Some(hook) = between_steps.as_mut() {
+                hook()?;
+            }
             let mut actions = Vec::new();
             let (result, team) = match bots.bot_mut(bot_ref) {
                 Ok(BotHandle { bot, team, seed }) => {
@@ -201,6 +219,7 @@ fn run_set(
                 }
             }
 
+            let before = game.status();
             let failure = match result.outcome {
                 Ok(()) => {
                     game.end_step(bot_ref);
@@ -212,6 +231,13 @@ fn run_set(
                     Some(failure)
                 }
             };
+            if let GameStatus::Complete(outcome) = &before
+                && game.status() != before
+            {
+                return Err(EngineError::Game(format!(
+                    "game changed a completed outcome ({outcome:?}) after the step"
+                )));
+            }
 
             for id in game.despawned() {
                 bots.despawn(id);

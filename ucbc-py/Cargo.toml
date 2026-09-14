@@ -12,10 +12,16 @@ test = false
 doctest = false
 bench = false
 
+[features]
+# One feature per game; `maturin build --no-default-features -F <game>` builds a
+# single-game wheel.
+default = ["tictactoe"]
+tictactoe = ["dep:ucbc-tictactoe"]
+
 [dependencies]
 pyo3 = { workspace = true, features = ["extension-module"] }
 ucbc-engine = { workspace = true }
-ucbc-tictactoe = { workspace = true }
+ucbc-tictactoe = { workspace = true, optional = true }
 serde_json = { workspace = true }
 
 [lints]

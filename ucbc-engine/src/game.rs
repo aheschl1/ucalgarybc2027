@@ -221,6 +221,13 @@ impl GameRegistry {
         self
     }
 
+    /// Registered game names, sorted.
+    pub fn names(&self) -> Vec<&'static str> {
+        let mut names: Vec<_> = self.factories.keys().copied().collect();
+        names.sort_unstable();
+        names
+    }
+
     pub fn get(&self, name: &str) -> Result<&GameFactory, EngineError> {
         self.factories
             .get(name)

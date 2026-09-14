@@ -1,14 +1,13 @@
 //! The two bots `ucbc-dev` can run. Not reference bots: participants and the
 //! reference bots are Python programs under `bots/`.
-//! 
+//!
 //! EXAMPLES ONLY
 use rand::SeedableRng;
 use rand::seq::IndexedRandom;
-use serde::Deserialize;
 use serde_json::json;
 use ucbc_engine::rng::ChaCha8Rng;
 use ucbc_engine::{Bot, SpawnCtx, StepCtx, StepResult, TeamSpec};
-use ucbc_tictactoe::Cell;
+use ucbc_tictactoe::BoardView;
 
 pub const KINDS: [&str; 2] = ["first-empty", "random"];
 
@@ -21,19 +20,11 @@ pub fn team(kind: &str, name: &str) -> Option<TeamSpec> {
     Some(spec)
 }
 
-#[derive(Deserialize)]
-struct BoardView {
-    cells: [Cell; 9],
-}
-
 fn empty_cells(ctx: &StepCtx<'_>) -> Vec<(u32, u32)> {
     let view: BoardView =
         serde_json::from_value(ctx.query(&json!({"type": "board"})).expect("board query"))
             .expect("board shape");
-    (0..9u32)
-        .filter(|&i| view.cells[i as usize] == Cell::Empty)
-        .map(|i| (i / 3, i % 3))
-        .collect()
+    view.board.empty_cells()
 }
 
 fn place(ctx: &mut StepCtx<'_>, (row, col): (u32, u32)) {

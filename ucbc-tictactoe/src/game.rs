@@ -12,9 +12,11 @@ pub enum Query {
     Board,
 }
 
-#[derive(Serialize)]
+/// What a bot sees when it asks for the board.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BoardView {
-    pub cells: [Cell; 9],
+    #[serde(flatten)]
+    pub board: Board,
     pub you: Cell,
     pub to_move: Cell,
     pub turn: u32,
@@ -26,7 +28,7 @@ pub enum Action {
     Place { row: u32, col: u32 },
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Placed {
     pub row: u32,
     pub col: u32,
@@ -68,8 +70,11 @@ impl TicTacToe {
         9 - self.board.empty_cells().len() as u32
     }
 
+    /// A forfeit only ends a set still in play; a completed outcome stands.
     fn forfeit(&mut self, loser: TeamId, detail: String) {
-        self.state = State::Over(Outcome::forfeit(Self::opponent(loser), detail));
+        if matches!(self.state, State::Playing { .. }) {
+            self.state = State::Over(Outcome::forfeit(Self::opponent(loser), detail));
+        }
     }
 }
 
@@ -104,7 +109,7 @@ impl Game for TicTacToe {
     fn handle_query(&self, bot: BotRef, query: Query) -> Result<BoardView, QueryError> {
         match query {
             Query::Board => Ok(BoardView {
-                cells: self.board.cells,
+                board: self.board,
                 you: self.mark(bot.team),
                 to_move: self.marks[(self.turn() % 2) as usize],
                 turn: self.turn(),

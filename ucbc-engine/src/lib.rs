@@ -13,7 +13,7 @@ pub mod runner;
 pub mod step;
 pub mod summary;
 
-pub use bot::{Bot, SpawnCtx, TeamKind, TeamSpec, registry::BotRegistry};
+pub use bot::{Bot, BotFactory, SpawnCtx, TeamSpec, registry::BotRegistry};
 pub use error::{ActionError, BotFailure, DecodeError, EngineError, QueryError};
 pub use game::{DynGame, Game, GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
 pub use ids::{BotId, BotRef, TeamId, TeamInfo};

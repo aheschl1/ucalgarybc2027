@@ -14,7 +14,7 @@ bench = false
 
 [dependencies]
 pyo3 = { workspace = true, features = ["extension-module"] }
-ucbc-engine = { workspace = true, features = ["python"] }
+ucbc-engine = { workspace = true }
 ucbc-tictactoe = { workspace = true }
 serde_json = { workspace = true }
 

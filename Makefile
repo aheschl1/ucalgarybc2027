@@ -1,4 +1,4 @@
-.PHONY: all sync build dev sdk viewer-types wheels test test-rust test-py test-viewer lint fmt clean
+.PHONY: all sync build dev sdk viewer-types viewer wheels test test-rust test-py test-viewer lint fmt clean
 
 # `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
 # the engine with that cargo feature, the SDK with that game's handle. Unset: all.
@@ -16,11 +16,16 @@ viewer-types:
 	npm ci
 	node ucbc-viewer/scripts/gen-types.mjs
 
+# The viewer page, built into the ucbc_engine package for `ucbc view`.
+viewer:
+	npm ci
+	npm run build -w @ucbc/viewer -- --outDir ../ucbc-py/python/ucbc_engine/viewer/static --emptyOutDir
+
 dev: sdk
 	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
 
 # Release wheels into dist/: ucbc (engine, runtime, CLI) and ucbc-sdk.
-wheels: sdk
+wheels: sdk viewer
 	rm -rf dist && mkdir -p dist
 	uv build --package ucbc --wheel -o dist -C build-args="$(FEATURES)"
 ifeq ($(GAME),)

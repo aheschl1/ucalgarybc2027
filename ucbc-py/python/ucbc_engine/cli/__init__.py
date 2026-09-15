@@ -1,6 +1,7 @@
 import click
 
 from ucbc_engine.cli.run import run
+from ucbc_engine.cli.view import view
 
 
 @click.group()
@@ -9,3 +10,4 @@ def main() -> None:
 
 
 main.add_command(run)
+main.add_command(view)

@@ -18,6 +18,7 @@ from ucbc_engine.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 @click.option(
     "--summary", type=click.Path(dir_okay=False, path_type=Path), help="Write the summary here."
 )
+@click.option("--view", is_flag=True, help="Open the replay in the viewer after the match.")
 @click.option("--show-bot-output", is_flag=True, help="Echo bot output as the match runs.")
 @click.option(
     "--step-ms", default=DEFAULT_STEP_MS, show_default=True, help="Time budget per bot step."
@@ -34,17 +35,26 @@ def run(
     match_id: str,
     replay: Path | None,
     summary: Path | None,
+    view: bool,
     show_bot_output: bool,
     step_ms: int,
     memory_mb: int,
 ) -> None:
     """Play BOT_A against BOT_B. Each is a directory containing main.py."""
     import signal
+    import tempfile
 
+    from ucbc_engine import viewer
     from ucbc_engine.runner import run_match
 
     # The match runs in Rust; let Ctrl-C end the process instead of waiting for it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    if view:
+        viewer.check_built()
+    if view and replay is None:
+        # Left behind: the process ends on Ctrl-C while serving it.
+        replay = Path(tempfile.mkdtemp(prefix="ucbc-")) / "replay.json"
 
     names = [bot_a.name, bot_b.name]
     try:
@@ -82,3 +92,5 @@ def run(
         click.echo(f"Replay: {replay}")
     if summary:
         click.echo(f"Summary: {summary}")
+    if view and replay:
+        viewer.open_viewer(replay)

@@ -9,6 +9,7 @@ dist/
 .ruff_cache/
 *.json
 .gstack/
+.env.prod
 !package.json
 !package-lock.json
 !tsconfig*.json

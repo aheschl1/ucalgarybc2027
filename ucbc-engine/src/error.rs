@@ -113,4 +113,7 @@ pub enum EngineError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
+    /// A caller-supplied hook failed.
+    #[error("callback failed: {0}")]
+    Callback(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

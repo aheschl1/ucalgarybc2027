@@ -34,5 +34,15 @@ services:
         condition: service_healthy
     command: sh -c "alembic upgrade head && ucbc-api"
 
+  web:
+    build: ./ucbc-web
+    environment:
+      # Inside the compose network the API is `api`, not localhost.
+      UCBC_API_PROXY: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
 volumes:
   pgdata:

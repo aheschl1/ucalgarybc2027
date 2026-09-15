@@ -9,6 +9,8 @@ dist/
 .ruff_cache/
 *.json
 .gstack/
+.env
+.env.local
 .env.prod
 !package.json
 !package-lock.json

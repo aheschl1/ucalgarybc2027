@@ -72,9 +72,10 @@ types. A game's renderer lives in `ucbc-<game>/viewer/` and is registered in
 
 Configuration comes from `.env` plus one realm file: `.env.local` by default, `.env.prod`
 when `ENV=prod`. Process variables win over both. `.env.local` holds the local database URL
-and the default admin credentials; `.env.prod` is not committed.
+and the default admin credentials. None of these files are committed; start from the templates.
 
 ```bash
+cp .env.example .env && cp .env.local.example .env.local
 make up                         # Postgres + the API in Docker, migrated, on :8000
 make db                         # Postgres only, for running the API from the checkout
 make migrate                    # alembic upgrade head

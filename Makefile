@@ -1,4 +1,4 @@
-.PHONY: all sync build dev sdk wheels test test-rust test-py lint fmt clean
+.PHONY: all sync build dev sdk viewer-types wheels test test-rust test-py lint fmt clean
 
 # `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
 # the engine with that cargo feature, the SDK with that game's handle. Unset: all.
@@ -10,6 +10,11 @@ build:
 
 sdk:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games
+
+# TypeScript types for the viewer, from the replay schema and each game's API.
+viewer-types:
+	npm ci
+	node ucbc-viewer/scripts/gen-types.mjs
 
 dev: sdk
 	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
@@ -41,7 +46,9 @@ lint:
 	uv run ruff check ucbc-sdk ucbc-py/python tests bots
 	uv run ruff format --check ucbc-sdk ucbc-py/python tests bots
 	uv run mypy
+	node ucbc-viewer/scripts/gen-types.mjs --check
+	npm run typecheck --workspaces
 
 clean:
 	cargo clean
-	rm -rf .venv dist
+	rm -rf .venv dist node_modules

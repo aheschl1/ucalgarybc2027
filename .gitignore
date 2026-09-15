@@ -9,3 +9,7 @@ dist/
 .ruff_cache/
 *.json
 .gstack/
+!package.json
+!package-lock.json
+!tsconfig*.json
+node_modules/

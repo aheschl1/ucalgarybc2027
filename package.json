@@ -1,0 +1,16 @@
+{
+  "name": "ucbc",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "ucbc-viewer",
+    "ucbc-tictactoe/viewer"
+  ],
+  "devDependencies": {
+    "jsdom": "^29.1.1",
+    "json-schema-to-typescript": "^16.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11"
+  }
+}

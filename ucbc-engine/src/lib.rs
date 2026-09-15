@@ -20,7 +20,7 @@ pub use ids::{BotId, BotRef, TeamId, TeamInfo};
 pub use replay::{
     MatchConfig, MatchResult, Reason, Replay, SetReplay, SetResult, Step, Tick, Usage,
 };
-pub use runner::{MatchReport, MatchRunner, MatchSpec};
+pub use runner::{MatchReport, MatchRunner, MatchSpec, SetHook};
 pub use step::{StepCtx, StepResult};
 pub use summary::Summary;
 

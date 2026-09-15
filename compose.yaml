@@ -1,0 +1,48 @@
+# Run through `make up` / `make db`, which pass .env and .env.<ENV> for ${...} substitution.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - .env
+      - .env.${ENV:-local}
+    environment:
+      ENV: ${ENV:-local}
+      # Inside the compose network the database is `db`, not localhost.
+      UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_API_HOST: 0.0.0.0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && ucbc-api"
+
+  web:
+    build: ./ucbc-web
+    environment:
+      # Inside the compose network the API is `api`, not localhost.
+      UCBC_API_PROXY: http://api:8000
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

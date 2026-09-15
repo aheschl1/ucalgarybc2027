@@ -1,0 +1,27 @@
+[build-system]
+requires = ["uv_build>=0.8,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "ucbc-api"
+version = "0.1.0"
+description = "UCalgary Battlecode: the platform API and its database CLI"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.6",
+    "psycopg[binary,pool]>=3.2",
+    "argon2-cffi>=23",
+    "alembic>=1.14",
+    "sqlalchemy>=2.0",
+    "click>=8.1",
+]
+
+[project.scripts]
+ucbc-api = "api.api:main"
+ucbc-api-cli = "api.cli:main"
+
+[tool.uv.build-backend]
+module-name = "api"
+module-root = ""

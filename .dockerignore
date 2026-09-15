@@ -1,0 +1,7 @@
+target/
+.venv/
+dist/
+bots/
+tests/
+.git/
+**/__pycache__/

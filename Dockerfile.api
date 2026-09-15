@@ -1,0 +1,18 @@
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+
+# uv reads every workspace member's manifest; only ucbc-api is installed.
+COPY pyproject.toml uv.lock ./
+COPY ucbc-sdk/pyproject.toml ucbc-sdk/
+COPY ucbc-py/pyproject.toml ucbc-py/
+COPY ucbc-api/ ucbc-api/
+COPY alembic.ini ./
+COPY alembic/ alembic/
+RUN uv sync --frozen --no-dev --package ucbc-api
+
+RUN useradd --create-home api && chown -R api:api /app
+USER api
+EXPOSE 8000
+CMD ["ucbc-api"]

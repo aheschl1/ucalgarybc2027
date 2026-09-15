@@ -62,9 +62,19 @@ def test_looping_step_is_frozen_and_the_turn_is_lost(bot: BotPath, tmp_path: Pat
     assert elapsed < 3
 
 
-def test_looping_load_is_frozen(bot: BotPath, tmp_path: Path) -> None:
-    # The load overran, the first turn resumed it, and it still never placed.
-    cut_off(set0(bot, "testing/loops_on_load", tmp_path))
+def test_looping_load_fails(bot: BotPath, tmp_path: Path) -> None:
+    failure = failure_of(set0(bot, "testing/loops_on_load", tmp_path))
+    assert failure["kind"] == "TimeoutError"
+    assert "main.py took longer" in failure["message"]
+
+
+def test_a_bot_inside_a_c_call_is_stopped_too(bot: BotPath, tmp_path: Path) -> None:
+    cut_off(set0(bot, "testing/busy_c", tmp_path))
+
+
+def test_signals_and_forks_are_refused(bot: BotPath, tmp_path: Path) -> None:
+    for name in ("testing/kills", "testing/forks"):
+        assert failure_of(set0(bot, name, tmp_path))["kind"] == "PermissionError"
 
 
 def test_an_overrun_resumes_on_the_next_turn(bot: BotPath, tmp_path: Path) -> None:
@@ -118,60 +128,9 @@ def test_limits_are_set_per_match_and_recorded(bot: BotPath, tmp_path: Path) -> 
     assert failure_of(small)["kind"] == "MemoryError"
 
 
-ABANDON_PROBE = """
-import json, os, resource, sys, time
-from ucbc import _engine
-from ucbc.runner import run_match
-run_match(sys.argv[1], sys.argv[2], sets=1)
-before = resource.getrusage(resource.RUSAGE_SELF).ru_utime
-time.sleep(1)
-after = resource.getrusage(resource.RUSAGE_SELF).ru_utime
-print(json.dumps({"cpu": after - before, "abandoned": _engine.abandoned_bots()}))
-sys.stdout.flush()
-os._exit(0)
-"""
-
-
-def abandon_probe(bot: BotPath, name: str) -> dict[str, Any]:
-    """Runs a match in a subprocess, since an abandoned bot lives until its process
-    exits, and reports the process's CPU use while idle afterwards."""
-    done = subprocess.run(
-        [sys.executable, "-c", ABANDON_PROBE, str(bot("first_empty")), str(bot(name))],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    assert done.returncode == 0, done.stderr
-    probe: dict[str, Any] = json.loads(done.stdout)
-    return probe
-
-
-def test_abandoned_bot_thread_stops_running(bot: BotPath) -> None:
-    # A bot that swallows the set-end SystemExit is left frozen, not spinning.
-    probe = abandon_probe(bot, "testing/swallows")
-    assert probe["abandoned"] == 1
-    assert probe["cpu"] < 0.2, probe
-
-
-def test_a_bot_inside_a_c_call_is_abandoned(bot: BotPath) -> None:
-    # The freeze cannot land until the call returns, and neither can the SystemExit
-    # at set end. Tic-tac-toe forfeits an empty step at once, so the bot is abandoned
-    # at set end; the in-step rule (a whole silent turn after a freeze that never
-    # landed) needs a game that plays on after an empty step.
-    assert abandon_probe(bot, "testing/busy_c")["abandoned"] == 1
-
-
-def test_the_switch_interval_cannot_be_changed(bot: BotPath, tmp_path: Path) -> None:
-    failure = failure_of(set0(bot, "testing/switch_interval", tmp_path))
-    assert failure["kind"] == "AttributeError"
-    assert "setswitchinterval" in failure["message"]
-
-
-def test_unstoppable_bot_is_abandoned_and_the_process_still_exits(
-    bot: BotPath, tmp_path: Path
-) -> None:
-    """Runs in a subprocess: the abandoned thread lives until that process exits."""
+def test_a_bot_that_swallows_everything_is_killed_at_set_end(bot: BotPath, tmp_path: Path) -> None:
+    """Runs the CLI in a subprocess: a surviving bot process would hold its stderr
+    open and the run would not return."""
     replay = tmp_path / "replay.json"
     cmd = [sys.executable, "-c", "from ucbc.cli import main; main()", "run"]
     args = [str(bot("first_empty")), str(bot("testing/swallows")), "--sets", "1"]

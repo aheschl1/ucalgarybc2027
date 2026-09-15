@@ -1,5 +1,4 @@
-"""Spends its step inside one C call, which no freeze can interrupt; it is abandoned
-at the end of its set."""
+"""Spends its step inside one C call; SIGSTOP does not care."""
 
 from ucbc.games.tictactoe import TicTacToeHandle
 

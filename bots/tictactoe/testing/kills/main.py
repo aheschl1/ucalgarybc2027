@@ -1,11 +1,11 @@
-"""Tries to make its GIL uninterruptible; the function is gone."""
+"""Tries to stop the engine; the process may not signal anyone."""
 
-import sys
+import os
+import signal
 
 from ucbc.games.tictactoe import TicTacToeHandle
 
-sys.setswitchinterval(1000)
-
 
 def step(handle: TicTacToeHandle) -> None:
+    os.kill(os.getppid(), signal.SIGSTOP)
     handle.place(*handle.empty_cells()[0])

@@ -13,12 +13,11 @@ use crate::error::BotFailure;
 use crate::ids::{BotRef, TeamInfo};
 use crate::step::{StepCtx, StepResult};
 
+/// Dropped when the bot is despawned; a runtime that must be told releases itself in
+/// `Drop`.
 pub trait Bot: Send {
     /// Run one step. Returning ends the step.
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> StepResult;
-
-    /// Called when the bot is despawned.
-    fn shutdown(&mut self) {}
 }
 
 /// What one bot may use, set per match. The engine hands it to the bot's runtime at

@@ -1,7 +1,7 @@
 GAMES: list[str]
 __version__: str
 
-def abandoned_bots() -> int: ...
+def lockdown() -> None: ...
 def run_match(
     game: str,
     bot_dirs: list[str],

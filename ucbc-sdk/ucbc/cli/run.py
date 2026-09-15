@@ -1,5 +1,3 @@
-import os
-import sys
 from pathlib import Path
 
 import click
@@ -84,12 +82,3 @@ def run(
         click.echo(f"Replay: {replay}")
     if summary:
         click.echo(f"Summary: {summary}")
-
-    from ucbc import _engine
-
-    # A bot that would not stop still runs in its interpreter; finalizing Python with
-    # it alive aborts the process, so leave without.
-    if _engine.abandoned_bots():
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os._exit(0)

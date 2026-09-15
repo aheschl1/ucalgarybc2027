@@ -1,5 +1,5 @@
-"""Swallows everything and keeps looping, even the ``SystemExit`` that ends its set;
-it is abandoned."""
+"""Swallows everything and keeps looping; it is stopped at the deadline and killed at
+set end."""
 
 from ucbc.games.tictactoe import TicTacToeHandle
 

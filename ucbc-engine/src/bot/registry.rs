@@ -50,7 +50,7 @@ impl BotRegistry {
     /// Releases every bot from the previous set and fixes the seed bots spawned in this
     /// set derive from.
     pub fn begin_set(&mut self, set_seed: u64) {
-        self.despawn_all();
+        self.bots.clear();
         self.dead.clear();
         self.set_seed = set_seed;
     }
@@ -94,21 +94,7 @@ impl BotRegistry {
     }
 
     pub fn despawn(&mut self, id: BotId) {
-        if let Some(mut handle) = self.bots.remove(&id) {
-            handle.bot.shutdown();
-        }
+        self.bots.remove(&id);
         self.dead.insert(id);
-    }
-
-    fn despawn_all(&mut self) {
-        for (_, mut handle) in self.bots.drain() {
-            handle.bot.shutdown();
-        }
-    }
-}
-
-impl Drop for BotRegistry {
-    fn drop(&mut self) {
-        self.despawn_all();
     }
 }

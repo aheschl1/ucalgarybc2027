@@ -1,7 +1,6 @@
 """The game-agnostic side of what a bot's ``step(handle)`` receives: a handle to the
 one game the engine runs."""
 
-import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -15,7 +14,8 @@ __all__ = [
     "SetOver",
 ]
 
-BridgeFn = Callable[[str], str]
+BridgeFn = Callable[[str, dict[str, Any]], dict[str, Any]]
+"""Sends one ``"query"`` or ``"act"`` payload to the engine and returns its reply."""
 
 
 class QueryError(Exception):
@@ -42,7 +42,7 @@ class Identity:
 class Handle:
     """Wraps the engine's bridge. Each game subclasses this with typed methods."""
 
-    def __init__(self, identity: Identity, bridge: dict[str, BridgeFn]) -> None:
+    def __init__(self, identity: Identity, bridge: BridgeFn) -> None:
         self._identity = identity
         self._bridge = bridge
         self.set_index = 0
@@ -68,7 +68,7 @@ class Handle:
         return self._identity.seed
 
     def _call(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        reply = json.loads(self._bridge[name](json.dumps(payload)))
+        reply = self._bridge(name, payload)
         if "err" in reply:
             kind, message = reply["err"]["kind"], reply["err"]["message"]
             if kind == "query":

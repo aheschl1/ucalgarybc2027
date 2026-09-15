@@ -8,8 +8,8 @@ UCalgary Battlecode. Python bots battle, managed by a rust game engine.
 | --- | --- |
 | `ucbc-engine/` | Game-agnostic match engine. |
 | `ucbc-tictactoe/` | Example tic-tac-toe game implementation. |
-| `ucbc-py/` | The `ucbc-engine` Python package: the `_engine` extension, the bot process, `ucbc run`. |
-| `ucbc-sdk/` | The `ucbc` Python package: what a bot imports, one handle per game. Pure Python. |
+| `ucbc-py/` | The `ucbc` distribution (`pip install ucbc`): the `_engine` extension, the bot process, `ucbc run`. Depends on `ucbc-sdk`. |
+| `ucbc-sdk/` | The `ucbc-sdk` distribution: the `ucbc` package a bot imports, one handle per game. Pure Python. |
 | `ucbc-cli/` | `ucbc-dev`, a Rust-only binary for engine work & testing. |
 | `bots/<game>/` | Sample bots. |
 | `tests/` | Python tests of the whole thing: matches, limits, lockdown. |

@@ -25,6 +25,11 @@ from ucbc_engine.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 @click.option(
     "--memory-mb", default=DEFAULT_MEMORY_BYTES >> 20, show_default=True, help="Memory per bot."
 )
+@click.option(
+    "--upload",
+    is_flag=True,
+    help="Record the match on the API named by UCBC_API_URL/USERNAME/PASSWORD.",
+)
 def run(
     bot_a: Path,
     bot_b: Path,
@@ -37,11 +42,16 @@ def run(
     show_bot_output: bool,
     step_ms: int,
     memory_mb: int,
+    upload: bool,
 ) -> None:
     """Play BOT_A against BOT_B. Each is a directory containing main.py."""
+    import logging
     import signal
 
     from ucbc_engine.runner import run_match
+    from ucbc_engine.upload import UploadError
+
+    logging.basicConfig(level=logging.INFO if upload else logging.WARNING, format="%(message)s")
 
     # The match runs in Rust; let Ctrl-C end the process instead of waiting for it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -61,8 +71,9 @@ def run(
             echo_bot_output=show_bot_output,
             step_ms=step_ms,
             memory_bytes=memory_mb * 2**20,
+            upload=upload,
         )
-    except (RuntimeError, ValueError) as e:
+    except (RuntimeError, ValueError, UploadError) as e:
         raise click.ClickException(str(e)) from e
 
     for s in result["sets"]:

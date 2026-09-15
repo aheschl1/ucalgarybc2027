@@ -412,3 +412,29 @@ fn replay_and_summary_files_round_trip() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn set_hook_sees_each_set_and_its_error_aborts_the_match() {
+    let reg = registry();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let s = spec(vec![plus_one("a"), plus_one("b")], 3, 1).on_set(Box::new(move |set| {
+        tx.send(set.result.index).unwrap();
+        Ok(())
+    }));
+    let report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
+    assert_eq!(rx.iter().collect::<Vec<_>>(), vec![0, 1, 2]);
+    assert_eq!(report.replay.sets.len(), 3);
+
+    let s = spec(vec![plus_one("a"), plus_one("b")], 3, 1).on_set(Box::new(|set| {
+        if set.result.index == 1 {
+            Err(EngineError::Callback("no more".into()))
+        } else {
+            Ok(())
+        }
+    }));
+    let Err(err) = MatchRunner::new(&reg, s).unwrap().run() else {
+        panic!("a failing hook must abort the match");
+    };
+    assert!(matches!(err, EngineError::Callback(_)));
+    assert_eq!(err.to_string(), "callback failed: no more");
+}

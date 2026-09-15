@@ -53,7 +53,7 @@ class MatchRepo:
                 r.reason,
                 r.detail,
                 r.ticks,
-                Jsonb(replay.model_dump()),
+                Jsonb(replay.model_dump(exclude_unset=True)),
             ),
         )
 

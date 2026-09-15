@@ -1,7 +1,10 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// One team, one code submission. Fixed for the whole match.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(transparent)]
 pub struct TeamId(pub u32);
 
@@ -12,7 +15,9 @@ impl std::fmt::Display for TeamId {
 }
 
 /// One unit the game asks to step. Ids are assigned by the game, unique within a set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(transparent)]
 pub struct BotId(pub u64);
 
@@ -23,7 +28,7 @@ impl std::fmt::Display for BotId {
 }
 
 /// A bot and the team that owns it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct BotRef {
     pub id: BotId,
     pub team: TeamId,
@@ -38,7 +43,7 @@ impl BotRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct TeamInfo {
     pub id: TeamId,
     pub name: String,

@@ -7,6 +7,7 @@
 
 use std::collections::BTreeSet;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ucbc_engine::{
@@ -14,18 +15,18 @@ use ucbc_engine::{
     SetSetup, TeamId,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
     Increment { by: u32 },
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub struct Incremented {
     pub count: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Query {
     Counts,
@@ -35,14 +36,14 @@ pub enum Query {
     },
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub struct Counts {
     pub counts: Vec<u32>,
     pub you: TeamId,
     pub bot: BotId,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 pub struct Snapshot {
     pub counts: Vec<u32>,
     pub bots: Vec<BotRef>,

@@ -11,6 +11,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+schemars = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]

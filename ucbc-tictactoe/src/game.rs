@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
     ActionError, BotFailure, BotRef, EngineError, Game, GameStatus, Outcome, QueryError, SetSetup,
@@ -6,29 +7,35 @@ use ucbc_engine::{
 
 use crate::rules::{Board, Cell};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Query {
+    /// The board and whose turn it is.
     Board,
 }
 
 /// What a bot sees when it asks for the board.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct BoardView {
     #[serde(flatten)]
     pub board: Board,
+    /// The mark this bot plays.
     pub you: Cell,
     pub to_move: Cell,
+    /// Marks placed so far this set.
     pub turn: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
+    /// Place this bot's mark. Refused if the cell is taken or a mark was already
+    /// placed this step.
     Place { row: u32, col: u32 },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The mark that was placed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Placed {
     pub row: u32,
     pub col: u32,

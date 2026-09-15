@@ -1,6 +1,7 @@
 //! Developer CLI: Rust-vs-Rust tic-tac-toe matches and replay inspection, no Python.
 
 mod bots;
+mod sdk;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -47,6 +48,16 @@ enum Command {
     },
     /// Print the sets and final boards of a replay file.
     Inspect { replay: PathBuf },
+    /// Print what a game exposes to bots, as JSON Schema.
+    Api { game: String },
+    /// Write every game's Python API module under `games`, as `<game>/_api.py`.
+    GenSdk {
+        /// The `ucbc/games` directory.
+        games: PathBuf,
+        /// Fail instead of writing when a module is out of date.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -57,6 +68,12 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn registry() -> GameRegistry {
+    let mut registry = GameRegistry::new();
+    registry.register::<TicTacToe>();
+    registry
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -71,9 +88,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             replay,
             summary,
         } => {
-            let mut registry = GameRegistry::new();
-            registry.register::<TicTacToe>();
-
             let teams = vec![
                 bots::team(&a, &a).expect("validated by clap"),
                 bots::team(&b, &b).expect("validated by clap"),
@@ -95,7 +109,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             if let Some(path) = summary {
                 spec = spec.summary_path(path);
             }
-            let report = MatchRunner::new(&registry, spec)?.run()?;
+            let report = MatchRunner::new(&registry(), spec)?.run()?;
             print_replay(&report.replay);
             Ok(())
         }
@@ -106,6 +120,28 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 replay.match_id, replay.engine_version
             );
             print_replay(&replay);
+            Ok(())
+        }
+        Command::Api { game } => {
+            println!("{}", serde_json::to_string_pretty(&registry().api(&game)?)?);
+            Ok(())
+        }
+        Command::GenSdk { games, check } => {
+            let registry = registry();
+            for name in registry.names() {
+                let module = sdk::generate(&registry.api(name)?)?;
+                let path = games.join(name).join("_api.py");
+                if check {
+                    if std::fs::read_to_string(&path).ok().as_deref() != Some(module.as_str()) {
+                        return Err(
+                            format!("{} is out of date; run `make sdk`", path.display()).into()
+                        );
+                    }
+                } else {
+                    std::fs::write(&path, module)?;
+                    println!("wrote {}", path.display());
+                }
+            }
             Ok(())
         }
     }

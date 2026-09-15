@@ -1,30 +1,12 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(try_from = "u8", into = "u8")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum Cell {
     Empty,
     X,
     O,
-}
-
-impl From<Cell> for u8 {
-    fn from(c: Cell) -> u8 {
-        c as u8
-    }
-}
-
-impl TryFrom<u8> for Cell {
-    type Error = String;
-
-    fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
-            0 => Ok(Cell::Empty),
-            1 => Ok(Cell::X),
-            2 => Ok(Cell::O),
-            _ => Err(format!("cell value out of range: {v}")),
-        }
-    }
 }
 
 impl Cell {
@@ -57,7 +39,7 @@ const LINES: [[usize; 3]; 8] = [
 ];
 
 /// 3x3 board, row-major.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Board {
     pub cells: [Cell; 9],
 }
@@ -164,15 +146,12 @@ mod tests {
     }
 
     #[test]
-    fn cells_serialize_as_ints() {
+    fn cells_serialize_by_name() {
         let b = filled("X.O......");
-        assert_eq!(
-            serde_json::to_string(&b).unwrap(),
-            r#"{"cells":[1,0,2,0,0,0,0,0,0]}"#
-        );
-        let back: Board = serde_json::from_str(r#"{"cells":[1,0,2,0,0,0,0,0,0]}"#).unwrap();
-        assert_eq!(back, b);
-        assert!(serde_json::from_str::<Board>(r#"{"cells":[7,0,0,0,0,0,0,0,0]}"#).is_err());
+        let json = r#"{"cells":["x","empty","o","empty","empty","empty","empty","empty","empty"]}"#;
+        assert_eq!(serde_json::to_string(&b).unwrap(), json);
+        assert_eq!(serde_json::from_str::<Board>(json).unwrap(), b);
+        assert!(serde_json::from_str::<Board>(json.replace("\"x\"", "\"y\"").as_str()).is_err());
     }
 
     #[test]

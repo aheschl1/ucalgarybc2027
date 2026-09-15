@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use schemars::{JsonSchema, schema_for};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -93,12 +94,12 @@ pub trait Game: Send + 'static {
     /// Registry key, e.g. `"tictactoe"`.
     const NAME: &'static str;
     /// A `#[serde(tag = "type")]` enum of what bots may ask.
-    type Query: DeserializeOwned;
-    type QueryResponse: Serialize;
+    type Query: DeserializeOwned + JsonSchema;
+    type QueryResponse: Serialize + JsonSchema;
     /// A `#[serde(tag = "type")]` enum of what bots may do.
-    type Action: DeserializeOwned;
-    type ActionResponse: Serialize;
-    type Snapshot: Serialize;
+    type Action: DeserializeOwned + JsonSchema;
+    type ActionResponse: Serialize + JsonSchema;
+    type Snapshot: Serialize + JsonSchema;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError>
     where
@@ -203,10 +204,45 @@ fn encode<T: Serialize>(value: T) -> Value {
 pub type GameFactory =
     Box<dyn Fn(&SetSetup) -> Result<Box<dyn DynGame>, EngineError> + Send + Sync>;
 
+/// What a game exposes to bots, as JSON Schema: the input to SDK generation.
+#[derive(Clone, Debug, Serialize)]
+pub struct GameApi {
+    pub name: &'static str,
+    /// The game's Rust type name, e.g. `TicTacToe`.
+    pub type_name: &'static str,
+    pub query: Value,
+    pub query_response: Value,
+    pub action: Value,
+    pub action_response: Value,
+    pub snapshot: Value,
+}
+
+impl GameApi {
+    fn of<G: Game>() -> Self {
+        Self {
+            name: G::NAME,
+            type_name: std::any::type_name::<G>()
+                .rsplit("::")
+                .next()
+                .unwrap_or("Game"),
+            query: schema_for!(G::Query).to_value(),
+            query_response: schema_for!(G::QueryResponse).to_value(),
+            action: schema_for!(G::Action).to_value(),
+            action_response: schema_for!(G::ActionResponse).to_value(),
+            snapshot: schema_for!(G::Snapshot).to_value(),
+        }
+    }
+}
+
+struct Entry {
+    factory: GameFactory,
+    api: fn() -> GameApi,
+}
+
 /// Games known to this engine build, by [`Game::NAME`].
 #[derive(Default)]
 pub struct GameRegistry {
-    factories: HashMap<&'static str, GameFactory>,
+    games: HashMap<&'static str, Entry>,
 }
 
 impl GameRegistry {
@@ -217,20 +253,32 @@ impl GameRegistry {
     pub fn register<G: Game>(&mut self) -> &mut Self {
         let factory: GameFactory =
             Box::new(|setup| G::create(setup).map(|g| Box::new(g) as Box<dyn DynGame>));
-        self.factories.insert(G::NAME, factory);
+        let entry = Entry {
+            factory,
+            api: GameApi::of::<G>,
+        };
+        self.games.insert(G::NAME, entry);
         self
     }
 
     /// Registered game names, sorted.
     pub fn names(&self) -> Vec<&'static str> {
-        let mut names: Vec<_> = self.factories.keys().copied().collect();
+        let mut names: Vec<_> = self.games.keys().copied().collect();
         names.sort_unstable();
         names
     }
 
-    pub fn get(&self, name: &str) -> Result<&GameFactory, EngineError> {
-        self.factories
+    fn entry(&self, name: &str) -> Result<&Entry, EngineError> {
+        self.games
             .get(name)
             .ok_or_else(|| EngineError::UnknownGame(name.to_string()))
+    }
+
+    pub fn get(&self, name: &str) -> Result<&GameFactory, EngineError> {
+        self.entry(name).map(|e| &e.factory)
+    }
+
+    pub fn api(&self, name: &str) -> Result<GameApi, EngineError> {
+        self.entry(name).map(|e| (e.api)())
     }
 }

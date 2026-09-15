@@ -80,7 +80,7 @@ fn run(a: TeamSpec, b: TeamSpec, sets: u32, seed: u64) -> ucbc_engine::Replay {
     MatchRunner::new(&reg, spec).unwrap().run().unwrap().replay
 }
 
-fn final_cells(set: &ucbc_engine::SetReplay) -> Vec<u8> {
+fn final_cells(set: &ucbc_engine::SetReplay) -> Vec<Cell> {
     serde_json::from_value(set.ticks.last().unwrap().state_after["cells"].clone()).unwrap()
 }
 
@@ -92,7 +92,8 @@ fn first_empty_mirror_match_is_won_by_x_on_the_diagonal() {
     assert_eq!(s0.result.winner_team, Some(TeamId(0)));
     // Seven moves: three full ticks of two steps, then X's winning step ends tick 3.
     assert_eq!(s0.result.ticks, 4);
-    assert_eq!(final_cells(s0), vec![1, 2, 1, 2, 1, 2, 1, 0, 0]);
+    use Cell::{Empty as E, O, X};
+    assert_eq!(final_cells(s0), vec![X, O, X, O, X, O, X, E, E]);
     let steppers: Vec<u32> = s0
         .ticks
         .iter()

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UCBC replay</title>
+    <style>
+      body {
+        margin: 0;
+        background: #fafaf9;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #1c1917;
+        }
+      }
+      .ucbc-app-message {
+        max-width: 48rem;
+        margin: 1rem auto;
+        padding: 2rem 1rem;
+        border: 2px dashed #a8a29e;
+        border-radius: 0.5rem;
+        color: #78716c;
+        font: 14px/1.4 system-ui, sans-serif;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./src/app.ts"></script>
+  </body>
+</html>

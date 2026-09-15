@@ -6,5 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ucbc/viewer": "*"
   }
 }

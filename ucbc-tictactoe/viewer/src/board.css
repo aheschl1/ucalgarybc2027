@@ -1,0 +1,32 @@
+.ttt-board {
+  display: grid;
+  grid-template-columns: repeat(3, 5rem);
+  grid-template-rows: repeat(3, 5rem);
+  gap: 4px;
+  background: var(--ucbc-line, #e7e5e4);
+}
+
+.ttt-legend {
+  align-self: center;
+  margin-left: 1.5rem;
+  color: var(--ucbc-muted, #78716c);
+}
+
+.ttt-cell {
+  display: grid;
+  place-items: center;
+  font: 600 2.5rem/1 system-ui, sans-serif;
+  background: var(--ucbc-panel, #ffffff);
+}
+
+.ttt-x {
+  color: #2563eb;
+}
+
+.ttt-o {
+  color: #dc2626;
+}
+
+.ttt-placed {
+  box-shadow: inset 0 0 0 3px var(--ucbc-accent, #2563eb);
+}

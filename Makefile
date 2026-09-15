@@ -1,4 +1,4 @@
-.PHONY: all sync build dev sdk viewer-types wheels test test-rust test-py lint fmt clean
+.PHONY: all sync build dev sdk viewer-types wheels test test-rust test-py test-viewer lint fmt clean
 
 # `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
 # the engine with that cargo feature, the SDK with that game's handle. Unset: all.
@@ -31,13 +31,17 @@ else
 	  && uv build --wheel -o dist $$tmp/sdk && rm -rf $$tmp
 endif
 
-test: test-rust test-py
+test: test-rust test-py test-viewer
 
 test-rust:
 	cargo test --workspace
 
 test-py: dev
 	uv run pytest
+
+test-viewer:
+	npm ci
+	npm test --workspaces
 
 lint:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games --check

@@ -1,6 +1,6 @@
 import click
 
-from ucbc.cli.run import run
+from ucbc_engine.cli.run import run
 
 
 @click.group()

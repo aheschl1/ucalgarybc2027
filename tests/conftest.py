@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-BOTS = Path(__file__).resolve().parents[2] / "bots" / "tictactoe"
+BOTS = Path(__file__).resolve().parents[1] / "bots" / "tictactoe"
 
 
 @pytest.fixture

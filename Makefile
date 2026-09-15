@@ -7,7 +7,7 @@ sdk:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games
 
 dev: sdk
-	uv run maturin develop --uv
+	cd ucbc-py && uv run maturin develop --uv
 
 test: test-rust test-py
 
@@ -21,8 +21,8 @@ lint:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games --check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	uv run ruff check ucbc-sdk bots
-	uv run ruff format --check ucbc-sdk bots
+	uv run ruff check ucbc-sdk ucbc-py/python tests bots
+	uv run ruff format --check ucbc-sdk ucbc-py/python tests bots
 	uv run mypy
 
 clean:

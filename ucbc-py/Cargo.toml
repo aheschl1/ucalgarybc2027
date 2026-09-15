@@ -3,7 +3,7 @@ name = "ucbc-py"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
-description = "PyO3 extension module `ucbc._engine`"
+description = "PyO3 extension module `ucbc_engine._engine`"
 
 [lib]
 name = "_engine"

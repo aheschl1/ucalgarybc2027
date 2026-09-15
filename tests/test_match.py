@@ -3,7 +3,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ucbc.runner import run_match
+from ucbc_engine.runner import run_match
 
 BotPath = Callable[[str], Path]
 
@@ -45,7 +45,7 @@ def test_same_seed_gives_identical_replays(bot: BotPath, tmp_path: Path) -> None
 
 
 def test_games_lists_what_is_compiled_in() -> None:
-    from ucbc import _engine
+    from ucbc_engine import _engine
 
     assert _engine.GAMES == ["tictactoe"]
 

@@ -1,27 +1,14 @@
-[build-system]
-requires = ["maturin>=1.9,<2"]
-build-backend = "maturin"
+# Workspace root: `ucbc-sdk` (the `ucbc` package bots import) and `ucbc-py` (the
+# `ucbc-engine` package with the extension, runtime, and CLI).
 
-[project]
-name = "ucbc"
-version = "0.1.0"
-description = "UCalgary Battlecode: match engine, bot API, and CLI"
-requires-python = ">=3.12"
-dependencies = ["click>=8.1"]
-
-[project.scripts]
-ucbc = "ucbc.cli:main"
-
-[tool.maturin]
-manifest-path = "ucbc-py/Cargo.toml"
-python-source = "ucbc-sdk"
-module-name = "ucbc._engine"
+[tool.uv.workspace]
+members = ["ucbc-sdk", "ucbc-py"]
 
 [dependency-groups]
 dev = ["pytest>=8", "maturin>=1.9,<2", "ruff>=0.6", "mypy>=1.13"]
 
 [tool.pytest.ini_options]
-testpaths = ["ucbc-sdk/tests"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
@@ -36,7 +23,7 @@ exclude = ["**/_api.py"]
 
 [tool.mypy]
 strict = true
-files = ["ucbc-sdk", "bots"]
+files = ["ucbc-sdk", "ucbc-py/python", "tests", "bots"]
 exclude = ["bots/tictactoe/testing/syntax_error"]
-mypy_path = "ucbc-sdk"
+mypy_path = "ucbc-sdk:ucbc-py/python"
 explicit_package_bases = true

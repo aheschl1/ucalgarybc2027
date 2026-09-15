@@ -2,7 +2,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from ucbc.runner import run_match
+from ucbc_engine.runner import run_match
 
 BotPath = Callable[[str], Path]
 

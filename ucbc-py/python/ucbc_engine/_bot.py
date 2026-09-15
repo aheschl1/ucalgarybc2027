@@ -1,4 +1,4 @@
-"""The bot process: ``python -m ucbc._bot``. Runs one team's ``main.py`` for one bot
+"""The bot process: ``python -m ucbc_engine._bot``. Runs one team's ``main.py`` for one bot
 and speaks line-delimited JSON with the engine on its real stdin and stdout. The
 bot's own prints go to a buffer that is returned with each step.
 
@@ -16,11 +16,12 @@ from collections.abc import Callable
 from importlib import import_module
 from typing import Any, TextIO
 
-from ucbc import _engine
 from ucbc.handle import Handle, Identity
 
+from ucbc_engine import _engine
+
 # Standard library a bot may import. Anything else needs a file the process may not
-# open once locked down.
+# open once locked down. `ucbc` and its game modules are imported below.
 PRELOAD = (
     "abc",
     "array",
@@ -135,6 +136,7 @@ def main() -> None:
     resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
     _engine.lockdown()
     handle: Handle = handle_cls(who, link.bridge)
+    link.send({"ready": None})  # The load budget starts here.
     try:
         step = _load(source, path, who.bot_id)
     except BaseException as e:  # noqa: BLE001

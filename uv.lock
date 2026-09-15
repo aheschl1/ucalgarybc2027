@@ -6,6 +6,20 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "ucbc",
+    "ucbc-engine",
+]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "maturin", specifier = ">=1.9,<2" },
+    { name = "mypy", specifier = ">=1.13" },
+    { name = "pytest", specifier = ">=8" },
+    { name = "ruff", specifier = ">=0.6" },
+]
+
 [[package]]
 name = "ast-serialize"
 version = "0.11.2"
@@ -371,26 +385,19 @@ wheels = [
 [[package]]
 name = "ucbc"
 version = "0.1.0"
-source = { editable = "." }
+source = { editable = "ucbc-sdk" }
+
+[[package]]
+name = "ucbc-engine"
+version = "0.1.0"
+source = { editable = "ucbc-py" }
 dependencies = [
     { name = "click" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "maturin" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
+    { name = "ucbc" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "click", specifier = ">=8.1" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "maturin", specifier = ">=1.9,<2" },
-    { name = "mypy", specifier = ">=1.13" },
-    { name = "pytest", specifier = ">=8" },
-    { name = "ruff", specifier = ">=0.6" },
+requires-dist = [
+    { name = "click", specifier = ">=8.1" },
+    { name = "ucbc", editable = "ucbc-sdk" },
 ]

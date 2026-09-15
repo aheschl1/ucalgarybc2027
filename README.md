@@ -8,10 +8,11 @@ UCalgary Battlecode. Python bots battle, managed by a rust game engine.
 | --- | --- |
 | `ucbc-engine/` | Game-agnostic match engine. |
 | `ucbc-tictactoe/` | Example tic-tac-toe game implementation. |
-| `ucbc-py/` | The `ucbc._engine` extension module + Python bot runtime. |
-| `ucbc-sdk/` | The `ucbc` Python package: bot API, classes per game, `ucbc run`. |
+| `ucbc-py/` | The `ucbc-engine` Python package: the `_engine` extension, the bot process, `ucbc run`. |
+| `ucbc-sdk/` | The `ucbc` Python package: what a bot imports, one handle per game. Pure Python. |
 | `ucbc-cli/` | `ucbc-dev`, a Rust-only binary for engine work & testing. |
-| `bots/<game>/` | Sample bots. Consume the ucbc-sdk and are players. |
+| `bots/<game>/` | Sample bots. |
+| `tests/` | Python tests of the whole thing: matches, limits, lockdown. |
 
 ## Setup
 
@@ -68,8 +69,9 @@ Copy the shape of tic-tac-toe.
 2. In `ucbc-py/Cargo.toml`, an optional dependency and a feature `foo = ["dep:ucbc-foo"]`
    in `default`; in `ucbc-py/src/lib.rs`, `registry.register::<ucbc_foo::Foo>()` under
    `#[cfg(feature = "foo")]`.
-3. `ucbc-sdk/ucbc/games/foo.py`: a subclass of `ucbc.handle.Handle` with typed methods over
-   `self._query` and `self._act`, ending with `HANDLE = FooHandle`.
+3. `make sdk` generates `ucbc-sdk/ucbc/games/foo/_api.py` from the game's Rust types;
+   `ucbc-sdk/ucbc/games/foo/__init__.py` subclasses `FooApi` with any conveniences and ends
+   with `HANDLE = FooHandle`.
 4. Bots under `bots/foo/`.
 
 `make dev`, then `uv run ucbc run bots/foo/a bots/foo/b`. A wheel with one game only:
@@ -80,7 +82,7 @@ Copy the shape of tic-tac-toe.
 A match is sets; a set is ticks; a tick is one run of the game's schedule; a step is
 one bot's turn within it. A team is one code submission and may own many bots; the
 game decides which bots exist, who owns them, and the step order. Each bot runs in
-its own interpreter on its own thread with its own copy of the team's `main.py`,
-stepped serially, within the time and memory the match sets. A bot's runtime
+its own locked-down process with its own copy of the team's `main.py`, stepped
+serially, within the time and memory the match sets. A bot's runtime
 failure, including running out of either, is reported to the game, which decides the
 consequence. Every recorded step carries the time and memory it used.

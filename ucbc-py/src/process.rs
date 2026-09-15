@@ -1,4 +1,4 @@
-//! Python teams as child processes, one per bot: `python -m ucbc._bot`, spoken to
+//! Python teams as child processes, one per bot: `python -m ucbc_engine._bot`, spoken to
 //! over its stdin and stdout in line-delimited JSON. The process is the unit of
 //! isolation and of enforcement. A bot past its step budget is stopped with
 //! `SIGSTOP` and resumed at its next turn with `SIGCONT`; at despawn it is killed.
@@ -17,6 +17,10 @@ use nix::unistd::Pid;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use ucbc_engine::{ActionError, Bot, BotFailure, SpawnCtx, StepCtx, StepResult};
+
+/// How long a bot process gets to start Python and import the SDK. Engine time, not
+/// the bot's: its load budget starts when it reports `Ready`.
+const STARTUP: Duration = Duration::from_secs(10);
 
 #[derive(Deserialize)]
 struct Failure {
@@ -56,6 +60,8 @@ impl From<StepReply> for StepResult {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum FromBot {
+    /// Python is up and the SDK imported; `main.py` runs next.
+    Ready(()),
     Loaded(Option<Failure>),
     Query(Value),
     Act(Value),
@@ -110,10 +116,10 @@ pub struct PyBot {
 }
 
 impl PyBot {
-    /// Starts the process and loads `main.py` within the step budget.
+    /// Starts the process and, once it is ready, loads `main.py` within the step budget.
     fn spawn(ctx: &SpawnCtx, team: &PyTeam) -> Result<Self, BotFailure> {
         let mut child = Command::new(&team.python)
-            .args(["-m", "ucbc._bot"])
+            .args(["-m", "ucbc_engine._bot"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -155,6 +161,12 @@ impl PyBot {
             return Err(BotFailure::Crash(
                 "bot process exited while starting".into(),
             ));
+        }
+        match bot.from_bot.recv_timeout(STARTUP) {
+            Ok(Ok(FromBot::Ready(()))) => {}
+            Ok(Ok(_)) => return Err(BotFailure::Crash("bot protocol error".into())),
+            Ok(Err(msg)) => return Err(BotFailure::Crash(msg)),
+            Err(_) => return Err(BotFailure::Crash("bot process did not start".into())),
         }
         match bot.from_bot.recv_timeout(bot.step_time) {
             Ok(Ok(FromBot::Loaded(None))) => Ok(bot),
@@ -210,7 +222,7 @@ impl PyBot {
                     Err(e) => error("action", e),
                 },
                 Ok(FromBot::Done(reply)) => return reply.into(),
-                Ok(FromBot::Loaded(_)) => {
+                Ok(FromBot::Ready(()) | FromBot::Loaded(_)) => {
                     return StepResult::failed(BotFailure::Crash("bot protocol error".into()));
                 }
                 Err(msg) => return StepResult::failed(BotFailure::Crash(msg)),

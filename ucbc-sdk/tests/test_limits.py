@@ -72,9 +72,18 @@ def test_a_bot_inside_a_c_call_is_stopped_too(bot: BotPath, tmp_path: Path) -> N
     cut_off(set0(bot, "testing/busy_c", tmp_path))
 
 
-def test_signals_and_forks_are_refused(bot: BotPath, tmp_path: Path) -> None:
-    for name in ("testing/kills", "testing/forks"):
-        assert failure_of(set0(bot, name, tmp_path))["kind"] == "PermissionError"
+def test_the_process_is_locked_down(bot: BotPath, tmp_path: Path) -> None:
+    for name in ("testing/kills", "testing/forks", "testing/reads", "testing/imports"):
+        assert failure_of(set0(bot, name, tmp_path))["kind"] == "PermissionError", name
+
+
+def test_sockets_are_refused() -> None:
+    probe = "import socket; from ucbc import _engine; _engine.lockdown(); socket.socket()"
+    done = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
+    )
+    assert done.returncode != 0
+    assert "PermissionError" in done.stderr
 
 
 def test_an_overrun_resumes_on_the_next_turn(bot: BotPath, tmp_path: Path) -> None:

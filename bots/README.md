@@ -6,6 +6,7 @@ and `handle` is a `ucbc.games.tictactoe.TicTacToeHandle`. Place exactly one mark
 `handle.memory` persist across steps within a set; each set starts fresh. `print` output
 is captured into the replay and shown with `ucbc run --show-bot-output`.
 
-`main.py` may not import sibling files yet. `tictactoe/random` and
+A bot's process cannot open files, so `main.py` may import only the standard-library
+modules listed in `PRELOAD` in `ucbc/_bot.py`, never sibling files. `tictactoe/random` and
 `tictactoe/first_empty` are the reference bots; everything under `testing/` exists to
 exercise failure paths, including the time and memory limits.

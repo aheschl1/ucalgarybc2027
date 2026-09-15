@@ -83,7 +83,8 @@ fn run_match(
 }
 
 /// System calls a bot process may not make: signalling, forking, threads, exec,
-/// and reading or writing other processes.
+/// other processes' memory, opening or changing files, and sockets. Everything it
+/// needs from disk is imported before the filter goes on.
 const REFUSED: &[&str] = &[
     "kill",
     "tkill",
@@ -99,6 +100,36 @@ const REFUSED: &[&str] = &[
     "process_vm_readv",
     "process_vm_writev",
     "prctl",
+    "open",
+    "openat",
+    "openat2",
+    "creat",
+    "memfd_create",
+    "unlink",
+    "unlinkat",
+    "rename",
+    "renameat",
+    "renameat2",
+    "mkdir",
+    "mkdirat",
+    "rmdir",
+    "link",
+    "linkat",
+    "symlink",
+    "symlinkat",
+    "mknod",
+    "mknodat",
+    "chmod",
+    "fchmodat",
+    "chown",
+    "lchown",
+    "fchownat",
+    "truncate",
+    "utimensat",
+    "sync",
+    "syncfs",
+    "socket",
+    "socketpair",
     #[cfg(target_arch = "x86_64")]
     "fork",
     #[cfg(target_arch = "x86_64")]
@@ -107,7 +138,7 @@ const REFUSED: &[&str] = &[
 
 /// Locks the calling process down for the rest of its life: it dies with its
 /// parent, and the calls in `REFUSED` fail with `EPERM`. `ucbc._bot` calls this
-/// before running the team's code.
+/// after its imports and before running the team's code.
 #[pyfunction]
 fn lockdown() -> PyResult<()> {
     nix::sys::prctl::set_pdeathsig(nix::sys::signal::Signal::SIGKILL).map_err(to_pyerr)?;

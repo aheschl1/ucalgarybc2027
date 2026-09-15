@@ -1,21 +1,64 @@
 """The bot process: ``python -m ucbc._bot``. Runs one team's ``main.py`` for one bot
 and speaks line-delimited JSON with the engine on its real stdin and stdout. The
-bot's own prints go to a buffer that is returned with each step."""
+bot's own prints go to a buffer that is returned with each step.
+
+Before the team's code runs the process is locked down (``_engine.lockdown``): from
+then on it cannot open files, so a bot can import only what is preloaded here."""
 
 import io
 import json
+import linecache
 import os
 import resource
 import sys
 import traceback
 from collections.abc import Callable
+from importlib import import_module
 from typing import Any, TextIO
 
 from ucbc import _engine
 from ucbc.handle import Handle, Identity
 
+# Standard library a bot may import. Anything else needs a file the process may not
+# open once locked down.
+PRELOAD = (
+    "abc",
+    "array",
+    "bisect",
+    "cmath",
+    "collections",
+    "collections.abc",
+    "contextlib",
+    "copy",
+    "dataclasses",
+    "decimal",
+    "encodings.ascii",
+    "encodings.latin_1",
+    "enum",
+    "fractions",
+    "functools",
+    "heapq",
+    "itertools",
+    "math",
+    "numbers",
+    "operator",
+    "pprint",
+    "random",
+    "re",
+    "statistics",
+    "string",
+    "textwrap",
+    "threading",
+    "time",
+    "types",
+    "typing",
+    "weakref",
+)
+
 _buffer = io.BytesIO()
 _output = io.TextIOWrapper(_buffer, encoding="utf-8", errors="backslashreplace", write_through=True)
+_statm = os.open("/proc/self/statm", os.O_RDONLY)
+_page = os.sysconf("SC_PAGE_SIZE")
 
 
 class Link:
@@ -65,8 +108,7 @@ def _load(source: str, path: str, bot_id: int) -> Callable[[Any], None]:
 
 
 def _resident_bytes() -> int:
-    with open("/proc/self/statm") as f:
-        return int(f.read().split()[1]) * os.sysconf("SC_PAGE_SIZE")
+    return int(os.pread(_statm, 256, 0).split()[1]) * _page
 
 
 def _take_output() -> str:
@@ -81,15 +123,20 @@ def main() -> None:
     sys.stdin = io.StringIO()
     sys.stdout = sys.stderr = _output
     sys.__stdout__ = sys.__stderr__ = _output  # type: ignore[misc]
-    _engine.lockdown()
     init = link.recv()
     who = Identity(**init["identity"])
-    handle_cls = __import__(f"ucbc.games.{who.game}", fromlist=["HANDLE"]).HANDLE
+    handle_cls = import_module(f"ucbc.games.{who.game}").HANDLE
+    for name in PRELOAD:
+        import_module(name)
+    source, path = init["source"], init["path"]
+    # Tracebacks read source through linecache, which may not open the file later.
+    linecache.cache[path] = (len(source), None, source.splitlines(True), path)
     limit = init["memory_bytes"]
     resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    _engine.lockdown()
     handle: Handle = handle_cls(who, link.bridge)
     try:
-        step = _load(init["source"], init["path"], who.bot_id)
+        step = _load(source, path, who.bot_id)
     except BaseException as e:  # noqa: BLE001
         link.send({"loaded": _describe(e)})
         return

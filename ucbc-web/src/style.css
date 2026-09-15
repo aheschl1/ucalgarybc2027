@@ -1,0 +1,121 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fff;
+  color: #000;
+  font: 14px/1.5 system-ui, sans-serif;
+}
+
+.login {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 260px;
+  margin: 0 auto;
+  min-height: 100vh;
+  justify-content: center;
+}
+
+.login input,
+.login button {
+  font: inherit;
+  padding: 10px 16px;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  background: #fff;
+  color: inherit;
+  outline: none;
+}
+
+.login input:focus {
+  border-color: #999;
+}
+
+.login button {
+  cursor: pointer;
+}
+
+.login button:disabled {
+  color: #aaa;
+  cursor: default;
+}
+
+.error {
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+  color: #c33;
+}
+
+.dim {
+  color: #888;
+}
+
+.tree {
+  padding: 32px;
+}
+
+.tree ul {
+  list-style: none;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tree > ul {
+  padding-left: 0;
+}
+
+.tree li {
+  margin: 4px 0;
+}
+
+.tree summary,
+.tree a {
+  color: #06c;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.tree summary:hover,
+.tree a:hover {
+  text-decoration: underline;
+}
+
+.tree .error {
+  display: inline;
+  text-align: left;
+}
+
+.lookup {
+  display: flex;
+  gap: 6px;
+}
+
+.lookup input,
+.lookup button {
+  font: inherit;
+  padding: 4px 12px;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  background: #fff;
+  color: inherit;
+  outline: none;
+}
+
+.lookup input {
+  width: 320px;
+}
+
+.lookup button:disabled {
+  color: #aaa;
+}
+
+.tree pre {
+  margin: 4px 0 0 20px;
+  font-size: 12px;
+  max-height: 480px;
+  overflow: auto;
+}

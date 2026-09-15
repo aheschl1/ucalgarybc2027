@@ -13,8 +13,9 @@ UCalgary Battlecode. Python bots battle, managed by a rust game engine.
 | `ucbc-py/` | The `ucbc` distribution (`pip install ucbc`): the `_engine` extension, the bot process, `ucbc run`. Depends on `ucbc-sdk`. |
 | `ucbc-sdk/` | The `ucbc-sdk` distribution: the `ucbc` package a bot imports, one handle per game. Pure Python. |
 | `ucbc-cli/` | `ucbc-dev`, a Rust-only binary for engine work & testing. |
+| `ucbc-api/` | The platform API (FastAPI, Postgres) and `ucbc-api-cli`. Migrations are raw SQL under `alembic/`. |
 | `bots/<game>/` | Sample bots. |
-| `tests/` | Python tests of the whole thing: matches, limits, lockdown. |
+| `tests/` | Python tests of the whole thing: matches, limits, lockdown; `tests/api/` for the API. |
 
 ## Setup
 
@@ -41,7 +42,37 @@ uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --step-ms 50 --
 Each bot gets 500 ms per step and 1 GiB unless the flags say otherwise; see
 [docs/resourcelimits.md](docs/resourcelimits.md).
 
+`--upload` records the match on the platform API: the match is created before the first
+set, each set is posted as it ends, and the result marks it done. It needs `UCBC_API_URL`,
+`UCBC_API_USERNAME`, and `UCBC_API_PASSWORD` (an admin user); without them the match plays
+and a warning says nothing was uploaded.
+
+```bash
+UCBC_API_URL=http://127.0.0.1:8000 UCBC_API_USERNAME=admin UCBC_API_PASSWORD=admin \
+  uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --upload
+```
+
 Rust-only game: `cargo run -p ucbc-cli -- run --a first-empty --b random`.
+
+## Platform API
+
+Configuration comes from `.env` plus one realm file: `.env.local` by default, `.env.prod`
+when `ENV=prod`. Process variables win over both. `.env.local` holds the local database URL
+and the default admin credentials; `.env.prod` is not committed.
+
+```bash
+make up                         # Postgres + the API in Docker, migrated, on :8000
+make db                         # Postgres only, for running the API from the checkout
+make migrate                    # alembic upgrade head
+make api                        # uvicorn on 127.0.0.1:8000; /docs shows the routes
+uv run ucbc-api-cli create-admin            # from UCBC_ADMIN_USERNAME/PASSWORD
+uv run ucbc-api-cli create-user --username bob --password pw
+ENV=prod uv run ucbc-api-cli list-users     # any command, against .env.prod
+make test-api                   # starts its own Postgres through testcontainers
+```
+
+Users authenticate with HTTP Basic; passwords are argon2 hashes. Every match route is admin
+only for now. A new migration is `uv run alembic revision -m "..."` with SQL in `op.execute`.
 
 ## Writing a bot
 

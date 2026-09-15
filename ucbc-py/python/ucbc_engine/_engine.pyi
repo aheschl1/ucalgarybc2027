@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 GAMES: list[str]
 __version__: str
 
@@ -15,4 +17,5 @@ def run_match(
     replay_path: str | None = None,
     summary_path: str | None = None,
     echo_bot_output: bool = False,
+    on_set: Callable[[str], object] | None = None,
 ) -> str: ...

@@ -1,4 +1,4 @@
-.PHONY: all sync build dev sdk wheels test test-rust test-py lint fmt clean
+.PHONY: build sdk dev wheels test test-rust test-py test-api lint clean up down db migrate api
 
 # `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
 # the engine with that cargo feature, the SDK with that game's handle. Unset: all.
@@ -26,22 +26,46 @@ else
 	  && uv build --wheel -o dist $$tmp/sdk && rm -rf $$tmp
 endif
 
-test: test-rust test-py
+test: test-rust test-py test-api
 
 test-rust:
 	cargo test --workspace
 
 test-py: dev
-	uv run pytest
+	uv run pytest --ignore=tests/api
+
+# Needs a database: UCBC_TEST_DATABASE_URL=postgresql://ucbc:ucbc@localhost:5432/ucbc_test
+test-api:
+	uv run pytest tests/api
 
 lint:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games --check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	uv run ruff check ucbc-sdk ucbc-py/python tests bots
-	uv run ruff format --check ucbc-sdk ucbc-py/python tests bots
+	uv run ruff check ucbc-sdk ucbc-py/python ucbc-api alembic tests bots
+	uv run ruff format --check ucbc-sdk ucbc-py/python ucbc-api alembic tests bots
 	uv run mypy
 
 clean:
 	cargo clean
 	rm -rf .venv dist
+
+# Platform: Postgres and the API. `make up` builds the API image, migrates, and serves on :8000.
+# `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.
+ENV ?= local
+COMPOSE := docker compose --env-file .env --env-file .env.$(ENV)
+
+up:
+	$(COMPOSE) up --build
+
+down:
+	$(COMPOSE) down
+
+db:
+	$(COMPOSE) up -d --wait db
+
+migrate:
+	uv run alembic upgrade head
+
+api:
+	uv run ucbc-api

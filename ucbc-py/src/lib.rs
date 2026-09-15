@@ -10,7 +10,10 @@ use pyo3::prelude::*;
 use serde_json::json;
 
 use process::PyTeam;
-use ucbc_engine::{BotResourceLimit, GameRegistry, MatchConfig, MatchRunner, MatchSpec, TeamSpec};
+use ucbc_engine::{
+    BotResourceLimit, EngineError, GameRegistry, MatchConfig, MatchRunner, MatchSpec, SetReplay,
+    TeamSpec,
+};
 
 /// Every game compiled into this wheel.
 fn registry() -> GameRegistry {
@@ -26,9 +29,21 @@ fn to_pyerr(e: impl std::fmt::Display) -> PyErr {
     PyRuntimeError::new_err(e.to_string())
 }
 
-/// Runs a match between Python teams and returns the match result as JSON.
+/// A hook's Python exception is re-raised as itself.
+fn engine_to_pyerr(e: EngineError) -> PyErr {
+    match e {
+        EngineError::Callback(inner) => match inner.downcast::<PyErr>() {
+            Ok(err) => *err,
+            Err(other) => to_pyerr(other),
+        },
+        other => to_pyerr(other),
+    }
+}
+
+/// Runs a match between Python teams and returns the match result as JSON. `on_set` is
+/// called with each set's replay as JSON when the set ends.
 #[pyfunction]
-#[pyo3(signature = (game, bot_dirs, *, step_ms, memory_bytes, sets = 3, seed = 0, match_id = "local", names = None, replay_path = None, summary_path = None, echo_bot_output = false))]
+#[pyo3(signature = (game, bot_dirs, *, step_ms, memory_bytes, sets = 3, seed = 0, match_id = "local", names = None, replay_path = None, summary_path = None, echo_bot_output = false, on_set = None))]
 #[allow(clippy::too_many_arguments)]
 fn run_match(
     py: Python<'_>,
@@ -43,6 +58,7 @@ fn run_match(
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    on_set: Option<Py<PyAny>>,
 ) -> PyResult<String> {
     let names = names.unwrap_or_else(|| {
         bot_dirs
@@ -76,9 +92,17 @@ fn run_match(
     if let Some(path) = summary_path {
         spec = spec.summary_path(path);
     }
+    if let Some(hook) = on_set {
+        spec = spec.on_set(Box::new(move |set: &SetReplay| {
+            let json = serde_json::to_string(set)?;
+            Python::attach(|py| hook.call1(py, (json,)))
+                .map(drop)
+                .map_err(|e| EngineError::Callback(Box::new(e)))
+        }));
+    }
     let report = py
         .detach(|| MatchRunner::new(&registry, spec)?.run())
-        .map_err(to_pyerr)?;
+        .map_err(engine_to_pyerr)?;
     serde_json::to_string(&report.replay.result).map_err(to_pyerr)
 }
 

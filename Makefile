@@ -34,7 +34,7 @@ test-rust:
 test-py: dev
 	uv run pytest --ignore=tests/api
 
-# Needs a database: UCBC_TEST_DATABASE_URL=postgresql://ucbc:ucbc@localhost:5432/ucbc_test
+# Starts its own Postgres through testcontainers; needs Docker.
 test-api:
 	uv run pytest tests/api
 

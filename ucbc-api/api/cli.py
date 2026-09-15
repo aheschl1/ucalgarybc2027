@@ -10,7 +10,8 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow, dict_row
 
 from api.db import DBConnection
-from api.services.users import UsernameTaken, create_user
+from api.errors import ApiError
+from api.services.users import create_user
 from api.settings import settings
 
 
@@ -31,7 +32,7 @@ def run(command: Callable[[DBConnection], Awaitable[None]]) -> None:
 
     try:
         asyncio.run(go())
-    except UsernameTaken as e:
+    except ApiError as e:
         raise click.ClickException(str(e)) from e
 
 

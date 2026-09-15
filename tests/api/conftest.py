@@ -1,15 +1,16 @@
-"""API tests run against a real Postgres named by UCBC_TEST_DATABASE_URL and are skipped
-without it. The schema comes from `alembic upgrade head`; tables are emptied before each test."""
+"""API tests run against a throwaway Postgres from testcontainers. The schema comes from
+`alembic upgrade head`; tables are emptied before each test."""
 
 import os
 import subprocess
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from testcontainers.community.postgres import PostgresContainer
 
 from api.api import create_app
 from api.db import DBConnection
@@ -22,18 +23,17 @@ MEMBER = ("alice", "alice-pw")
 
 
 @pytest.fixture(scope="session")
-def database_url() -> str:
-    url = os.environ.get("UCBC_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("UCBC_TEST_DATABASE_URL is not set")
-    subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=ROOT,
-        env={**os.environ, "UCBC_DATABASE_URL": url},
-        check=True,
-        capture_output=True,
-    )
-    return url
+def database_url() -> Iterator[str]:
+    with PostgresContainer("postgres:17", driver=None) as pg:
+        url = pg.get_connection_url()
+        subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=ROOT,
+            env={**os.environ, "UCBC_DATABASE_URL": url},
+            check=True,
+            capture_output=True,
+        )
+        yield url
 
 
 @pytest.fixture

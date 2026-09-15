@@ -4,10 +4,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from api.db import create_pool
-from api.routes import users
+from api.errors import ApiError
+from api.routes import matches, users
 from api.settings import settings
 
 
@@ -25,12 +27,19 @@ def create_app(database_url: str | None = None) -> FastAPI:
 
     app = FastAPI(title="UCBC", lifespan=lifespan)
     app.include_router(users.router)
+    app.include_router(matches.router)
+    app.add_exception_handler(ApiError, api_error)
 
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
     return app
+
+
+async def api_error(_request: Request, exc: Exception) -> JSONResponse:
+    assert isinstance(exc, ApiError)
+    return JSONResponse({"detail": str(exc)}, status_code=exc.status_code)
 
 
 def main() -> None:

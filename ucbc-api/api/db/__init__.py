@@ -8,6 +8,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from api.db.matches import MatchRepo
 from api.db.users import UserRepo
 
 
@@ -15,6 +16,7 @@ class DBConnection:
     def __init__(self, conn: AsyncConnection[DictRow]) -> None:
         self.conn = conn
         self.user_repo = UserRepo(conn)
+        self.match_repo = MatchRepo(conn)
 
 
 def create_pool(database_url: str) -> AsyncConnectionPool[AsyncConnection[DictRow]]:

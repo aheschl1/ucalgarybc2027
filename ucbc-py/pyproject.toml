@@ -3,11 +3,11 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "ucbc-engine"
+name = "ucbc"
 version = "0.1.0"
-description = "UCalgary Battlecode: match engine, bot runtime, and CLI"
+description = "UCalgary Battlecode: match engine, bot runtime, and the ucbc command; brings the bot SDK"
 requires-python = ">=3.12"
-dependencies = ["ucbc", "click>=8.1"]
+dependencies = ["ucbc-sdk", "click>=8.1"]
 
 [project.scripts]
 ucbc = "ucbc_engine.cli:main"
@@ -17,4 +17,4 @@ python-source = "python"
 module-name = "ucbc_engine._engine"
 
 [tool.uv.sources]
-ucbc = { workspace = true }
+ucbc-sdk = { workspace = true }

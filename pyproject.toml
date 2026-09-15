@@ -1,5 +1,5 @@
-# Workspace root: `ucbc-sdk` (the `ucbc` package bots import) and `ucbc-py` (the
-# `ucbc-engine` package with the extension, runtime, and CLI).
+# Workspace root. `pip install ucbc` is the `ucbc-py` distribution: the extension,
+# runtime, and CLI, which depends on `ucbc-sdk`, the pure `ucbc` package bots import.
 
 [tool.uv.workspace]
 members = ["ucbc-sdk", "ucbc-py"]

@@ -9,7 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "ucbc",
-    "ucbc-engine",
+    "ucbc-sdk",
 ]
 
 [manifest.dependency-groups]
@@ -385,19 +385,19 @@ wheels = [
 [[package]]
 name = "ucbc"
 version = "0.1.0"
-source = { editable = "ucbc-sdk" }
-
-[[package]]
-name = "ucbc-engine"
-version = "0.1.0"
 source = { editable = "ucbc-py" }
 dependencies = [
     { name = "click" },
-    { name = "ucbc" },
+    { name = "ucbc-sdk" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
-    { name = "ucbc", editable = "ucbc-sdk" },
+    { name = "ucbc-sdk", editable = "ucbc-sdk" },
 ]
+
+[[package]]
+name = "ucbc-sdk"
+version = "0.1.0"
+source = { editable = "ucbc-sdk" }

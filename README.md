@@ -74,8 +74,9 @@ Copy the shape of tic-tac-toe.
    with `HANDLE = FooHandle`.
 4. Bots under `bots/foo/`.
 
-`make dev`, then `uv run ucbc run bots/foo/a bots/foo/b`. A wheel with one game only:
-`maturin build --no-default-features -F foo`.
+`make dev`, then `uv run ucbc run bots/foo/a bots/foo/b`. Wheels go to `dist/` with
+`make wheels`; `make wheels GAME=foo` (or `make dev GAME=foo`) builds the engine with only
+that game and the SDK with only its handle.
 
 ## Engine model
 

@@ -2,6 +2,8 @@
 
 UCalgary Battlecode. Python bots battle, managed by a rust game engine.
 
+<https://linear.app/andrew-heschl/team/UCBC/overview>
+
 ## Layout
 
 | Path | What |

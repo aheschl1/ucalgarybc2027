@@ -14,6 +14,9 @@ use crate::rng::set_seed;
 use crate::step::{StepCtx, StepResult};
 use crate::summary::{Summary, summarize, write_summary};
 
+/// Called with each set as it ends; an `Err` aborts the match.
+pub type SetHook = Box<dyn FnMut(&SetReplay) -> Result<(), EngineError> + Send>;
+
 pub struct MatchSpec {
     match_id: String,
     config: MatchConfig,
@@ -21,6 +24,7 @@ pub struct MatchSpec {
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    on_set: Option<SetHook>,
 }
 
 impl MatchSpec {
@@ -32,6 +36,7 @@ impl MatchSpec {
             replay_path: None,
             summary_path: None,
             echo_bot_output: false,
+            on_set: None,
         }
     }
 
@@ -50,6 +55,12 @@ impl MatchSpec {
     /// Echo captured bot output to stderr as it happens.
     pub fn echo_bot_output(mut self, echo: bool) -> Self {
         self.echo_bot_output = echo;
+        self
+    }
+
+    /// Run `hook` after each set, before the next one starts.
+    pub fn on_set(mut self, hook: SetHook) -> Self {
+        self.on_set = Some(hook);
         self
     }
 }
@@ -73,6 +84,7 @@ pub struct MatchRunner<'r> {
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    on_set: Option<SetHook>,
 }
 
 impl<'r> MatchRunner<'r> {
@@ -108,6 +120,7 @@ impl<'r> MatchRunner<'r> {
             replay_path: spec.replay_path,
             summary_path: spec.summary_path,
             echo_bot_output: spec.echo_bot_output,
+            on_set: spec.on_set,
         })
     }
 
@@ -121,6 +134,9 @@ impl<'r> MatchRunner<'r> {
                 self.echo_bot_output,
                 set_index,
             )?;
+            if let Some(hook) = &mut self.on_set {
+                hook(&set)?;
+            }
             sets.push(set);
         }
         let replay = Replay::new(self.match_id, self.config, self.bots.teams(), sets);

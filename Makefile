@@ -35,7 +35,7 @@ test-py: dev
 	uv run pytest --ignore=tests/api
 
 # Starts its own Postgres through testcontainers; needs Docker.
-test-api:
+test-api: dev
 	uv run pytest tests/api
 
 lint:

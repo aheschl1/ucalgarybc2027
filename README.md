@@ -9,7 +9,8 @@ UCalgary Battlecode. Python bots battle, managed by a rust game engine.
 | Path | What |
 | --- | --- |
 | `ucbc-engine/` | Game-agnostic match engine. |
-| `ucbc-tictactoe/` | Example tic-tac-toe game implementation. |
+| `ucbc-tictactoe/` | Example tic-tac-toe game implementation; `viewer/` is its board renderer. |
+| `ucbc-viewer/` | Replay viewer (TypeScript, Vite): game-agnostic shell, standalone page. |
 | `ucbc-py/` | The `ucbc` distribution (`pip install ucbc`): the `_engine` extension, the bot process, `ucbc run`. Depends on `ucbc-sdk`. |
 | `ucbc-sdk/` | The `ucbc-sdk` distribution: the `ucbc` package a bot imports, one handle per game. Pure Python. |
 | `ucbc-cli/` | `ucbc-dev`, a Rust-only binary for engine work & testing. |
@@ -19,7 +20,7 @@ UCalgary Battlecode. Python bots battle, managed by a rust game engine.
 
 ## Setup
 
-Rust 1.85+, Python 3.12, and [uv](https://docs.astral.sh/uv/).
+Rust 1.85+, Python 3.12, and [uv](https://docs.astral.sh/uv/). Node 20.19+ for the viewer.
 
 ```bash
 uv sync                 # builds the extension into .venv
@@ -53,6 +54,19 @@ UCBC_API_URL=http://127.0.0.1:8000 UCBC_API_USERNAME=admin UCBC_API_PASSWORD=adm
 ```
 
 Rust-only game: `cargo run -p ucbc-cli -- run --a first-empty --b random`.
+
+## Viewing a replay
+
+```bash
+make viewer                                   # build the page into ucbc_engine (once, and after viewer changes)
+uv run ucbc view r.json                       # serve on localhost, open the browser
+uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --view
+npm run dev -w @ucbc/viewer                   # work on the viewer; drop a replay onto the page
+```
+
+`make viewer-types` regenerates the viewer's TypeScript types from the Rust replay and game
+types. A game's renderer lives in `ucbc-<game>/viewer/` and is registered in
+`ucbc-viewer/src/app.ts`.
 
 ## Platform API
 
@@ -106,6 +120,8 @@ Copy the shape of tic-tac-toe.
    `ucbc-sdk/ucbc/games/foo/__init__.py` subclasses `FooApi` with any conveniences and ends
    with `HANDLE = FooHandle`.
 4. Bots under `bots/foo/`.
+5. A renderer in `ucbc-foo/viewer/` (an npm workspace), its generated types added to
+   `ucbc-viewer/scripts/gen-types.mjs`, and registered in `ucbc-viewer/src/app.ts`.
 
 `make dev`, then `uv run ucbc run bots/foo/a bots/foo/b`. Wheels go to `dist/` with
 `make wheels`; `make wheels GAME=foo` (or `make dev GAME=foo`) builds the engine with only

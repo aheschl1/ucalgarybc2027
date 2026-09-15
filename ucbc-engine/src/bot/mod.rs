@@ -7,6 +7,7 @@ pub mod registry;
 use std::sync::Arc;
 use std::time::Duration;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::BotFailure;
@@ -22,7 +23,7 @@ pub trait Bot: Send {
 
 /// What one bot may use, set per match. The engine hands it to the bot's runtime at
 /// spawn; enforcement is the runtime's.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct BotResourceLimit {
     /// Wall-clock budget, in milliseconds, for loading the team's code and for each step.
     pub step_ms: u64,

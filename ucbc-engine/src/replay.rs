@@ -5,6 +5,7 @@ use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
 use std::time::Duration;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -19,7 +20,7 @@ fn default_max_ticks() -> u32 {
     DEFAULT_MAX_TICKS
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct MatchConfig {
     /// Registry key of the game, e.g. `"tictactoe"`.
     pub game: String,
@@ -69,7 +70,7 @@ impl MatchConfig {
 }
 
 /// How a set ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Reason {
     Win,
@@ -88,7 +89,7 @@ impl std::fmt::Display for Reason {
 }
 
 /// Attached to the step where a bot's runtime failed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct FailureRecord {
     pub kind: String,
     pub message: String,
@@ -111,7 +112,7 @@ impl FailureRecord {
 }
 
 /// What a step used.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Usage {
     /// Wall-clock time the bot had control during the step: the engine's own time
     /// answering its calls is excluded.
@@ -130,7 +131,7 @@ impl Usage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Step {
     pub bot: BotId,
     pub team: TeamId,
@@ -162,7 +163,7 @@ impl Step {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Tick {
     /// 0-based within the set.
     pub number: u32,
@@ -181,7 +182,7 @@ impl Tick {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SetResult {
     pub index: u32,
     pub first_team: TeamId,
@@ -207,7 +208,7 @@ impl SetResult {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SetReplay {
     pub index: u32,
     pub first_team: TeamId,
@@ -228,7 +229,7 @@ impl SetReplay {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MatchResult {
     pub sets: Vec<SetResult>,
     /// Sets won, indexed by team.
@@ -264,7 +265,7 @@ impl MatchResult {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Replay {
     pub match_id: String,
     pub engine_version: String,

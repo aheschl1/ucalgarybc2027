@@ -1,4 +1,4 @@
-.PHONY: build sdk dev wheels test test-rust test-py test-api lint clean up down db migrate api
+.PHONY: build sdk viewer-types viewer dev wheels test test-rust test-py test-api test-viewer lint clean up down db migrate api
 
 # `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
 # the engine with that cargo feature, the SDK with that game's handle. Unset: all.
@@ -11,11 +11,21 @@ build:
 sdk:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games
 
+# TypeScript types for the viewer, from the replay schema and each game's API.
+viewer-types:
+	npm ci
+	node ucbc-viewer/scripts/gen-types.mjs
+
+# The viewer page, built into the ucbc_engine package for `ucbc view`.
+viewer:
+	npm ci
+	npm run build -w @ucbc/viewer -- --outDir ../ucbc-py/python/ucbc_engine/viewer/static --emptyOutDir
+
 dev: sdk
 	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
 
 # Release wheels into dist/: ucbc (engine, runtime, CLI) and ucbc-sdk.
-wheels: sdk
+wheels: sdk viewer
 	rm -rf dist && mkdir -p dist
 	uv build --package ucbc --wheel -o dist -C build-args="$(FEATURES)"
 ifeq ($(GAME),)
@@ -26,7 +36,7 @@ else
 	  && uv build --wheel -o dist $$tmp/sdk && rm -rf $$tmp
 endif
 
-test: test-rust test-py test-api
+test: test-rust test-py test-api test-viewer
 
 test-rust:
 	cargo test --workspace
@@ -38,6 +48,10 @@ test-py: dev
 test-api: dev
 	uv run pytest tests/api
 
+test-viewer:
+	npm ci
+	npm test --workspaces
+
 lint:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games --check
 	cargo fmt --all --check
@@ -45,10 +59,12 @@ lint:
 	uv run ruff check ucbc-sdk ucbc-py/python ucbc-api alembic tests bots
 	uv run ruff format --check ucbc-sdk ucbc-py/python ucbc-api alembic tests bots
 	uv run mypy
+	node ucbc-viewer/scripts/gen-types.mjs --check
+	npm run typecheck --workspaces
 
 clean:
 	cargo clean
-	rm -rf .venv dist
+	rm -rf .venv dist node_modules
 
 # Platform: Postgres and the API. `make up` builds the API image, migrates, and serves on :8000.
 # `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.

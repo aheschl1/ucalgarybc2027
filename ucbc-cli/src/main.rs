@@ -50,6 +50,8 @@ enum Command {
     Inspect { replay: PathBuf },
     /// Print what a game exposes to bots, as JSON Schema.
     Api { game: String },
+    /// Print the replay format, as JSON Schema.
+    ReplaySchema,
     /// Write every game's Python API module under `games`, as `<game>/_api.py`.
     GenSdk {
         /// The `ucbc/games` directory.
@@ -124,6 +126,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Api { game } => {
             println!("{}", serde_json::to_string_pretty(&registry().api(&game)?)?);
+            Ok(())
+        }
+        Command::ReplaySchema => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schemars::schema_for!(Replay))?
+            );
             Ok(())
         }
         Command::GenSdk { games, check } => {

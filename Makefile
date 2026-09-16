@@ -1,4 +1,4 @@
-.PHONY: build sdk viewer-types viewer dev wheels test test-rust test-py test-api test-viewer lint clean up down db migrate api
+.PHONY: build sdk viewer-types viewer dev wheels test test-rust test-py test-api test-viewer lint clean up down db migrate api worker web
 
 # `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
 # the engine with that cargo feature, the SDK with that game's handle. Unset: all.
@@ -20,6 +20,11 @@ viewer-types:
 viewer:
 	npm ci
 	npm run build -w @ucbc/viewer -- --outDir ../ucbc-py/python/ucbc_engine/viewer/static --emptyOutDir
+
+# The platform frontend, built into the API package so `ucbc-api` serves it at /.
+web:
+	npm ci
+	npm run build -w ucbc-web -- --outDir ../ucbc-api/api/static --emptyOutDir
 
 dev: sdk
 	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
@@ -56,17 +61,18 @@ lint:
 	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games --check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	uv run ruff check ucbc-sdk ucbc-py/python ucbc-api alembic tests bots
-	uv run ruff format --check ucbc-sdk ucbc-py/python ucbc-api alembic tests bots
+	uv run ruff check ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots
+	uv run ruff format --check ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots
 	uv run mypy
 	node ucbc-viewer/scripts/gen-types.mjs --check
 	npm run typecheck --workspaces
 
 clean:
 	cargo clean
-	rm -rf .venv dist node_modules
+	rm -rf .venv dist node_modules ucbc-api/api/static
 
-# Platform: Postgres and the API. `make up` builds the API image, migrates, and serves on :8000.
+# Platform: Postgres, the API with the web app, and a worker. `make up` builds the images,
+# migrates, and serves on :8000.
 # `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.
 ENV ?= local
 COMPOSE := docker compose --env-file .env --env-file .env.$(ENV)
@@ -85,3 +91,6 @@ migrate:
 
 api:
 	uv run ucbc-api
+
+worker:
+	uv run ucbc-worker

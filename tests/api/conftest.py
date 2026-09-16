@@ -14,7 +14,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from api.api import create_app
 from api.db import DBConnection
-from api.models import User
+from api.models.users import User
 from api.services.users import create_user
 
 ROOT = Path(__file__).resolve().parents[2]

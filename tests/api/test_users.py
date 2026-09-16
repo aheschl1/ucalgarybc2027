@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from pytest import MonkeyPatch
 
 from api import cli, settings
-from api.models import User
+from api.models.users import User
 from tests.api.conftest import ADMIN, MEMBER
 
 
@@ -19,7 +19,7 @@ async def test_me_requires_valid_credentials(client: AsyncClient, member: User) 
     assert (await client.get("/users/me")).status_code == 401
     r = await client.get("/users/me", auth=(MEMBER[0], "wrong"))
     assert r.status_code == 401
-    assert r.headers["www-authenticate"] == "Basic"
+    assert "www-authenticate" not in r.headers
     r = await client.get("/users/me", auth=MEMBER)
     assert r.status_code == 200
     body = r.json()

@@ -2,7 +2,7 @@ from psycopg.errors import UniqueViolation
 
 from api.db import DBConnection
 from api.errors import Conflict
-from api.models import User
+from api.models.users import User
 from api.passwords import hash_password, verify_password
 
 

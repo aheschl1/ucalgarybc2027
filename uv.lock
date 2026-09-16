@@ -12,6 +12,7 @@ members = [
     "ucbc",
     "ucbc-api",
     "ucbc-sdk",
+    "ucbc-worker",
 ]
 
 [manifest.dependency-groups]
@@ -1373,6 +1374,23 @@ requires-dist = [
 name = "ucbc-sdk"
 version = "0.1.0"
 source = { editable = "ucbc-sdk" }
+
+[[package]]
+name = "ucbc-worker"
+version = "0.1.0"
+source = { editable = "ucbc-worker" }
+dependencies = [
+    { name = "click" },
+    { name = "ucbc" },
+    { name = "ucbc-api" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1" },
+    { name = "ucbc", editable = "ucbc-py" },
+    { name = "ucbc-api", editable = "ucbc-api" },
+]
 
 [[package]]
 name = "urllib3"

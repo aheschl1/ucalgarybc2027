@@ -2,7 +2,7 @@
 # runtime, and CLI, which depends on `ucbc-sdk`, the pure `ucbc` package bots import.
 
 [tool.uv.workspace]
-members = ["ucbc-sdk", "ucbc-py", "ucbc-api"]
+members = ["ucbc-sdk", "ucbc-py", "ucbc-api", "ucbc-worker"]
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "httpx>=0.27", "testcontainers[postgres]>=4.8", "maturin>=1.9,<2", "ruff>=0.6", "mypy>=1.13"]
@@ -20,7 +20,7 @@ exclude = ["bots/tictactoe/testing/syntax_error"]
 extend-select = ["I"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api"]
+known-first-party = ["api", "worker"]
 
 [tool.ruff.format]
 exclude = ["**/_api.py"]
@@ -28,7 +28,7 @@ exclude = ["**/_api.py"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["ucbc-sdk", "ucbc-py/python", "ucbc-api", "alembic", "tests", "bots"]
+files = ["ucbc-sdk", "ucbc-py/python", "ucbc-api", "ucbc-worker", "alembic", "tests", "bots"]
 exclude = ["bots/tictactoe/testing/syntax_error"]
-mypy_path = "ucbc-sdk:ucbc-py/python:ucbc-api"
+mypy_path = "ucbc-sdk:ucbc-py/python:ucbc-api:ucbc-worker"
 explicit_package_bases = true

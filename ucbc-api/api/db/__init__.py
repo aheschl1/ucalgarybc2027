@@ -19,9 +19,10 @@ class DBConnection:
         self.match_repo = MatchRepo(conn)
 
 
-def create_pool(database_url: str) -> AsyncConnectionPool[AsyncConnection[DictRow]]:
+def create_pool(database_url: str, size: int = 4) -> AsyncConnectionPool[AsyncConnection[DictRow]]:
     return AsyncConnectionPool(
         database_url,
+        min_size=size,
         open=False,
         connection_class=AsyncConnection[DictRow],
         kwargs={"row_factory": dict_row},

@@ -6,20 +6,21 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from api.db import DB
-from api.models import User
+from api.models.users import User
 from api.services.users import authenticate
+
+# No WWW-Authenticate header on a 401, so the browser never opens its own login dialog.
+basic = HTTPBasic(auto_error=False)
 
 
 async def current_user(
-    creds: Annotated[HTTPBasicCredentials, Depends(HTTPBasic())], db: DB
+    creds: Annotated[HTTPBasicCredentials | None, Depends(basic)], db: DB
 ) -> User:
+    if creds is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "log in")
     user = await authenticate(db, creds.username, creds.password)
     if user is None:
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED,
-            "wrong username or password",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong username or password")
     return user
 
 

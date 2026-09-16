@@ -9,12 +9,6 @@ export default defineConfig({
       "/api": {
         target: process.env.UCBC_API_PROXY ?? "http://127.0.0.1:8000",
         rewrite: (path) => path.replace(/^\/api/, ""),
-        configure: (proxy) => {
-          // Without this a 401 opens the browser's own Basic auth dialog.
-          proxy.on("proxyRes", (res) => {
-            delete res.headers["www-authenticate"];
-          });
-        },
       },
     },
   },

@@ -4,7 +4,8 @@
   "type": "module",
   "workspaces": [
     "ucbc-viewer",
-    "ucbc-tictactoe/viewer"
+    "ucbc-tictactoe/viewer",
+    "ucbc-web"
   ],
   "devDependencies": {
     "jsdom": "^29.1.1",

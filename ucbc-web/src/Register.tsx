@@ -1,9 +1,14 @@
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router";
-import { ApiError, logIn, type User } from "./api";
+import { describe, logIn, signUp, type User } from "./api";
 
-export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
+export default function Register({
+  onLogIn,
+}: {
+  onLogIn: (user: User) => void;
+}) {
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -13,13 +18,12 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
     setBusy(true);
     setError("");
     try {
+      // Signing up does not log you in, so the app does it straight after. The
+      // session swaps the route table, which is what lands this on the profile.
+      await signUp(email, displayName, password);
       onLogIn(await logIn(email, password));
     } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 401
-          ? "wrong email or password"
-          : "could not reach the api",
-      );
+      setError(describe(err));
       setBusy(false);
     }
   };
@@ -35,16 +39,25 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
         onChange={(e) => setEmail(e.target.value)}
       />
       <input
+        placeholder="display name"
+        autoComplete="nickname"
+        maxLength={64}
+        value={displayName}
+        onChange={(e) => setDisplayName(e.target.value)}
+      />
+      <input
         type="password"
-        placeholder="password"
-        autoComplete="current-password"
+        placeholder="password (8 or more)"
+        autoComplete="new-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
       />
-      <button disabled={busy || !email || !password}>log in</button>
+      <button disabled={busy || !email || !displayName || password.length < 8}>
+        sign up
+      </button>
       {error && <p className="error">{error}</p>}
       <p className="dim center">
-        <Link to="/register">create an account</Link>
+        <Link to="/">already have an account?</Link>
       </p>
     </form>
   );

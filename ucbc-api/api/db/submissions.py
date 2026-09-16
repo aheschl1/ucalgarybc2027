@@ -6,7 +6,7 @@ from psycopg.rows import DictRow
 from api.models.submissions import Submission
 
 COLUMNS = (
-    "s.id, s.user_id, s.name, s.game, s.size, s.sha256, s.created_at, u.username "
+    "s.id, s.user_id, s.name, s.game, s.size, s.sha256, s.created_at, u.display_name "
     "from submissions s join users u on u.id = s.user_id"
 )
 

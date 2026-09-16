@@ -56,37 +56,48 @@ body {
   color: #888;
 }
 
-.tree {
+.tree,
+.page {
   padding: 32px;
 }
 
-.tree ul {
+.tree ul,
+.page ul {
   list-style: none;
   margin: 0;
   padding-left: 20px;
 }
 
-.tree > ul {
+.tree > ul,
+.page > ul {
   padding-left: 0;
 }
 
-.tree li {
+.tree li,
+.page li {
   margin: 4px 0;
 }
 
 .tree summary,
-.tree a {
+.tree a,
+.page summary,
+.page a,
+.login a {
   color: #06c;
   cursor: pointer;
   text-decoration: none;
 }
 
 .tree summary:hover,
-.tree a:hover {
+.tree a:hover,
+.page summary:hover,
+.page a:hover,
+.login a:hover {
   text-decoration: underline;
 }
 
-.tree .error {
+.tree .error,
+.page .error {
   display: inline;
   text-align: left;
 }
@@ -122,9 +133,39 @@ body {
   color: #aaa;
 }
 
-.tree pre {
+.tree pre,
+.page pre {
   margin: 4px 0 0 20px;
   font-size: 12px;
   max-height: 480px;
   overflow: auto;
+}
+
+.page {
+  max-width: 760px;
+}
+
+.page h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.page h2 {
+  font-size: 14px;
+  font-weight: 400;
+  color: #888;
+  margin: 24px 0 6px;
+}
+
+.page p {
+  margin: 4px 0;
+}
+
+.center {
+  text-align: center;
+}
+
+.page .back {
+  margin-top: 24px;
 }

@@ -10,14 +10,14 @@ from api.services.sessions import COOKIE, hash_token
 from tests.api.conftest import MEMBER
 
 
-def credentials(username: str, password: str) -> dict[str, str]:
-    return {"username": username, "password": password}
+def credentials(email: str, password: str) -> dict[str, str]:
+    return {"email": email, "password": password}
 
 
 async def test_login_sets_a_same_origin_cookie(client: AsyncClient, member: User) -> None:
     r = await client.post("/auth/login", json=credentials(*MEMBER))
     assert r.status_code == 200
-    assert r.json()["username"] == MEMBER[0]
+    assert r.json()["email"] == MEMBER[0]
     assert "password_hash" not in r.json()
     cookie = r.headers["set-cookie"].lower()
     assert cookie.startswith(f"{COOKIE.lower()}=")
@@ -31,11 +31,11 @@ async def test_login_sets_a_same_origin_cookie(client: AsyncClient, member: User
     # The client keeps the cookie, and nothing else is needed on later requests.
     r = await client.get("/users/me")
     assert r.status_code == 200
-    assert r.json()["username"] == MEMBER[0]
+    assert r.json()["email"] == MEMBER[0]
 
 
 async def test_wrong_credentials_get_no_cookie(client: AsyncClient, member: User) -> None:
-    for body in [credentials(MEMBER[0], "wrong"), credentials("nobody", MEMBER[1])]:
+    for body in [credentials(MEMBER[0], "wrong"), credentials("nobody@example.com", MEMBER[1])]:
         r = await client.post("/auth/login", json=body)
         assert r.status_code == 401
         assert "set-cookie" not in r.headers
@@ -88,12 +88,12 @@ async def test_deleted_user_loses_the_session(
 
 
 async def test_login_is_rate_limited(client: AsyncClient) -> None:
-    # An unknown username skips the password check, so the loop is quick.
+    # An unknown email skips the password check, so the loop is quick.
     for _ in range(60):
         assert (
-            await client.post("/auth/login", json=credentials("nobody", "x"))
+            await client.post("/auth/login", json=credentials("nobody@example.com", "x"))
         ).status_code == 401
-    r = await client.post("/auth/login", json=credentials("nobody", "x"))
+    r = await client.post("/auth/login", json=credentials("nobody@example.com", "x"))
     assert r.status_code == 429
     assert "too many requests" in r.json()["detail"]
     assert (await client.get("/health")).status_code == 200

@@ -272,3 +272,12 @@ async def test_members_queue_and_see_their_own(
         admin_match,
         match_id,
     ]
+
+    # `mine` drops the platform match: it is what the profile page lists.
+    assert [m["id"] for m in (await member_client.get("/matches?mine=true")).json()] == [match_id]
+    # An admin's own list is their own too, not every match. Both of these hold one of
+    # their submissions: the member queued against it, which is what puts them in a match.
+    assert [m["id"] for m in (await admin_client.get("/matches?mine=true")).json()] == [
+        admin_match,
+        match_id,
+    ]

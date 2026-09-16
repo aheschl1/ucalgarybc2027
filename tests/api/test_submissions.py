@@ -12,7 +12,6 @@ from httpx import AsyncClient
 
 from api.blobs import BlobMissing, BlobStore
 from api.services.submissions import MAX_ZIP, key_for
-from tests.api.conftest import MEMBER
 
 BotPath = Callable[[str], Path]
 
@@ -51,7 +50,7 @@ async def test_upload_list_get(
     body = r.json()
     assert body["name"] == "mybot"
     assert body["game"] == "tictactoe"
-    assert body["username"] == MEMBER[0]
+    assert body["display_name"] == "Alice"
     assert body["size"] == len(data)
     assert body["sha256"] == hashlib.sha256(data).hexdigest()
 

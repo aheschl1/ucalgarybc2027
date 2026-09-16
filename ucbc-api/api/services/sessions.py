@@ -17,9 +17,9 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-async def log_in(db: DBConnection, username: str, password: str) -> tuple[str, User] | None:
+async def log_in(db: DBConnection, email: str, password: str) -> tuple[str, User] | None:
     """A fresh token for the user, or None when the credentials are wrong."""
-    user = await authenticate(db, username, password)
+    user = await authenticate(db, email, password)
     if user is None:
         return None
     await db.session_repo.delete_expired(user.id)

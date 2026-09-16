@@ -17,9 +17,10 @@ async def enqueue(body: MatchEnqueue, db: DB, user: CurrentUser) -> MatchCreated
 
 
 @router.get("")
-async def list_matches(db: DB, user: CurrentUser) -> list[MatchRow]:
-    """Platform matches and the caller's own, newest first; every match for an admin."""
-    return await matches.list_matches(db, user)
+async def list_matches(db: DB, user: CurrentUser, mine: bool = False) -> list[MatchRow]:
+    """Platform matches and the caller's own, newest first; every match for an admin.
+    `mine` narrows to matches the caller has a bot in."""
+    return await matches.list_matches(db, user, mine)
 
 
 @router.get("/{match_id}")

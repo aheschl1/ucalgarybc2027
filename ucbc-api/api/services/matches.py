@@ -62,9 +62,11 @@ async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: in
     return replay
 
 
-async def list_matches(db: DBConnection, user: User) -> list[MatchRow]:
+async def list_matches(db: DBConnection, user: User, mine: bool = False) -> list[MatchRow]:
     """Platform matches and matches with one of the caller's submissions, newest first;
-    every match for an admin."""
+    every match for an admin. `mine` narrows to the caller's own, admin or not."""
+    if mine:
+        return await db.match_repo.list_recent(user.id, LIST_LIMIT, owned_only=True)
     return await db.match_repo.list_recent(None if user.is_admin else user.id, LIST_LIMIT)
 
 

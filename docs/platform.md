@@ -21,7 +21,8 @@ Two images from root Dockerfiles: `Dockerfile.api` (API plus the built web app) 
 
 ## Auth
 
-`POST /api/auth/login` checks the password (Argon2) and sets a session cookie:
+`POST /api/auth/login` takes an email and password, checks the password (Argon2), and sets a
+session cookie:
 `__Host-ucbc_session`, `HttpOnly`, `Secure`, `SameSite=Strict`, 30 days. The cookie holds a
 random token; `sessions` holds its SHA-256 and the user id, so a database read yields no live
 session. Every request resolves the cookie against `sessions` joined to `users`, so deleting a
@@ -30,6 +31,18 @@ app stores nothing itself; on load it asks `/api/users/me` whether it is logged 
 `SameSite=Strict` is the CSRF defence; it works because every API call is a same-site `fetch`.
 Login is limited to 60 requests a minute per client address (slowapi, in memory); behind a
 proxy, uvicorn must be told to trust the forwarded address for that to be per client.
+
+## Users
+
+A user is `email`, `display_name`, `password_hash`, `is_admin`. The email is the login
+credential and is never shown to anyone but its owner; the display name is the only thing
+another user sees, next to a submission. `POST /api/users` is open: anyone signs up, always
+as a non-admin, and the app logs in straight after. Admins are made only by
+`ucbc-api-cli create-admin`. Nothing about a user can be changed once it exists.
+
+The web app is a single page with client-side routes. `api/api.py::APP_ROUTES` lists the
+paths it owns, each served the app shell so a reload of one works; anything else under `/`
+is a built file or a 404.
 
 ## Submissions
 
@@ -61,12 +74,13 @@ lets another worker take the match, after which the old holder's writes match no
 `worker/match.py::command` is the one place the engine process is described.
 
 Who sees a match: admins see all; everyone sees `origin = 'platform'` matches (from schedules,
-not built yet); a user sees matches with one of their own submissions. A member may queue a
+not built yet); a user sees matches with one of their own submissions. `?mine=true` narrows
+any caller to the matches one of their own submissions is in. A member may queue a
 match between submissions when one is their own.
 
 ## Settings
 
 `UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,
 `BLOB_URL` (`scheme://access:secret@host[:port]/bucket[?region=]`), `API_HOST`,
-`API_PORT`, `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
+`API_PORT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
 `WORKER_NAME`.

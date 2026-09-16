@@ -42,29 +42,31 @@ def main() -> None:
 
 
 @main.command("create-user")
-@click.option("--username", required=True)
+@click.option("--email", required=True)
+@click.option("--display-name", required=True)
 @click.option("--password", required=True)
 @click.option("--admin", is_flag=True)
-def create_user_cmd(username: str, password: str, admin: bool) -> None:
+def create_user_cmd(email: str, display_name: str, password: str, admin: bool) -> None:
     async def go(db: DBConnection) -> None:
-        user = await create_user(db, username, password, admin)
-        click.echo(f"created {user.username} (id {user.id}, admin={user.is_admin})")
+        user = await create_user(db, email, display_name, password, admin)
+        click.echo(f"created {user.email} (id {user.id}, admin={user.is_admin})")
 
     run(go)
 
 
 @main.command("create-admin")
-@click.option("--username", help="Defaults to UCBC_ADMIN_USERNAME.")
+@click.option("--email", help="Defaults to UCBC_ADMIN_EMAIL.")
 @click.option("--password", help="Defaults to UCBC_ADMIN_PASSWORD.")
-def create_admin(username: str | None, password: str | None) -> None:
-    username = username or settings.admin_username
+@click.option("--display-name", default="admin", show_default=True)
+def create_admin(email: str | None, password: str | None, display_name: str) -> None:
+    email = email or settings.admin_email
     password = password or settings.admin_password
-    if not username or not password:
-        raise click.UsageError("set --username/--password or UCBC_ADMIN_USERNAME/PASSWORD")
+    if not email or not password:
+        raise click.UsageError("set --email/--password or UCBC_ADMIN_EMAIL/PASSWORD")
 
     async def go(db: DBConnection) -> None:
-        user = await create_user(db, username, password, is_admin=True)
-        click.echo(f"created admin {user.username} (id {user.id})")
+        user = await create_user(db, email, display_name, password, is_admin=True)
+        click.echo(f"created admin {user.email} (id {user.id})")
 
     run(go)
 
@@ -74,6 +76,6 @@ def list_users() -> None:
     async def go(db: DBConnection) -> None:
         for user in await db.user_repo.list():
             flag = " admin" if user.is_admin else ""
-            click.echo(f"{user.id}\t{user.username}{flag}")
+            click.echo(f"{user.id}\t{user.email}\t{user.display_name}{flag}")
 
     run(go)

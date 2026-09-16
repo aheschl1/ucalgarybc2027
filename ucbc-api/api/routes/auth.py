@@ -1,6 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from api.db import DB
 from api.models.sessions import Credentials
@@ -9,6 +11,9 @@ from api.services import sessions
 from api.services.sessions import COOKIE, LIFETIME
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+# Password guessing is throttled per client address; the app registers the 429 handler.
+limiter = Limiter(key_func=get_remote_address)
+LOGIN_LIMIT = "60/minute"
 
 
 def set_session_cookie(response: Response, token: str | None) -> None:
@@ -27,7 +32,8 @@ def set_session_cookie(response: Response, token: str | None) -> None:
 
 
 @router.post("/login")
-async def login(body: Credentials, db: DB, response: Response) -> User:
+@limiter.limit(LOGIN_LIMIT)
+async def login(request: Request, body: Credentials, db: DB, response: Response) -> User:
     result = await sessions.log_in(db, body.username, body.password)
     if result is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong username or password")

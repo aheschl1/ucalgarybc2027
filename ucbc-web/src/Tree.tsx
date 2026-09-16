@@ -9,7 +9,6 @@ import {
   type Submission,
   type User,
 } from "./api";
-import type { Session } from "./App";
 
 type Api = {
   load: <T>(path: string) => Promise<T>;
@@ -17,8 +16,7 @@ type Api = {
   upload: <T>(path: string, form: FormData) => Promise<T>;
 };
 
-export default function Tree({ session, onLogOut }: { session: Session; onLogOut: () => void }) {
-  const { token, user } = session;
+export default function Tree({ user, onLogOut }: { user: User; onLogOut: () => void }) {
   const [lookup, setLookup] = useState("");
   const [opened, setOpened] = useState<string[]>([]);
   // Bumped after an upload or a queued match so the lists refetch.
@@ -34,9 +32,9 @@ export default function Tree({ session, onLogOut }: { session: Session; onLogOut
     }
   };
   const api: Api = {
-    load: (path) => guard(get(path, token)),
-    post: (path, body) => guard(post(path, token, body)),
-    upload: (path, form) => guard(upload(path, token, form)),
+    load: (path) => guard(get(path)),
+    post: (path, body) => guard(post(path, body)),
+    upload: (path, form) => guard(upload(path, form)),
   };
 
   const open = (e: FormEvent) => {

@@ -19,6 +19,18 @@ graph LR
 Two images from root Dockerfiles: `Dockerfile.api` (API plus the built web app) and
 `Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `db`, `minio`, `api`, `worker`.
 
+## Auth
+
+`POST /api/auth/login` checks the password (Argon2) and sets a session cookie:
+`__Host-ucbc_session`, `HttpOnly`, `Secure`, `SameSite=Strict`, 30 days. The cookie holds a
+random token; `sessions` holds its SHA-256 and the user id, so a database read yields no live
+session. Every request resolves the cookie against `sessions` joined to `users`, so deleting a
+user or a session row ends access at once. `POST /api/auth/logout` deletes the row. The web
+app stores nothing itself; on load it asks `/api/users/me` whether it is logged in.
+`SameSite=Strict` is the CSRF defence; it works because every API call is a same-site `fetch`.
+Login is limited to 60 requests a minute per client address (slowapi, in memory); behind a
+proxy, uvicorn must be told to trust the forwarded address for that to be per client.
+
 ## Submissions
 
 A submission is a zip with `main.py` at the top, at most 1 MiB, checked on upload for member

@@ -20,7 +20,7 @@ async def test_login_sets_a_same_origin_cookie(client: AsyncClient, member: User
     assert r.json()["username"] == MEMBER[0]
     assert "password_hash" not in r.json()
     cookie = r.headers["set-cookie"].lower()
-    assert cookie.startswith(f"{COOKIE}=")
+    assert cookie.startswith(f"{COOKIE.lower()}=")
     assert "httponly" in cookie
     assert "samesite=strict" in cookie
     assert "path=/" in cookie
@@ -85,3 +85,15 @@ async def test_deleted_user_loses_the_session(
     assert (await member_client.get("/users/me")).status_code == 200
     await db.conn.execute("delete from users where id = %s", (member.id,))
     assert (await member_client.get("/users/me")).status_code == 401
+
+
+async def test_login_is_rate_limited(client: AsyncClient) -> None:
+    # An unknown username skips the password check, so the loop is quick.
+    for _ in range(60):
+        assert (
+            await client.post("/auth/login", json=credentials("nobody", "x"))
+        ).status_code == 401
+    r = await client.post("/auth/login", json=credentials("nobody", "x"))
+    assert r.status_code == 429
+    assert "too many requests" in r.json()["detail"]
+    assert (await client.get("/health")).status_code == 200

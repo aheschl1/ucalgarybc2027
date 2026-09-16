@@ -17,6 +17,7 @@ from testcontainers.community.postgres import PostgresContainer
 from api.api import create_app
 from api.db import DBConnection
 from api.models.users import User
+from api.routes.auth import limiter
 from api.services.users import create_user
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -48,6 +49,8 @@ def blob_url() -> Iterator[str]:
 @pytest.fixture
 async def app(database_url: str, blob_url: str) -> AsyncIterator[FastAPI]:
     app = create_app(database_url, blob_url)
+    # The login limiter's counters are process-wide, so each test starts from zero.
+    limiter.reset()
     async with app.router.lifespan_context(app):
         async with app.state.pool.connection() as conn:
             await conn.execute(

@@ -8,7 +8,8 @@ from api.db import DBConnection
 from api.models.users import User
 from api.services.users import authenticate
 
-COOKIE = "ucbc_session"
+# The __Host- prefix makes the browser enforce Secure, no Domain, and Path=/.
+COOKIE = "__Host-ucbc_session"
 LIFETIME = timedelta(days=30)
 
 

@@ -1,8 +1,7 @@
 import { type FormEvent, useState } from "react";
-import { ApiError, basicToken, get, type User } from "./api";
-import type { Session } from "./App";
+import { ApiError, logIn, type User } from "./api";
 
-export default function Login({ onLogIn }: { onLogIn: (s: Session) => void }) {
+export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -12,9 +11,8 @@ export default function Login({ onLogIn }: { onLogIn: (s: Session) => void }) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const token = basicToken(username, password);
     try {
-      onLogIn({ token, user: await get<User>("/users/me", token) });
+      onLogIn(await logIn(username, password));
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401

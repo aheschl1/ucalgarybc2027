@@ -18,6 +18,7 @@ dependencies = [
     "click>=8.1",
     "boto3>=1.35",
     "python-multipart>=0.0.20",
+    "slowapi>=0.1.9",
 ]
 
 [project.scripts]

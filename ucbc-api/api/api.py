@@ -11,9 +11,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from api.blobs import BlobStore
 from api.db import create_pool
 from api.errors import ApiError
-from api.routes import matches, users
+from api.routes import matches, submissions, users
 from api.settings import settings
 
 STATIC = Path(__file__).with_name("static")
@@ -21,14 +22,17 @@ STATIC = Path(__file__).with_name("static")
 log = logging.getLogger(__name__)
 
 
-def create_app(database_url: str | None = None) -> FastAPI:
+def create_app(database_url: str | None = None, blob_url: str | None = None) -> FastAPI:
     """The API alone, with its routes at the root."""
     url = database_url or settings.database_url
+    blobs = BlobStore(blob_url or settings.blob_url)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.pool = create_pool(url)
         await app.state.pool.open()
+        app.state.blobs = blobs
+        await blobs.ensure_bucket()
         try:
             yield
         finally:
@@ -37,6 +41,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app = FastAPI(title="UCBC", lifespan=lifespan)
     app.include_router(users.router)
     app.include_router(matches.router)
+    app.include_router(submissions.router)
     app.add_exception_handler(ApiError, api_error)
 
     @app.get("/health")
@@ -46,9 +51,11 @@ def create_app(database_url: str | None = None) -> FastAPI:
     return app
 
 
-def create_site(database_url: str | None = None, static: Path = STATIC) -> FastAPI:
+def create_site(
+    database_url: str | None = None, blob_url: str | None = None, static: Path = STATIC
+) -> FastAPI:
     """The API mounted at /api and the web app served at /."""
-    api = create_app(database_url)
+    api = create_app(database_url, blob_url)
 
     @asynccontextmanager
     async def lifespan(site: FastAPI) -> AsyncIterator[None]:

@@ -10,6 +10,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 from psycopg_pool import AsyncConnectionPool
 
+from api.blobs import BlobStore
 from api.db import DBConnection, create_pool
 from api.services import matches
 from api.services.matches import LostLease
@@ -23,6 +24,7 @@ class Worker:
     def __init__(
         self,
         pool: AsyncConnectionPool[AsyncConnection[DictRow]],
+        blobs: BlobStore,
         *,
         name: str,
         slots: int,
@@ -31,6 +33,7 @@ class Worker:
         lease: timedelta,
     ) -> None:
         self.pool = pool
+        self.blobs = blobs
         self.name = name
         self.slots = slots
         self.poll_s = poll_s
@@ -61,7 +64,9 @@ class Worker:
         log.info("match %s: attempt %d", match.id, match.attempts)
         try:
             try:
-                replay = await play(match, lambda: matches.heartbeat(db, match), self.heartbeat_s)
+                replay = await play(
+                    match, self.blobs, lambda: matches.heartbeat(db, match), self.heartbeat_s
+                )
             except MatchFailed as e:
                 log.warning("match %s: %s", match.id, e)
                 await matches.fail_match(db, match, str(e))
@@ -100,6 +105,7 @@ async def _serve() -> None:
         loop.add_signal_handler(sig, request_stop)
     worker = Worker(
         pool,
+        BlobStore(settings.blob_url),
         name=settings.worker_name,
         slots=settings.worker_slots,
         poll_s=settings.worker_poll_s,

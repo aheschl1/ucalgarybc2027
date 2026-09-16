@@ -5,16 +5,26 @@ graph LR
     web[web app<br/>served at /]
     api[ucbc-api<br/>FastAPI at /api]
     db[(Postgres<br/>matches = queue)]
+    blobs[(blob storage<br/>S3 API, MinIO locally)]
     worker[ucbc-worker]
     engine[ucbc run<br/>one process per match]
     web --> api
     api --> db
+    api --> blobs
     worker --> db
+    worker --> blobs
     worker --> engine
 ```
 
 Two images from root Dockerfiles: `Dockerfile.api` (API plus the built web app) and
-`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `db`, `api`, `worker`.
+`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `db`, `minio`, `api`, `worker`.
+
+## Submissions
+
+A submission is a zip with `main.py` at the top, at most 1 MiB, checked on upload for member
+paths that escape the directory. The row (`submissions`: owner, name, game, size, sha256) is
+in Postgres; the zip is in the bucket at `submissions/<id>.zip` (`api/blobs.py`, one boto3
+client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not.
 
 ## Queue
 
@@ -34,12 +44,17 @@ A worker claims with `for update skip locked`, heartbeats while the engine runs,
 the sets and result in one transaction. `(id, claimed_at)` is the lease: a stale heartbeat
 lets another worker take the match, after which the old holder's writes match no row.
 
-`matches.bots` names each bot's code: `{kind: "path", path}` today, object storage later
-(`api/models/matches.py`, `worker/match.py::fetch`). `worker/match.py::command` is the one
-place the engine process is described.
+`matches.bots` names each bot's code: `{kind: "path", path}` (admins only) or
+`{kind: "submission", id}`, which the worker downloads and unpacks (`worker/match.py::fetch`).
+`worker/match.py::command` is the one place the engine process is described.
+
+Who sees a match: admins see all; everyone sees `origin = 'platform'` matches (from schedules,
+not built yet); a user sees matches with one of their own submissions. A member may queue a
+match between submissions when one is their own.
 
 ## Settings
 
-`UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`, `API_HOST`,
+`UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,
+`BLOB_URL` (`scheme://access:secret@host[:port]/bucket[?region=]`), `API_HOST`,
 `API_PORT`, `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
 `WORKER_NAME`.

@@ -1,16 +1,20 @@
 """Plays one claimed match with `ucbc run` and reads back its replay."""
 
 import asyncio
+import io
 import logging
 import sys
 import tempfile
+import zipfile
 from asyncio.subprocess import DEVNULL, PIPE
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from pydantic import ValidationError
 
-from api.models.matches import BotSource, MatchReplay, MatchRow
+from api.blobs import BlobStore
+from api.models.matches import BotSource, MatchReplay, MatchRow, PathSource
+from api.services.submissions import check_member_name, key_for
 
 log = logging.getLogger(__name__)
 
@@ -27,12 +31,17 @@ class StartFailed(Exception):
     """The engine process could not start; the match goes back to the queue."""
 
 
-def fetch(source: BotSource, scratch: Path) -> Path:
-    """The directory holding the bot's main.py. `scratch` is for sources that have to be
-    downloaded first."""
-    match source.kind:
-        case "path":
-            return Path(source.path)
+async def fetch(source: BotSource, scratch: Path, blobs: BlobStore) -> Path:
+    """The directory holding the bot's main.py: a path as given, or a submission's zip
+    downloaded and unpacked into `scratch`."""
+    if isinstance(source, PathSource):
+        return Path(source.path)
+    data = await blobs.get(key_for(source.id))
+    with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        for name in zf.namelist():
+            check_member_name(name)
+        zf.extractall(scratch)
+    return scratch
 
 
 def command(match: MatchRow, bots: list[Path], replay: Path) -> list[str]:
@@ -61,13 +70,16 @@ def command(match: MatchRow, bots: list[Path], replay: Path) -> list[str]:
 
 
 async def play(
-    match: MatchRow, keepalive: Callable[[], Awaitable[bool]], interval: float
+    match: MatchRow,
+    blobs: BlobStore,
+    keepalive: Callable[[], Awaitable[bool]],
+    interval: float,
 ) -> MatchReplay:
     """Runs the match. `keepalive` is called every `interval` seconds while the engine
     runs; when it returns False the engine is stopped and the match fails."""
     with tempfile.TemporaryDirectory(prefix="ucbc-match-") as tmp:
         scratch = Path(tmp)
-        bots = [fetch(s, scratch / f"bot{i}") for i, s in enumerate(match.bots)]
+        bots = [await fetch(s, scratch / f"bot{i}", blobs) for i, s in enumerate(match.bots)]
         replay = scratch / "replay.json"
         try:
             proc = await asyncio.create_subprocess_exec(

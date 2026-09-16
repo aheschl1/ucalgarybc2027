@@ -2,8 +2,20 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from api.db import DBConnection
-from api.errors import NotFound
-from api.models.matches import Match, MatchEnqueue, MatchReplay, MatchRow, SetReplay, TeamInfo
+from api.errors import ApiError, Forbidden, NotFound
+from api.models.matches import (
+    Match,
+    MatchEnqueue,
+    MatchReplay,
+    MatchRow,
+    PathSource,
+    SetReplay,
+    TeamInfo,
+)
+from api.models.users import User
+from api.services.submissions import get_submission
+
+LIST_LIMIT = 50
 
 
 class LostLease(Exception):
@@ -13,24 +25,56 @@ class LostLease(Exception):
         super().__init__(f"match {match.id} is no longer held")
 
 
-async def enqueue_match(db: DBConnection, req: MatchEnqueue) -> UUID:
-    teams = [TeamInfo(id=i, name=bot.name) for i, bot in enumerate(req.bots)]
-    return await db.match_repo.insert(req.game, teams, req.config, req.bots, req.priority)
+async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID:
+    """Admins queue anything. A member queues submissions only, at least one their own,
+    at normal priority."""
+    names: list[str] = []
+    owned = False
+    for bot in req.bots:
+        if isinstance(bot, PathSource):
+            if not user.is_admin:
+                raise Forbidden("only admins may run bots from a path")
+            names.append(bot.name)
+        else:
+            submission = await get_submission(db, bot.id)
+            if submission.game != req.game:
+                raise ApiError(f"submission {bot.id} is for {submission.game}, not {req.game}")
+            owned = owned or submission.user_id == user.id
+            names.append(submission.name)
+    if not user.is_admin and not owned:
+        raise Forbidden("one of the bots must be your own submission")
+    priority = req.priority if user.is_admin else 0
+    teams = [TeamInfo(id=i, name=name) for i, name in enumerate(names)]
+    return await db.match_repo.insert("user", req.game, teams, req.config, req.bots, priority)
 
 
-async def get_match(db: DBConnection, match_id: UUID) -> Match:
-    row = await db.match_repo.get(match_id)
-    if row is None:
-        raise NotFound(f"no match {match_id}")
+async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
+    row = await _visible(db, user, match_id)
     sets = await db.match_repo.list_set_results(match_id)
     return Match(**row.model_dump(), sets=sets)
 
 
-async def get_set_replay(db: DBConnection, match_id: UUID, index: int) -> SetReplay:
+async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int) -> SetReplay:
+    await _visible(db, user, match_id)
     replay = await db.match_repo.get_set_replay(match_id, index)
     if replay is None:
         raise NotFound(f"no set {index} in match {match_id}")
     return replay
+
+
+async def list_matches(db: DBConnection, user: User) -> list[MatchRow]:
+    """Platform matches and matches with one of the caller's submissions, newest first;
+    every match for an admin."""
+    return await db.match_repo.list_recent(None if user.is_admin else user.id, LIST_LIMIT)
+
+
+async def _visible(db: DBConnection, user: User, match_id: UUID) -> MatchRow:
+    """A platform match or one with the caller's submission, or any for an admin; otherwise
+    as if missing."""
+    row = await db.match_repo.get(match_id, None if user.is_admin else user.id)
+    if row is None:
+        raise NotFound(f"no match {match_id}")
+    return row
 
 
 # The worker side of the queue.

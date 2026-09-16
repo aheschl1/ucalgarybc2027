@@ -6,15 +6,32 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
-from api.models.matches import BotSource, MatchConfig, MatchRow, SetReplay, SetResult, TeamInfo
+from api.models.matches import (
+    BotSource,
+    MatchConfig,
+    MatchOrigin,
+    MatchRow,
+    SetReplay,
+    SetResult,
+    TeamInfo,
+)
 
 COLUMNS = (
-    "id, game, engine_version, teams, config, bots, status, set_wins, winner_team, error, "
+    "id, origin, game, engine_version, teams, config, bots, status, set_wins, winner_team, error, "
     "priority, attempts, max_attempts, claimed_by, claimed_at, heartbeat_at, created_at, "
     "completed_at"
 )
 QUALIFIED = ", ".join(f"matches.{c}" for c in COLUMNS.split(", "))
 SET_RESULT_COLUMNS = "index, first_team, winner_team, reason, detail, ticks"
+# What a user may see: platform matches, and matches with a submission they own. A null
+# user sees everything.
+VISIBLE = """
+    %s::bigint is null or matches.origin = 'platform' or exists (
+        select 1 from jsonb_array_elements(matches.bots) b
+        join submissions s on s.id = (b->>'id')::uuid
+        where b->>'kind' = 'submission' and s.user_id = %s
+    )
+"""
 
 
 class MatchRepo:
@@ -28,6 +45,7 @@ class MatchRepo:
 
     async def insert(
         self,
+        origin: MatchOrigin,
         game: str,
         teams: list[TeamInfo],
         config: MatchConfig,
@@ -35,13 +53,14 @@ class MatchRepo:
         priority: int,
     ) -> UUID:
         cur = await self._conn.execute(
-            "insert into matches (game, teams, config, bots, priority, status) "
-            "values (%s, %s, %s, %s, %s, 'queued') returning id",
+            "insert into matches (origin, game, teams, config, bots, priority, status) "
+            "values (%s, %s, %s, %s, %s, %s, 'queued') returning id",
             (
+                origin,
                 game,
                 Jsonb([t.model_dump() for t in teams]),
                 Jsonb(config.model_dump()),
-                Jsonb([b.model_dump() for b in bots]),
+                Jsonb([b.model_dump(mode="json") for b in bots]),
                 priority,
             ),
         )
@@ -50,10 +69,22 @@ class MatchRepo:
         id: UUID = row["id"]
         return id
 
-    async def get(self, match_id: UUID) -> MatchRow | None:
-        cur = await self._conn.execute(f"select {COLUMNS} from matches where id = %s", (match_id,))
+    async def get(self, match_id: UUID, user_id: int | None = None) -> MatchRow | None:
+        """The match, when `user_id` is None or may see it."""
+        cur = await self._conn.execute(
+            f"select {COLUMNS} from matches where id = %s and ({VISIBLE})",
+            (match_id, user_id, user_id),
+        )
         row = await cur.fetchone()
         return None if row is None else MatchRow.model_validate(row)
+
+    async def list_recent(self, user_id: int | None, limit: int) -> list[MatchRow]:
+        """Newest first; what `user_id` may see, or every match when None."""
+        cur = await self._conn.execute(
+            f"select {COLUMNS} from matches where {VISIBLE} order by created_at desc limit %s",
+            (user_id, user_id, limit),
+        )
+        return [MatchRow.model_validate(row) for row in await cur.fetchall()]
 
     async def claim(self, worker: str, lease: timedelta) -> MatchRow | None:
         """The next queued match, or a running one whose heartbeat is older than `lease`."""

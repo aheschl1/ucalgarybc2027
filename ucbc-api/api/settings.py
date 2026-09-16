@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="UCBC_", env_file=_env_files(), extra="ignore")
 
     database_url: str
+    blob_url: str
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     # Read by `ucbc-api-cli create-admin` only.

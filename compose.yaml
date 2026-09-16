@@ -15,6 +15,23 @@ services:
       timeout: 2s
       retries: 15
 
+  minio:
+    image: minio/minio
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - blobdata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
   # The API and the web app; migrates first.
   api:
     build:
@@ -27,11 +44,14 @@ services:
       ENV: ${ENV:-local}
       # Inside the compose network the database is `db`, not localhost.
       UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_BLOB_URL: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000/ucbc
       UCBC_API_HOST: 0.0.0.0
     ports:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      minio:
         condition: service_healthy
     command: sh -c "alembic upgrade head && ucbc-api"
     healthcheck:
@@ -52,6 +72,7 @@ services:
     environment:
       ENV: ${ENV:-local}
       UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_BLOB_URL: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000/ucbc
       UCBC_WORKER_SLOTS: ${UCBC_WORKER_SLOTS:-2}
     volumes:
       - ./bots:/app/bots:ro
@@ -63,3 +84,4 @@ services:
 
 volumes:
   pgdata:
+  blobdata:

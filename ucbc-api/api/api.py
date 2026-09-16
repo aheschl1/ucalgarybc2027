@@ -20,7 +20,7 @@ from api.settings import settings
 
 STATIC = Path(__file__).with_name("static")
 # The paths the web app owns
-APP_ROUTES = ("/", "/register", "/profile")
+APP_ROUTES = ("/", "/register", "/profile", "/viewer/{match_id}")
 
 log = logging.getLogger(__name__)
 

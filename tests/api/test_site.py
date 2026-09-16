@@ -1,6 +1,7 @@
 """The site serves the API under /api and the built web app at /."""
 
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
@@ -26,6 +27,7 @@ async def test_site_routes(database_url: str, blob_url: str, tmp_path: Path) -> 
 
         # Every route the app owns is served the shell, so reloading one works.
         for path in APP_ROUTES:
+            path = path.format(match_id=uuid4())
             assert (await c.get(path)).text == "<h1>ucbc</h1>", path
 
         # Nothing else is: a missing file is a missing file.

@@ -82,6 +82,7 @@ body {
 .tree a,
 .page summary,
 .page a,
+.viewer a,
 .login a {
   color: #06c;
   cursor: pointer;
@@ -92,12 +93,14 @@ body {
 .tree a:hover,
 .page summary:hover,
 .page a:hover,
+.viewer a:hover,
 .login a:hover {
   text-decoration: underline;
 }
 
 .tree .error,
-.page .error {
+.page .error,
+.viewer .error {
   display: inline;
   text-align: left;
 }
@@ -168,4 +171,12 @@ body {
 
 .page .back {
   margin-top: 24px;
+}
+
+.viewer {
+  padding: 16px 32px;
+}
+
+.viewer p {
+  margin: 0 0 8px;
 }

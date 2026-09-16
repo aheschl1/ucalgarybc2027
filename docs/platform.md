@@ -78,6 +78,11 @@ not built yet); a user sees matches with one of their own submissions. `?mine=tr
 any caller to the matches one of their own submissions is in. A member may queue a
 match between submissions when one is their own.
 
+`/viewer/<match id>` in the web app plays a done match: it reads the match and each of its
+sets through these endpoints and hands the assembled replay to the viewer (`ucbc-viewer`), so
+it shows exactly the matches the API shows the caller. `make web GAME=...` picks the game
+renderer it bundles (`ucbc-viewer/vite/games.ts`).
+
 ## Settings
 
 `UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,

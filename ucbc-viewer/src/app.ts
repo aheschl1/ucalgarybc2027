@@ -1,8 +1,7 @@
 // The standalone page: loads `?replay=<url>` (default `replay.json`, which `ucbc view`
 // serves), or a replay file dropped onto the page.
 
-import { ticTacToe } from "@ucbc/viewer-tictactoe";
-
+import { renderers } from "./games.ts";
 import type { Replay } from "./replay.gen.ts";
 import { createViewer } from "./shell.ts";
 
@@ -10,7 +9,7 @@ const app = document.getElementById("app")!;
 const message = document.createElement("p");
 message.className = "ucbc-app-message";
 message.hidden = true;
-const viewer = createViewer(app, { renderers: [ticTacToe] });
+const viewer = createViewer(app, { renderers });
 const root = app.querySelector<HTMLElement>(".ucbc-viewer")!;
 root.hidden = true;
 app.append(message);

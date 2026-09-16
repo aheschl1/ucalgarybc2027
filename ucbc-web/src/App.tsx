@@ -5,6 +5,7 @@ import Login from "./Login";
 import Profile from "./Profile";
 import Register from "./Register";
 import Tree from "./Tree";
+import Viewer from "./Viewer";
 
 export default function App() {
   // undefined until the API says whether the session cookie is live.
@@ -38,6 +39,7 @@ export default function App() {
         element={<Tree user={user} api={api} onLogOut={leave} />}
       />
       <Route path="/profile" element={<Profile user={user} api={api} />} />
+      <Route path="/viewer/:matchId" element={<Viewer api={api} />} />
       {/* Where signing up lands: the session arrives while the browser is still here. */}
       <Route path="/register" element={<Navigate to="/profile" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

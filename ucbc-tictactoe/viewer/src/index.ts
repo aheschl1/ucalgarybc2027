@@ -6,8 +6,9 @@ import type { Action, Board } from "./api.gen.ts";
 
 const SYMBOL = { empty: "", x: "X", o: "O" } as const;
 
-/** The first team of a set plays X. Cells placed during the drawn tick are highlighted. */
-export const ticTacToe: GameRenderer = {
+/** The first team of a set plays X. Cells placed during the drawn tick are highlighted.
+ * Every game package exports its renderer under this name; the viewer's build finds it. */
+export const renderer: GameRenderer = {
   game: "tictactoe",
   mount(el) {
     const grid = document.createElement("div");

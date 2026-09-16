@@ -32,11 +32,13 @@ services:
       timeout: 2s
       retries: 15
 
-  # The API and the web app; migrates first.
+  # The API and the web app; migrates first. `make up GAME=...` narrows the web app's viewer.
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
+      args:
+        UCBC_GAME: ${UCBC_GAME:-}
     env_file:
       - .env
       - .env.${ENV:-local}

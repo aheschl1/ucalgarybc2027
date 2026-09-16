@@ -131,6 +131,7 @@ export type Match = {
   bots: BotSource[];
   engine_version: string | null;
   teams: { id: number; name: string }[];
+  config: { sets: number; seed: number; step_ms: number; memory_bytes: number };
   status: "queued" | "running" | "done" | "error";
   set_wins: number[] | null;
   winner_team: number | null;

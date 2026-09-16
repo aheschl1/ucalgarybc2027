@@ -4,7 +4,7 @@ import type { SetReplay, Tick } from "@ucbc/viewer";
 import { expect, it } from "vitest";
 
 import type { Board } from "./api.gen.ts";
-import { ticTacToe } from "./index.ts";
+import { renderer } from "./index.ts";
 
 it("draws marks, highlights this tick's placements, and names X and O", () => {
   const board: Board = { cells: ["x", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "o"] };
@@ -29,7 +29,7 @@ it("draws marks, highlights this tick's placements, and names X and O", () => {
   ];
 
   const el = document.createElement("div");
-  const instance = ticTacToe.mount(el);
+  const instance = renderer.mount(el);
   instance.draw({ state: board, tick, set, teams });
 
   const cells = [...el.querySelectorAll(".ttt-cell")];
@@ -52,7 +52,7 @@ it("rejects a board it does not recognise", () => {
     ticks: [],
     result: { index: 0, first_team: 0, reason: "draw", ticks: 0 },
   };
-  const instance = ticTacToe.mount(document.createElement("div"));
+  const instance = renderer.mount(document.createElement("div"));
   // Cells as integers: replays from before `Cell` serialized as strings.
   const old = { cells: [1, 0, 0, 0, 0, 0, 2, 0, 0] };
   expect(() => instance.draw({ state: old, tick: null, set, teams: [] })).toThrow("not a tic-tac-toe board");

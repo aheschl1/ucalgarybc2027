@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { describe, type Api, type Match, type SetResult } from "./api";
 
 export function MatchList({
@@ -69,8 +70,13 @@ export function MatchBranch({ row, api }: { row: Match; api: Api }) {
               <span className="error">{error}</span>
             </li>
           )}
+          {match.status === "done" && (
+            <li>
+              <Link to={`/viewer/${encodeURIComponent(match.id)}`}>watch</Link>
+            </li>
+          )}
           {(match.sets ?? []).map((set) => (
-            <SetBranch key={set.index} matchId={match.id} set={set} api={api} />
+            <SetLine key={set.index} set={set} />
           ))}
         </ul>
       </details>
@@ -78,52 +84,16 @@ export function MatchBranch({ row, api }: { row: Match; api: Api }) {
   );
 }
 
-function SetBranch({
-  matchId,
-  set,
-  api,
-}: {
-  matchId: string;
-  set: SetResult;
-  api: Api;
-}) {
-  const [replay, setReplay] = useState<unknown>(null);
-  const [error, setError] = useState("");
-
-  const fetchReplay = () => {
-    if (replay !== null || error) return;
-    api
-      .load(`/matches/${encodeURIComponent(matchId)}/sets/${set.index}`)
-      .then(setReplay, (err) => setError(describe(err)));
-  };
-
+function SetLine({ set }: { set: SetResult }) {
   const winner =
     set.winner_team === null ? "no winner" : `winner ${set.winner_team}`;
   return (
     <li>
-      <details>
-        <summary>
-          set {set.index}{" "}
-          <span className="dim">
-            {winner} · {set.reason}
-            {set.detail && ` (${set.detail})`} · {set.ticks} ticks
-          </span>
-        </summary>
-        <ul>
-          <li>
-            <details onToggle={(e) => e.currentTarget.open && fetchReplay()}>
-              <summary>replay</summary>
-              {error ? (
-                <p className="error">{error}</p>
-              ) : replay === null ? (
-                <p className="dim">loading</p>
-              ) : (
-                <pre>{JSON.stringify(replay, null, 2)}</pre>
-              )}
-            </details>
-          </li>
-        </ul>
-      </details>
+      set {set.index}{" "}
+      <span className="dim">
+        {winner} · {set.reason}
+        {set.detail && ` (${set.detail})`} · {set.ticks} ticks
+      </span>
     </li>
   );
 }

@@ -1,9 +1,11 @@
 .PHONY: build sdk viewer-types viewer dev wheels test test-rust test-py test-api test-viewer lint clean up down db migrate api worker web
 
-# `make dev GAME=tictactoe` or `make wheels GAME=tictactoe` builds one game only:
-# the engine with that cargo feature, the SDK with that game's handle. Unset: all.
+# `make <target> GAME=tictactoe` builds one game everywhere: the engine with that cargo
+# feature, the SDK with that game's handle, the viewer and web app with its renderer, the
+# API image likewise. Unset: every game. Exported so npm and compose see the same choice.
 GAME ?=
 FEATURES := $(if $(GAME),--no-default-features -F $(GAME),)
+export UCBC_GAME := $(GAME)
 
 build:
 	cargo build --workspace

@@ -1,28 +1,21 @@
-import { useState } from "react";
-import type { User } from "./api";
+import { useEffect, useState } from "react";
+import { get, logOut, type User } from "./api";
 import Login from "./Login";
 import Tree from "./Tree";
 
-const KEY = "ucbc-token";
-
-export type Session = { token: string; user: User };
-
-function load(): Session | null {
-  const raw = sessionStorage.getItem(KEY);
-  return raw ? JSON.parse(raw) : null;
-}
-
 export default function App() {
-  const [session, setSession] = useState(load);
+  // undefined until the API says whether the session cookie is live.
+  const [user, setUser] = useState<User | null | undefined>(undefined);
 
-  const logIn = (s: Session) => {
-    sessionStorage.setItem(KEY, JSON.stringify(s));
-    setSession(s);
-  };
-  const logOut = () => {
-    sessionStorage.removeItem(KEY);
-    setSession(null);
+  useEffect(() => {
+    get<User>("/users/me").then(setUser, () => setUser(null));
+  }, []);
+
+  const leave = () => {
+    setUser(null);
+    logOut().catch(() => {});
   };
 
-  return session ? <Tree session={session} onLogOut={logOut} /> : <Login onLogIn={logIn} />;
+  if (user === undefined) return null;
+  return user ? <Tree user={user} onLogOut={leave} /> : <Login onLogIn={setUser} />;
 }

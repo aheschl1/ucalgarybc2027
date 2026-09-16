@@ -7,38 +7,39 @@ export class ApiError extends Error {
   }
 }
 
-export function basicToken(username: string, password: string): string {
-  const bytes = new TextEncoder().encode(`${username}:${password}`);
-  return btoa(String.fromCharCode(...bytes));
-}
-
-async function send<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    headers: { ...init.headers, Authorization: `Basic ${token}` },
-  });
+// The session is a same-origin cookie, which fetch sends on its own.
+async function send<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`/api${path}`, init);
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     const detail = typeof body?.detail === "string" ? body.detail : res.statusText;
     throw new ApiError(res.status, detail);
   }
-  return res.json();
+  return res.status === 204 ? (undefined as T) : res.json();
 }
 
-export function get<T>(path: string, token: string): Promise<T> {
-  return send(path, token);
+export function get<T>(path: string): Promise<T> {
+  return send(path);
 }
 
-export function post<T>(path: string, token: string, body: unknown): Promise<T> {
-  return send(path, token, {
+export function post<T>(path: string, body: unknown): Promise<T> {
+  return send(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
 
-export function upload<T>(path: string, token: string, form: FormData): Promise<T> {
-  return send(path, token, { method: "POST", body: form });
+export function upload<T>(path: string, form: FormData): Promise<T> {
+  return send(path, { method: "POST", body: form });
+}
+
+export function logIn(username: string, password: string): Promise<User> {
+  return post("/auth/login", { username, password });
+}
+
+export function logOut(): Promise<void> {
+  return post("/auth/logout", undefined);
 }
 
 export type User = {

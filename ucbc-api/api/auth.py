@@ -1,26 +1,21 @@
-"""Request dependencies that resolve a user from HTTP Basic headers."""
+"""Request dependencies that resolve a user from the session cookie."""
 
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import Cookie, Depends, HTTPException, status
 
 from api.db import DB
 from api.models.users import User
-from api.services.users import authenticate
-
-# No WWW-Authenticate header on a 401, so the browser never opens its own login dialog.
-basic = HTTPBasic(auto_error=False)
+from api.services import sessions
+from api.services.sessions import COOKIE
 
 
-async def current_user(
-    creds: Annotated[HTTPBasicCredentials | None, Depends(basic)], db: DB
-) -> User:
-    if creds is None:
+async def current_user(db: DB, token: Annotated[str | None, Cookie(alias=COOKIE)] = None) -> User:
+    if token is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "log in")
-    user = await authenticate(db, creds.username, creds.password)
+    user = await sessions.resolve(db, token)
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong username or password")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "session expired; log in again")
     return user
 
 

@@ -29,7 +29,7 @@ class SubmissionRepo:
         row = await cur.fetchone()
         return None if row is None else Submission.model_validate(row)
 
-    async def list(self, user_id: int | None) -> list[Submission]:
+    async def list_recent(self, user_id: int | None) -> list[Submission]:
         """Newest first; every user's when `user_id` is None."""
         cur = await self._conn.execute(
             f"select {COLUMNS} where %s::bigint is null or s.user_id = %s "

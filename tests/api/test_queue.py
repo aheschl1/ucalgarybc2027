@@ -1,7 +1,8 @@
 """The match queue: enqueue and read through the API, claim and lease through the services."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -14,6 +15,7 @@ from api.models.matches import MatchReplay, SetReplay
 from api.models.users import User
 from api.services import matches
 from tests.api.conftest import ADMIN, MEMBER
+from tests.api.test_submissions import upload, zip_dir
 
 LEASE = timedelta(seconds=30)
 MISSING = "00000000-0000-0000-0000-000000000000"
@@ -100,7 +102,7 @@ async def test_permissions_and_validation(client: AsyncClient, admin: User, memb
 
     match_id = await enqueue(client)
     assert (await client.get(f"/matches/{match_id}")).status_code == 401
-    assert (await client.get(f"/matches/{match_id}", auth=MEMBER)).status_code == 403
+    assert (await client.get(f"/matches/{match_id}", auth=MEMBER)).status_code == 404
     assert (await client.get(f"/matches/{MISSING}", auth=ADMIN)).status_code == 404
     assert (await client.get(f"/matches/{match_id}/sets/0", auth=ADMIN)).status_code == 404
 
@@ -214,3 +216,56 @@ async def test_attempts_are_capped(client: AsyncClient, admin: User, db: DBConne
     match = await get(client, exhausted)
     assert match["status"] == "error"
     assert match["error"] == "gave up after 3 attempts"
+
+
+def submission(id: str) -> dict[str, str]:
+    return {"kind": "submission", "id": id}
+
+
+async def test_members_queue_and_see_their_own(
+    client: AsyncClient, admin: User, member: User, db: DBConnection, bot: Callable[[str], Path]
+) -> None:
+    mine = (await upload(client, zip_dir(bot("random")), form={"name": "mine"})).json()["id"]
+    theirs = (
+        await upload(client, zip_dir(bot("first_empty")), auth=ADMIN, form={"name": "theirs"})
+    ).json()["id"]
+    chess = (
+        await upload(client, zip_dir(bot("random")), auth=ADMIN, form={"game": "chess"})
+    ).json()["id"]
+
+    async def queue(bots: list[dict[str, str]], auth: tuple[str, str] = MEMBER) -> Any:
+        body = {"game": "tictactoe", "bots": bots, "config": {"seed": 1}, "priority": 5}
+        return await client.post("/matches/queue", json=body, auth=auth)
+
+    r = await queue([submission(mine), submission(theirs)])
+    assert r.status_code == 201, r.text
+    match_id = r.json()["id"]
+    match = (await client.get(f"/matches/{match_id}", auth=MEMBER)).json()
+    assert match["priority"] == 0
+    assert [t["name"] for t in match["teams"]] == ["mine", "theirs"]
+    assert match["bots"] == [submission(mine), submission(theirs)]
+
+    assert (await queue([submission(theirs), submission(theirs)])).status_code == 403
+    assert (await queue([submission(mine), REQUEST["bots"][1]])).status_code == 403
+    r = await queue([submission(mine), submission(chess)])
+    assert r.status_code == 400
+    assert "is for chess" in r.json()["detail"]
+    assert (await queue([submission(mine), submission(MISSING)])).status_code == 404
+
+    # A match without the member's submissions is invisible to them and absent from their list.
+    admin_match = (await queue([submission(theirs), submission(theirs)], auth=ADMIN)).json()["id"]
+    assert (await client.get(f"/matches/{admin_match}", auth=MEMBER)).status_code == 404
+    assert (await client.get(f"/matches/{admin_match}/sets/0", auth=MEMBER)).status_code == 404
+    assert [m["id"] for m in (await client.get("/matches", auth=MEMBER)).json()] == [match_id]
+    assert [m["id"] for m in (await client.get("/matches", auth=ADMIN)).json()] == [
+        admin_match,
+        match_id,
+    ]
+
+    # A platform match is visible to everyone. Nothing creates one yet, so make it so.
+    await db.conn.execute("update matches set origin = 'platform' where id = %s", (admin_match,))
+    assert (await client.get(f"/matches/{admin_match}", auth=MEMBER)).json()["origin"] == "platform"
+    assert [m["id"] for m in (await client.get("/matches", auth=MEMBER)).json()] == [
+        admin_match,
+        match_id,
+    ]

@@ -13,8 +13,9 @@ from httpx import AsyncClient
 from api.db import DBConnection
 from api.models.users import User
 from api.services import matches
-from tests.api.conftest import ADMIN
+from tests.api.conftest import ADMIN, MEMBER
 from tests.api.test_queue import LEASE, get
+from tests.api.test_submissions import upload, zip_dir
 from worker import match as engine
 from worker.main import Worker
 
@@ -23,7 +24,15 @@ BotPath = Callable[[str], Path]
 
 @pytest.fixture
 def worker(app: FastAPI) -> Worker:
-    return Worker(app.state.pool, name="test", slots=2, poll_s=0.05, heartbeat_s=0.1, lease=LEASE)
+    return Worker(
+        app.state.pool,
+        app.state.blobs,
+        name="test",
+        slots=2,
+        poll_s=0.05,
+        heartbeat_s=0.1,
+        lease=LEASE,
+    )
 
 
 async def enqueue(client: AsyncClient, bots: list[Path], **override: Any) -> UUID:
@@ -136,6 +145,37 @@ async def test_lost_lease_stops_the_engine(
     assert match["status"] == "running"
     assert match["claimed_by"] == "w2"
     assert match["attempts"] == 2
+
+
+async def test_worker_plays_uploaded_submissions(
+    client: AsyncClient,
+    admin: User,
+    member: User,
+    db: DBConnection,
+    worker: Worker,
+    bot: BotPath,
+) -> None:
+    mine = (await upload(client, zip_dir(bot("random")), form={"name": "mine"})).json()
+    theirs = (
+        await upload(client, zip_dir(bot("first_empty")), auth=ADMIN, form={"name": "theirs"})
+    ).json()
+    body = {
+        "game": "tictactoe",
+        "bots": [
+            {"kind": "submission", "id": mine["id"]},
+            {"kind": "submission", "id": theirs["id"]},
+        ],
+        "config": {"seed": 7},
+    }
+    r = await client.post("/matches/queue", json=body, auth=MEMBER)
+    assert r.status_code == 201, r.text
+    match_id = UUID(r.json()["id"])
+
+    assert await worker.run_once(db)
+    match = (await client.get(f"/matches/{match_id}", auth=MEMBER)).json()
+    assert match["status"] == "done", match["error"]
+    assert [t["name"] for t in match["teams"]] == ["mine", "theirs"]
+    assert len(match["sets"]) == 3
 
 
 async def test_serve_runs_slots_and_drains(

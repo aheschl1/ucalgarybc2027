@@ -5,6 +5,10 @@ class ApiError(Exception):
     status_code = 400
 
 
+class Forbidden(ApiError):
+    status_code = 403
+
+
 class NotFound(ApiError):
     status_code = 404
 

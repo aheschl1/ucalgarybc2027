@@ -44,9 +44,13 @@ A worker claims with `for update skip locked`, heartbeats while the engine runs,
 the sets and result in one transaction. `(id, claimed_at)` is the lease: a stale heartbeat
 lets another worker take the match, after which the old holder's writes match no row.
 
-`matches.bots` names each bot's code: `{kind: "path", path}` today, object storage later
-(`api/models/matches.py`, `worker/match.py::fetch`). `worker/match.py::command` is the one
-place the engine process is described.
+`matches.bots` names each bot's code: `{kind: "path", path}` (admins only) or
+`{kind: "submission", id}`, which the worker downloads and unpacks (`worker/match.py::fetch`).
+`worker/match.py::command` is the one place the engine process is described.
+
+Who sees a match: admins see all; everyone sees `origin = 'platform'` matches (from schedules,
+not built yet); a user sees matches with one of their own submissions. A member may queue a
+match between submissions when one is their own.
 
 ## Settings
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import PurePath
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -67,10 +67,18 @@ class PathSource(BaseModel):
         return PurePath(self.path).name
 
 
-# Where a bot's code comes from; object storage will be a second kind.
-BotSource = PathSource
+class SubmissionSource(BaseModel):
+    """An uploaded submission, fetched from blob storage."""
+
+    kind: Literal["submission"] = "submission"
+    id: UUID
+
+
+BotSource = Annotated[PathSource | SubmissionSource, Field(discriminator="kind")]
 
 MatchStatus = Literal["queued", "running", "done", "error"]
+# Who made the match: a user, or the platform from a schedule. Platform matches are public.
+MatchOrigin = Literal["user", "platform"]
 
 
 class MatchEnqueue(BaseModel):
@@ -90,6 +98,7 @@ class MatchRow(BaseModel):
     """A `matches` row."""
 
     id: UUID
+    origin: MatchOrigin
     game: str
     engine_version: str | None
     teams: list[TeamInfo]

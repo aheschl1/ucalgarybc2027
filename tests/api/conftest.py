@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -50,7 +51,7 @@ async def app(database_url: str, blob_url: str) -> AsyncIterator[FastAPI]:
     async with app.router.lifespan_context(app):
         async with app.state.pool.connection() as conn:
             await conn.execute(
-                "truncate users, matches, sets, submissions restart identity cascade"
+                "truncate users, sessions, matches, sets, submissions restart identity cascade"
             )
         yield app
 
@@ -63,9 +64,23 @@ async def db(app: FastAPI) -> AsyncIterator[DBConnection]:
         yield DBConnection(conn)
 
 
+def anonymous(app: FastAPI) -> AsyncClient:
+    # The session cookie is Secure, so the client only sends it back over https.
+    return AsyncClient(transport=ASGITransport(app=app), base_url="https://test")
+
+
+@asynccontextmanager
+async def log_in(app: FastAPI, creds: tuple[str, str]) -> AsyncIterator[AsyncClient]:
+    """A client that logged in through the API and carries the session cookie."""
+    async with anonymous(app) as c:
+        r = await c.post("/auth/login", json={"username": creds[0], "password": creds[1]})
+        assert r.status_code == 200, r.text
+        yield c
+
+
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async with anonymous(app) as c:
         yield c
 
 
@@ -77,3 +92,15 @@ async def admin(db: DBConnection) -> User:
 @pytest.fixture
 async def member(db: DBConnection) -> User:
     return await create_user(db, *MEMBER, is_admin=False)
+
+
+@pytest.fixture
+async def admin_client(app: FastAPI, admin: User) -> AsyncIterator[AsyncClient]:
+    async with log_in(app, ADMIN) as c:
+        yield c
+
+
+@pytest.fixture
+async def member_client(app: FastAPI, member: User) -> AsyncIterator[AsyncClient]:
+    async with log_in(app, MEMBER) as c:
+        yield c

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from api.blobs import BlobStore
 from api.db import create_pool
 from api.errors import ApiError
-from api.routes import matches, submissions, users
+from api.routes import auth, matches, submissions, users
 from api.settings import settings
 
 STATIC = Path(__file__).with_name("static")
@@ -39,6 +39,7 @@ def create_app(database_url: str | None = None, blob_url: str | None = None) -> 
             await app.state.pool.close()
 
     app = FastAPI(title="UCBC", lifespan=lifespan)
+    app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(matches.router)
     app.include_router(submissions.router)

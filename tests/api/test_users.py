@@ -1,12 +1,12 @@
 import asyncio
 
 from click.testing import CliRunner, Result
+from fastapi import FastAPI
 from httpx import AsyncClient
 from pytest import MonkeyPatch
 
 from api import cli, settings
-from api.models.users import User
-from tests.api.conftest import ADMIN, MEMBER
+from tests.api.conftest import MEMBER, log_in
 
 
 async def test_health(client: AsyncClient) -> None:
@@ -15,12 +15,9 @@ async def test_health(client: AsyncClient) -> None:
     assert r.json() == {"status": "ok"}
 
 
-async def test_me_requires_valid_credentials(client: AsyncClient, member: User) -> None:
+async def test_me(client: AsyncClient, member_client: AsyncClient) -> None:
     assert (await client.get("/users/me")).status_code == 401
-    r = await client.get("/users/me", auth=(MEMBER[0], "wrong"))
-    assert r.status_code == 401
-    assert "www-authenticate" not in r.headers
-    r = await client.get("/users/me", auth=MEMBER)
+    r = await member_client.get("/users/me")
     assert r.status_code == 200
     body = r.json()
     assert body["username"] == MEMBER[0]
@@ -28,18 +25,21 @@ async def test_me_requires_valid_credentials(client: AsyncClient, member: User) 
     assert "password_hash" not in body
 
 
-async def test_create_user_is_admin_only(client: AsyncClient, admin: User, member: User) -> None:
+async def test_create_user_is_admin_only(
+    app: FastAPI, admin_client: AsyncClient, member_client: AsyncClient
+) -> None:
     body = {"username": "bob", "password": "bob-pw"}
-    assert (await client.post("/users", json=body, auth=MEMBER)).status_code == 403
-    r = await client.post("/users", json=body, auth=ADMIN)
+    assert (await member_client.post("/users", json=body)).status_code == 403
+    r = await admin_client.post("/users", json=body)
     assert r.status_code == 201
     assert r.json()["username"] == "bob"
-    assert (await client.get("/users/me", auth=("bob", "bob-pw"))).status_code == 200
-    assert (await client.post("/users", json=body, auth=ADMIN)).status_code == 409
+    async with log_in(app, ("bob", "bob-pw")) as bob:
+        assert (await bob.get("/users/me")).status_code == 200
+    assert (await admin_client.post("/users", json=body)).status_code == 409
 
 
 async def test_cli_create_admin_can_log_in(
-    client: AsyncClient, database_url: str, monkeypatch: MonkeyPatch
+    app: FastAPI, database_url: str, monkeypatch: MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings.settings, "database_url", database_url)
     monkeypatch.setattr(settings.settings, "admin_username", "cli-admin")
@@ -54,7 +54,8 @@ async def test_cli_create_admin_can_log_in(
     assert result.exit_code == 0, result.output
     assert "created admin cli-admin" in result.output
 
-    r = await client.get("/users/me", auth=("cli-admin", "cli-pw"))
+    async with log_in(app, ("cli-admin", "cli-pw")) as c:
+        r = await c.get("/users/me")
     assert r.status_code == 200
     assert r.json()["is_admin"] is True
 

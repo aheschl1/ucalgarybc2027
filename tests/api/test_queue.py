@@ -12,9 +12,7 @@ from httpx import AsyncClient
 
 from api.db import DBConnection
 from api.models.matches import MatchReplay, SetReplay
-from api.models.users import User
 from api.services import matches
-from tests.api.conftest import ADMIN, MEMBER
 from tests.api.test_submissions import upload, zip_dir
 
 LEASE = timedelta(seconds=30)
@@ -69,22 +67,22 @@ async def other(app: FastAPI) -> AsyncIterator[DBConnection]:
 
 
 async def enqueue(client: AsyncClient, **override: Any) -> UUID:
-    r = await client.post("/matches/queue", json={**REQUEST, **override}, auth=ADMIN)
+    r = await client.post("/matches/queue", json={**REQUEST, **override})
     assert r.status_code == 201, r.text
     return UUID(r.json()["id"])
 
 
 async def get(client: AsyncClient, match_id: UUID) -> dict[str, Any]:
-    r = await client.get(f"/matches/{match_id}", auth=ADMIN)
+    r = await client.get(f"/matches/{match_id}")
     assert r.status_code == 200, r.text
     body: dict[str, Any] = r.json()
     return body
 
 
-async def test_enqueue_and_get(client: AsyncClient, admin: User) -> None:
-    match_id = await enqueue(client)
+async def test_enqueue_and_get(admin_client: AsyncClient) -> None:
+    match_id = await enqueue(admin_client)
 
-    match = await get(client, match_id)
+    match = await get(admin_client, match_id)
     assert match["status"] == "queued"
     assert match["engine_version"] is None
     assert match["bots"] == REQUEST["bots"]
@@ -95,22 +93,24 @@ async def test_enqueue_and_get(client: AsyncClient, admin: User) -> None:
     assert match["sets"] == []
 
 
-async def test_permissions_and_validation(client: AsyncClient, admin: User, member: User) -> None:
-    assert (await client.post("/matches/queue", json=REQUEST, auth=MEMBER)).status_code == 403
+async def test_permissions_and_validation(
+    client: AsyncClient, admin_client: AsyncClient, member_client: AsyncClient
+) -> None:
+    assert (await member_client.post("/matches/queue", json=REQUEST)).status_code == 403
     one_bot = {**REQUEST, "bots": REQUEST["bots"][:1]}
-    assert (await client.post("/matches/queue", json=one_bot, auth=ADMIN)).status_code == 422
+    assert (await admin_client.post("/matches/queue", json=one_bot)).status_code == 422
 
-    match_id = await enqueue(client)
+    match_id = await enqueue(admin_client)
     assert (await client.get(f"/matches/{match_id}")).status_code == 401
-    assert (await client.get(f"/matches/{match_id}", auth=MEMBER)).status_code == 404
-    assert (await client.get(f"/matches/{MISSING}", auth=ADMIN)).status_code == 404
-    assert (await client.get(f"/matches/{match_id}/sets/0", auth=ADMIN)).status_code == 404
+    assert (await member_client.get(f"/matches/{match_id}")).status_code == 404
+    assert (await admin_client.get(f"/matches/{MISSING}")).status_code == 404
+    assert (await admin_client.get(f"/matches/{match_id}/sets/0")).status_code == 404
 
 
 async def test_claim_is_exclusive(
-    client: AsyncClient, admin: User, db: DBConnection, other: DBConnection
+    admin_client: AsyncClient, db: DBConnection, other: DBConnection
 ) -> None:
-    match_id = await enqueue(client)
+    match_id = await enqueue(admin_client)
 
     held = await matches.claim_match(db, "w1", LEASE)
     assert held is not None and held.id == match_id
@@ -118,12 +118,12 @@ async def test_claim_is_exclusive(
     assert held.attempts == 1
     assert held.claimed_by == "w1"
     assert await matches.claim_match(other, "w2", LEASE) is None
-    assert (await get(client, match_id))["status"] == "running"
+    assert (await get(admin_client, match_id))["status"] == "running"
 
     await matches.finish_match(db, held, replay(match_id))
     assert await matches.claim_match(other, "w2", LEASE) is None
 
-    match = await get(client, match_id)
+    match = await get(admin_client, match_id)
     assert match["status"] == "done"
     assert match["engine_version"] == "0.1.0"
     assert match["set_wins"] == [2, 0]
@@ -133,26 +133,26 @@ async def test_claim_is_exclusive(
     assert match["sets"] == expected
 
     # Set replays come back exactly as stored.
-    r = await client.get(f"/matches/{match_id}/sets/0", auth=ADMIN)
+    r = await admin_client.get(f"/matches/{match_id}/sets/0")
     assert r.status_code == 200
     assert r.json() == set_replay(0, None)
-    assert (await client.get(f"/matches/{match_id}/sets/1", auth=ADMIN)).json() == set_replay(1, 0)
-    assert (await client.get(f"/matches/{match_id}/sets/3", auth=ADMIN)).status_code == 404
+    assert (await admin_client.get(f"/matches/{match_id}/sets/1")).json() == set_replay(1, 0)
+    assert (await admin_client.get(f"/matches/{match_id}/sets/3")).status_code == 404
 
 
-async def test_priority_and_order(client: AsyncClient, admin: User, db: DBConnection) -> None:
-    first = await enqueue(client)
-    urgent = await enqueue(client, priority=1)
-    second = await enqueue(client)
+async def test_priority_and_order(admin_client: AsyncClient, db: DBConnection) -> None:
+    first = await enqueue(admin_client)
+    urgent = await enqueue(admin_client, priority=1)
+    second = await enqueue(admin_client)
 
     claimed = [await matches.claim_match(db, "w", LEASE) for _ in range(3)]
     assert [m.id for m in claimed if m is not None] == [urgent, first, second]
 
 
 async def test_stale_lease_is_reclaimed(
-    client: AsyncClient, admin: User, db: DBConnection, other: DBConnection
+    admin_client: AsyncClient, db: DBConnection, other: DBConnection
 ) -> None:
-    match_id = await enqueue(client)
+    match_id = await enqueue(admin_client)
     held = await matches.claim_match(db, "w1", LEASE)
     assert held is not None
     assert await matches.heartbeat(db, held)
@@ -172,7 +172,7 @@ async def test_stale_lease_is_reclaimed(
     with pytest.raises(matches.LostLease):
         await matches.fail_match(db, held, "boom")
     await matches.requeue_match(db, held)
-    match = await get(client, match_id)
+    match = await get(admin_client, match_id)
     assert match["status"] == "running"
     assert match["claimed_by"] == "w2"
     assert match["sets"] == []
@@ -180,18 +180,18 @@ async def test_stale_lease_is_reclaimed(
     # The new holder finishes; sets from a partial earlier attempt are replaced.
     await other.match_repo.add_set(match_id, SetReplay.model_validate(set_replay(0, 1)))
     await matches.finish_match(other, taken, replay(match_id))
-    match = await get(client, match_id)
+    match = await get(admin_client, match_id)
     assert match["status"] == "done"
     assert [s["winner_team"] for s in match["sets"]] == [None, 0, 0]
 
 
-async def test_fail_and_requeue(client: AsyncClient, admin: User, db: DBConnection) -> None:
-    match_id = await enqueue(client)
+async def test_fail_and_requeue(admin_client: AsyncClient, db: DBConnection) -> None:
+    match_id = await enqueue(admin_client)
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None
 
     await matches.requeue_match(db, held)
-    match = await get(client, match_id)
+    match = await get(admin_client, match_id)
     assert match["status"] == "queued"
     assert match["claimed_by"] is None
     assert match["attempts"] == 1
@@ -199,21 +199,21 @@ async def test_fail_and_requeue(client: AsyncClient, admin: User, db: DBConnecti
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None
     await matches.fail_match(db, held, "ucbc run exited 2")
-    match = await get(client, match_id)
+    match = await get(admin_client, match_id)
     assert match["status"] == "error"
     assert match["error"] == "ucbc run exited 2"
     assert match["completed_at"] is not None
     assert await matches.claim_match(db, "w", LEASE) is None
 
 
-async def test_attempts_are_capped(client: AsyncClient, admin: User, db: DBConnection) -> None:
-    exhausted = await enqueue(client)
-    fresh = await enqueue(client)
+async def test_attempts_are_capped(admin_client: AsyncClient, db: DBConnection) -> None:
+    exhausted = await enqueue(admin_client)
+    fresh = await enqueue(admin_client)
     await db.conn.execute("update matches set attempts = 3 where id = %s", (exhausted,))
 
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None and held.id == fresh
-    match = await get(client, exhausted)
+    match = await get(admin_client, exhausted)
     assert match["status"] == "error"
     assert match["error"] == "gave up after 3 attempts"
 
@@ -223,24 +223,27 @@ def submission(id: str) -> dict[str, str]:
 
 
 async def test_members_queue_and_see_their_own(
-    client: AsyncClient, admin: User, member: User, db: DBConnection, bot: Callable[[str], Path]
+    admin_client: AsyncClient,
+    member_client: AsyncClient,
+    db: DBConnection,
+    bot: Callable[[str], Path],
 ) -> None:
-    mine = (await upload(client, zip_dir(bot("random")), form={"name": "mine"})).json()["id"]
+    mine = (await upload(member_client, zip_dir(bot("random")), form={"name": "mine"})).json()["id"]
     theirs = (
-        await upload(client, zip_dir(bot("first_empty")), auth=ADMIN, form={"name": "theirs"})
+        await upload(admin_client, zip_dir(bot("first_empty")), form={"name": "theirs"})
     ).json()["id"]
-    chess = (
-        await upload(client, zip_dir(bot("random")), auth=ADMIN, form={"game": "chess"})
-    ).json()["id"]
+    chess = (await upload(admin_client, zip_dir(bot("random")), form={"game": "chess"})).json()[
+        "id"
+    ]
 
-    async def queue(bots: list[dict[str, str]], auth: tuple[str, str] = MEMBER) -> Any:
+    async def queue(bots: list[dict[str, str]], client: AsyncClient = member_client) -> Any:
         body = {"game": "tictactoe", "bots": bots, "config": {"seed": 1}, "priority": 5}
-        return await client.post("/matches/queue", json=body, auth=auth)
+        return await client.post("/matches/queue", json=body)
 
     r = await queue([submission(mine), submission(theirs)])
     assert r.status_code == 201, r.text
     match_id = r.json()["id"]
-    match = (await client.get(f"/matches/{match_id}", auth=MEMBER)).json()
+    match = (await member_client.get(f"/matches/{match_id}")).json()
     assert match["priority"] == 0
     assert [t["name"] for t in match["teams"]] == ["mine", "theirs"]
     assert match["bots"] == [submission(mine), submission(theirs)]
@@ -253,19 +256,19 @@ async def test_members_queue_and_see_their_own(
     assert (await queue([submission(mine), submission(MISSING)])).status_code == 404
 
     # A match without the member's submissions is invisible to them and absent from their list.
-    admin_match = (await queue([submission(theirs), submission(theirs)], auth=ADMIN)).json()["id"]
-    assert (await client.get(f"/matches/{admin_match}", auth=MEMBER)).status_code == 404
-    assert (await client.get(f"/matches/{admin_match}/sets/0", auth=MEMBER)).status_code == 404
-    assert [m["id"] for m in (await client.get("/matches", auth=MEMBER)).json()] == [match_id]
-    assert [m["id"] for m in (await client.get("/matches", auth=ADMIN)).json()] == [
+    admin_match = (await queue([submission(theirs), submission(theirs)], admin_client)).json()["id"]
+    assert (await member_client.get(f"/matches/{admin_match}")).status_code == 404
+    assert (await member_client.get(f"/matches/{admin_match}/sets/0")).status_code == 404
+    assert [m["id"] for m in (await member_client.get("/matches")).json()] == [match_id]
+    assert [m["id"] for m in (await admin_client.get("/matches")).json()] == [
         admin_match,
         match_id,
     ]
 
     # A platform match is visible to everyone. Nothing creates one yet, so make it so.
     await db.conn.execute("update matches set origin = 'platform' where id = %s", (admin_match,))
-    assert (await client.get(f"/matches/{admin_match}", auth=MEMBER)).json()["origin"] == "platform"
-    assert [m["id"] for m in (await client.get("/matches", auth=MEMBER)).json()] == [
+    assert (await member_client.get(f"/matches/{admin_match}")).json()["origin"] == "platform"
+    assert [m["id"] for m in (await member_client.get("/matches")).json()] == [
         admin_match,
         match_id,
     ]

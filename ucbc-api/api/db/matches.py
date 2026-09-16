@@ -23,15 +23,16 @@ COLUMNS = (
 )
 QUALIFIED = ", ".join(f"matches.{c}" for c in COLUMNS.split(", "))
 SET_RESULT_COLUMNS = "index, first_team, winner_team, reason, detail, ticks"
-# What a user may see: platform matches, and matches with a submission they own. A null
-# user sees everything.
-VISIBLE = """
-    %s::bigint is null or matches.origin = 'platform' or exists (
+# A match with a submission the user owns.
+OWNED = """
+    exists (
         select 1 from jsonb_array_elements(matches.bots) b
         join submissions s on s.id = (b->>'id')::uuid
         where b->>'kind' = 'submission' and s.user_id = %s
     )
 """
+# What a user may see on top of that: platform matches. A null user sees everything.
+VISIBLE = f"%s::bigint is null or matches.origin = 'platform' or {OWNED}"
 
 
 class MatchRepo:
@@ -78,11 +79,15 @@ class MatchRepo:
         row = await cur.fetchone()
         return None if row is None else MatchRow.model_validate(row)
 
-    async def list_recent(self, user_id: int | None, limit: int) -> list[MatchRow]:
-        """Newest first; what `user_id` may see, or every match when None."""
+    async def list_recent(
+        self, user_id: int | None, limit: int, owned_only: bool = False
+    ) -> list[MatchRow]:
+        """Newest first; what `user_id` may see, or every match when None. `owned_only`
+        narrows to matches with one of that user's submissions."""
+        where, args = (OWNED, (user_id,)) if owned_only else (VISIBLE, (user_id, user_id))
         cur = await self._conn.execute(
-            f"select {COLUMNS} from matches where {VISIBLE} order by created_at desc limit %s",
-            (user_id, user_id, limit),
+            f"select {COLUMNS} from matches where {where} order by created_at desc limit %s",
+            (*args, limit),
         )
         return [MatchRow.model_validate(row) for row in await cur.fetchall()]
 

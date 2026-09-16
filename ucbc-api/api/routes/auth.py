@@ -34,9 +34,9 @@ def set_session_cookie(response: Response, token: str | None) -> None:
 @router.post("/login")
 @limiter.limit(LOGIN_LIMIT)
 async def login(request: Request, body: Credentials, db: DB, response: Response) -> User:
-    result = await sessions.log_in(db, body.username, body.password)
+    result = await sessions.log_in(db, body.email, body.password)
     if result is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong username or password")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong email or password")
     token, user = result
     set_session_cookie(response, token)
     return user

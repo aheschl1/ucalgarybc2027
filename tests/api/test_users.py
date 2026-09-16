@@ -8,6 +8,8 @@ from pytest import MonkeyPatch
 from api import cli, settings
 from tests.api.conftest import MEMBER, log_in
 
+SIGNUP = {"email": "bob@example.com", "display_name": "Bob", "password": "bob-password"}
+
 
 async def test_health(client: AsyncClient) -> None:
     r = await client.get("/health")
@@ -20,30 +22,57 @@ async def test_me(client: AsyncClient, member_client: AsyncClient) -> None:
     r = await member_client.get("/users/me")
     assert r.status_code == 200
     body = r.json()
-    assert body["username"] == MEMBER[0]
+    assert body["email"] == MEMBER[0]
+    assert body["display_name"] == "Alice"
     assert body["is_admin"] is False
     assert "password_hash" not in body
 
 
-async def test_create_user_is_admin_only(
-    app: FastAPI, admin_client: AsyncClient, member_client: AsyncClient
-) -> None:
-    body = {"username": "bob", "password": "bob-pw"}
-    assert (await member_client.post("/users", json=body)).status_code == 403
-    r = await admin_client.post("/users", json=body)
+async def test_signup_is_public(app: FastAPI, client: AsyncClient) -> None:
+    r = await client.post("/users", json=SIGNUP)
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["email"] == SIGNUP["email"]
+    assert body["display_name"] == "Bob"
+    assert body["is_admin"] is False
+    assert "password_hash" not in body
+
+    # Signing up does not log you in; the app logs in straight after.
+    assert (await client.get("/users/me")).status_code == 401
+    async with log_in(app, (SIGNUP["email"], SIGNUP["password"])) as bob:
+        assert (await bob.get("/users/me")).json()["display_name"] == "Bob"
+
+
+async def test_signup_cannot_self_promote(app: FastAPI, client: AsyncClient) -> None:
+    r = await client.post("/users", json={**SIGNUP, "is_admin": True})
     assert r.status_code == 201
-    assert r.json()["username"] == "bob"
-    async with log_in(app, ("bob", "bob-pw")) as bob:
-        assert (await bob.get("/users/me")).status_code == 200
-    assert (await admin_client.post("/users", json=body)).status_code == 409
+    assert r.json()["is_admin"] is False
+
+
+async def test_one_account_per_address(client: AsyncClient) -> None:
+    assert (await client.post("/users", json=SIGNUP)).status_code == 201
+    # The address is normalised, so a different spelling is the same account.
+    r = await client.post("/users", json={**SIGNUP, "email": "BOB@EXAMPLE.com"})
+    assert r.status_code == 409
+    assert "already has an account" in r.json()["detail"]
+
+
+async def test_signup_validation(client: AsyncClient) -> None:
+    for bad in [
+        {"email": "not-an-address"},
+        {"password": "short"},
+        {"display_name": ""},
+        {"display_name": "x" * 65},
+    ]:
+        assert (await client.post("/users", json={**SIGNUP, **bad})).status_code == 422
 
 
 async def test_cli_create_admin_can_log_in(
     app: FastAPI, database_url: str, monkeypatch: MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings.settings, "database_url", database_url)
-    monkeypatch.setattr(settings.settings, "admin_username", "cli-admin")
-    monkeypatch.setattr(settings.settings, "admin_password", "cli-pw")
+    monkeypatch.setattr(settings.settings, "admin_email", "cli-admin@example.com")
+    monkeypatch.setattr(settings.settings, "admin_password", "cli-password")
     runner = CliRunner()
 
     async def invoke(*args: str) -> Result:
@@ -52,16 +81,17 @@ async def test_cli_create_admin_can_log_in(
 
     result = await invoke("create-admin")
     assert result.exit_code == 0, result.output
-    assert "created admin cli-admin" in result.output
+    assert "created admin cli-admin@example.com" in result.output
 
-    async with log_in(app, ("cli-admin", "cli-pw")) as c:
+    async with log_in(app, ("cli-admin@example.com", "cli-password")) as c:
         r = await c.get("/users/me")
     assert r.status_code == 200
     assert r.json()["is_admin"] is True
+    assert r.json()["display_name"] == "admin"
 
     result = await invoke("create-admin")
     assert result.exit_code != 0
-    assert "taken" in result.output
+    assert "already has an account" in result.output
 
     result = await invoke("list-users")
-    assert result.output.strip().endswith("cli-admin admin")
+    assert result.output.strip().endswith("cli-admin@example.com\tadmin admin")

@@ -3,7 +3,11 @@ from datetime import datetime
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
+from api.db.users import COLUMNS as USER_COLUMNS
 from api.models.users import StoredUser
+
+# The user columns as the join sees them, so a new one is picked up here too.
+_USER_COLUMNS = ", ".join(f"u.{c}" for c in USER_COLUMNS.split(", "))
 
 
 class SessionRepo:
@@ -19,8 +23,7 @@ class SessionRepo:
     async def get_user(self, token_hash: str) -> StoredUser | None:
         """The user behind a live session, or None when it is unknown or expired."""
         cur = await self._conn.execute(
-            "select u.id, u.username, u.password_hash, u.is_admin, u.created_at "
-            "from sessions s join users u on u.id = s.user_id "
+            f"select {_USER_COLUMNS} from sessions s join users u on u.id = s.user_id "
             "where s.token_hash = %s and s.expires_at > now()",
             (token_hash,),
         )

@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
-import { get, logOut, type User } from "./api";
+import { Navigate, Route, Routes } from "react-router";
+import { get, logOut, makeApi, type User } from "./api";
 import Login from "./Login";
+import Profile from "./Profile";
+import Register from "./Register";
 import Tree from "./Tree";
 
 export default function App() {
@@ -17,5 +20,27 @@ export default function App() {
   };
 
   if (user === undefined) return null;
-  return user ? <Tree user={user} onLogOut={leave} /> : <Login onLogIn={setUser} />;
+  if (!user) {
+    // Signing in at any address lands on it, since the route table below then applies.
+    return (
+      <Routes>
+        <Route path="/register" element={<Register onLogIn={setUser} />} />
+        <Route path="*" element={<Login onLogIn={setUser} />} />
+      </Routes>
+    );
+  }
+
+  const api = makeApi(leave);
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={<Tree user={user} api={api} onLogOut={leave} />}
+      />
+      <Route path="/profile" element={<Profile user={user} api={api} />} />
+      {/* Where signing up lands: the session arrives while the browser is still here. */}
+      <Route path="/register" element={<Navigate to="/profile" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }

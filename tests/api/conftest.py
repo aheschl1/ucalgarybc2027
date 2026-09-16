@@ -21,8 +21,8 @@ from api.routes.auth import limiter
 from api.services.users import create_user
 
 ROOT = Path(__file__).resolve().parents[2]
-ADMIN = ("root", "root-pw")
-MEMBER = ("alice", "alice-pw")
+ADMIN = ("root@example.com", "root-pw")
+MEMBER = ("alice@example.com", "alice-pw")
 
 
 @pytest.fixture(scope="session")
@@ -76,7 +76,7 @@ def anonymous(app: FastAPI) -> AsyncClient:
 async def log_in(app: FastAPI, creds: tuple[str, str]) -> AsyncIterator[AsyncClient]:
     """A client that logged in through the API and carries the session cookie."""
     async with anonymous(app) as c:
-        r = await c.post("/auth/login", json={"username": creds[0], "password": creds[1]})
+        r = await c.post("/auth/login", json={"email": creds[0], "password": creds[1]})
         assert r.status_code == 200, r.text
         yield c
 
@@ -89,12 +89,12 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 async def admin(db: DBConnection) -> User:
-    return await create_user(db, *ADMIN, is_admin=True)
+    return await create_user(db, ADMIN[0], "Root", ADMIN[1], is_admin=True)
 
 
 @pytest.fixture
 async def member(db: DBConnection) -> User:
-    return await create_user(db, *MEMBER, is_admin=False)
+    return await create_user(db, MEMBER[0], "Alice", MEMBER[1], is_admin=False)
 
 
 @pytest.fixture

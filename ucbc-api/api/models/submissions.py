@@ -4,8 +4,9 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
-class SubmissionRow(BaseModel):
-    """A `submissions` row."""
+class Submission(BaseModel):
+    """A `submissions` row with its owner's display name, which is how the repo always
+    reads one."""
 
     id: UUID
     user_id: int
@@ -14,9 +15,4 @@ class SubmissionRow(BaseModel):
     size: int
     sha256: str
     created_at: datetime
-
-
-class Submission(SubmissionRow):
-    """A submission with its owner's name."""
-
-    username: str
+    display_name: str

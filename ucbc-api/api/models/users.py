@@ -1,11 +1,15 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class User(BaseModel):
+    """The caller's own user. It carries an email, so it is should not be returned for anyone
+    else."""
+
     id: int
-    username: str
+    email: str
+    display_name: str
     is_admin: bool
     created_at: datetime
 
@@ -16,12 +20,13 @@ class StoredUser(User):
     password_hash: str
 
     def public(self) -> User:
-        return User(
-            id=self.id, username=self.username, is_admin=self.is_admin, created_at=self.created_at
-        )
+        # `User` has no password_hash, so pydantic drops it.
+        return User.model_validate(self.model_dump())
 
 
 class UserCreate(BaseModel):
-    username: str = Field(min_length=1, max_length=64)
-    password: str = Field(min_length=1)
-    is_admin: bool = False
+    """Self-serve signup. Admins are made with `ucbc-api-cli create-admin`."""
+
+    email: EmailStr
+    display_name: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=8, max_length=128)

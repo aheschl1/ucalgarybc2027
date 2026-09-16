@@ -8,7 +8,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
 
@@ -19,6 +19,8 @@ from api.routes import auth, matches, submissions, users
 from api.settings import settings
 
 STATIC = Path(__file__).with_name("static")
+# The paths the web app owns
+APP_ROUTES = ("/", "/register", "/profile")
 
 log = logging.getLogger(__name__)
 
@@ -70,7 +72,14 @@ def create_site(
     site = FastAPI(lifespan=lifespan, openapi_url=None)
     site.mount("/api", api)
     if static.is_dir():
-        site.mount("/", StaticFiles(directory=static, html=True))
+        index = static / "index.html"
+
+        async def shell() -> FileResponse:
+            return FileResponse(index)
+
+        for path in APP_ROUTES:
+            site.get(path, include_in_schema=False)(shell)
+        site.mount("/", StaticFiles(directory=static))
     else:
         log.warning("no web app at %s; serving the API only", static)
     return site

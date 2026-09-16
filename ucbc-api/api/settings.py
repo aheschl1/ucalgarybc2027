@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8000
     # Read by `ucbc-api-cli create-admin` only.
-    admin_username: str | None = None
+    admin_email: str | None = None
     admin_password: str | None = None
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from testcontainers.community.minio import MinioContainer
 from testcontainers.community.postgres import PostgresContainer
 
 from api.api import create_app
@@ -36,12 +37,21 @@ def database_url() -> Iterator[str]:
         yield url
 
 
+@pytest.fixture(scope="session")
+def blob_url() -> Iterator[str]:
+    with MinioContainer("minio/minio:latest") as minio:
+        cfg = minio.get_config()
+        yield f"http://{cfg['access_key']}:{cfg['secret_key']}@{cfg['endpoint']}/test"
+
+
 @pytest.fixture
-async def app(database_url: str) -> AsyncIterator[FastAPI]:
-    app = create_app(database_url)
+async def app(database_url: str, blob_url: str) -> AsyncIterator[FastAPI]:
+    app = create_app(database_url, blob_url)
     async with app.router.lifespan_context(app):
         async with app.state.pool.connection() as conn:
-            await conn.execute("truncate users, matches, sets restart identity cascade")
+            await conn.execute(
+                "truncate users, matches, sets, submissions restart identity cascade"
+            )
         yield app
 
 

@@ -11,3 +11,7 @@ class NotFound(ApiError):
 
 class Conflict(ApiError):
     status_code = 409
+
+
+class PayloadTooLarge(ApiError):
+    status_code = 413

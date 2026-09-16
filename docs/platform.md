@@ -5,16 +5,26 @@ graph LR
     web[web app<br/>served at /]
     api[ucbc-api<br/>FastAPI at /api]
     db[(Postgres<br/>matches = queue)]
+    blobs[(blob storage<br/>S3 API, MinIO locally)]
     worker[ucbc-worker]
     engine[ucbc run<br/>one process per match]
     web --> api
     api --> db
+    api --> blobs
     worker --> db
+    worker --> blobs
     worker --> engine
 ```
 
 Two images from root Dockerfiles: `Dockerfile.api` (API plus the built web app) and
-`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `db`, `api`, `worker`.
+`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `db`, `minio`, `api`, `worker`.
+
+## Submissions
+
+A submission is a zip with `main.py` at the top, at most 1 MiB, checked on upload for member
+paths that escape the directory. The row (`submissions`: owner, name, game, size, sha256) is
+in Postgres; the zip is in the bucket at `submissions/<id>.zip` (`api/blobs.py`, one boto3
+client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not.
 
 ## Queue
 
@@ -40,6 +50,7 @@ place the engine process is described.
 
 ## Settings
 
-`UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`, `API_HOST`,
+`UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,
+`BLOB_URL` (`scheme://access:secret@host[:port]/bucket[?region=]`), `API_HOST`,
 `API_PORT`, `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
 `WORKER_NAME`.

@@ -52,11 +52,12 @@ uv run ucbc run bots/tictactoe/mine bots/tictactoe/random
 
 ```bash
 cp .env.example .env && cp .env.local.example .env.local
-make up                                 # Postgres, API + web on :8000 (/api/docs), worker
+make up                                 # Postgres, MinIO (:9001 console), API + web on :8000 (/api/docs), worker
 uv run ucbc-api-cli create-admin
 make test-api
 ```
 
+`POST /submissions` uploads a zipped bot (main.py at the top, 1 MiB) to blob storage;
 `POST /matches/queue` queues a match between two bot directories on the worker host;
 `make worker` plays queued matches from the checkout, `UCBC_WORKER_SLOTS` at a time.
 

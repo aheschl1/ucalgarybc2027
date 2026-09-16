@@ -28,7 +28,6 @@ uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --view
 | `--show-bot-output` | bot stdout/stderr |
 | `--replay FILE`, `--summary FILE` | write JSON |
 | `--view` | open replay in browser |
-| `--upload` | post to API; needs `UCBC_API_URL`, `UCBC_API_USERNAME`, `UCBC_API_PASSWORD` (admin) |
 
 `uv run ucbc view r.json` replays a saved file.
 

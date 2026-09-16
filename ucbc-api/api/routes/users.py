@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from api.auth import AdminUser, CurrentUser
 from api.db import DB
-from api.models import User, UserCreate
+from api.models.users import User, UserCreate
 from api.services.users import create_user
 
 router = APIRouter(prefix="/users", tags=["users"])

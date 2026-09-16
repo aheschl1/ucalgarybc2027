@@ -1,10 +1,8 @@
 import json
-import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import pytest
 from ucbc_engine.runner import run_match
 
 BotPath = Callable[[str], Path]
@@ -55,14 +53,3 @@ def test_games_lists_what_is_compiled_in() -> None:
 def test_names_default_to_directory_names(bot: BotPath) -> None:
     result = run_match(bot("first_empty"), bot("first_empty"), sets=1)
     assert result["winner_team"] == 0
-
-
-def test_upload_without_credentials_warns_and_plays(
-    bot: BotPath, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    for name in ("UCBC_API_URL", "UCBC_API_USERNAME", "UCBC_API_PASSWORD"):
-        monkeypatch.delenv(name, raising=False)
-    with caplog.at_level(logging.WARNING, logger="ucbc_engine.runner"):
-        result = run_match(bot("first_empty"), bot("first_empty"), sets=1, upload=True)
-    assert result["winner_team"] == 0
-    assert "not uploading" in caplog.text

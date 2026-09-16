@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from pytest import MonkeyPatch
 
 from api import cli, settings
-from api.models import User
+from api.models.users import User
 from tests.api.conftest import ADMIN, MEMBER
 
 

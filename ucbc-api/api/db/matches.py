@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -5,24 +6,43 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
-from api.models import MatchCreate, SetReplay, SetResult
+from api.models.matches import BotSource, MatchConfig, MatchRow, SetReplay, SetResult, TeamInfo
 
+COLUMNS = (
+    "id, game, engine_version, teams, config, bots, status, set_wins, winner_team, error, "
+    "priority, attempts, max_attempts, claimed_by, claimed_at, heartbeat_at, created_at, "
+    "completed_at"
+)
+QUALIFIED = ", ".join(f"matches.{c}" for c in COLUMNS.split(", "))
 SET_RESULT_COLUMNS = "index, first_team, winner_team, reason, detail, ticks"
 
 
 class MatchRepo:
+    """Matches, which are also the queue. A worker `claim`s a match and holds it through
+    `heartbeat` until `complete`, `fail`, or `requeue`. `(id, claimed_at)` is the lease: a
+    match whose heartbeat goes stale can be claimed again, and every write by the earlier
+    holder then matches no row."""
+
     def __init__(self, conn: AsyncConnection[DictRow]) -> None:
         self._conn = conn
 
-    async def insert(self, match: MatchCreate) -> UUID:
+    async def insert(
+        self,
+        game: str,
+        teams: list[TeamInfo],
+        config: MatchConfig,
+        bots: list[BotSource],
+        priority: int,
+    ) -> UUID:
         cur = await self._conn.execute(
-            "insert into matches (game, engine_version, teams, config, status) "
-            "values (%s, %s, %s, %s, 'running') returning id",
+            "insert into matches (game, teams, config, bots, priority, status) "
+            "values (%s, %s, %s, %s, %s, 'queued') returning id",
             (
-                match.game,
-                match.engine_version,
-                Jsonb([t.model_dump() for t in match.teams]),
-                Jsonb(match.config),
+                game,
+                Jsonb([t.model_dump() for t in teams]),
+                Jsonb(config.model_dump()),
+                Jsonb([b.model_dump() for b in bots]),
+                priority,
             ),
         )
         row = await cur.fetchone()
@@ -30,14 +50,76 @@ class MatchRepo:
         id: UUID = row["id"]
         return id
 
-    async def get(self, match_id: UUID) -> dict[str, Any] | None:
-        """The match row without its sets."""
+    async def get(self, match_id: UUID) -> MatchRow | None:
+        cur = await self._conn.execute(f"select {COLUMNS} from matches where id = %s", (match_id,))
+        row = await cur.fetchone()
+        return None if row is None else MatchRow.model_validate(row)
+
+    async def claim(self, worker: str, lease: timedelta) -> MatchRow | None:
+        """The next queued match, or a running one whose heartbeat is older than `lease`."""
         cur = await self._conn.execute(
-            "select id, game, engine_version, teams, config, status, set_wins, winner_team, "
-            "created_at, completed_at from matches where id = %s",
-            (match_id,),
+            f"""
+            with next as (
+                select id from matches
+                where status = 'queued'
+                   or (status = 'running' and heartbeat_at < now() - %s)
+                order by priority desc, created_at
+                for update skip locked
+                limit 1
+            )
+            update matches set status = 'running', claimed_by = %s, claimed_at = now(),
+                heartbeat_at = now(), attempts = attempts + 1
+            from next where matches.id = next.id
+            returning {QUALIFIED}
+            """,
+            (lease, worker),
         )
-        return await cur.fetchone()
+        row = await cur.fetchone()
+        return None if row is None else MatchRow.model_validate(row)
+
+    async def heartbeat(self, match_id: UUID, claimed_at: datetime) -> bool:
+        return await self._update_held(match_id, claimed_at, "heartbeat_at = now()", ())
+
+    async def requeue(self, match_id: UUID, claimed_at: datetime) -> bool:
+        """Back to the queue; the attempt stays counted."""
+        return await self._update_held(
+            match_id,
+            claimed_at,
+            "status = 'queued', claimed_by = null, claimed_at = null, heartbeat_at = null",
+            (),
+        )
+
+    async def fail(self, match_id: UUID, claimed_at: datetime, error: str) -> bool:
+        return await self._update_held(
+            match_id, claimed_at, "status = 'error', error = %s, completed_at = now()", (error,)
+        )
+
+    async def complete(
+        self,
+        match_id: UUID,
+        claimed_at: datetime,
+        set_wins: list[int],
+        winner_team: int | None,
+        engine_version: str,
+    ) -> bool:
+        return await self._update_held(
+            match_id,
+            claimed_at,
+            "status = 'done', set_wins = %s, winner_team = %s, engine_version = %s, "
+            "completed_at = now()",
+            (Jsonb(set_wins), winner_team, engine_version),
+        )
+
+    async def _update_held(
+        self, match_id: UUID, claimed_at: datetime, assignments: str, params: tuple[Any, ...]
+    ) -> bool:
+        """False when the lease has been taken over."""
+        cur = await self._conn.execute(
+            f"update matches set {assignments} "
+            "where id = %s and claimed_at = %s and status = 'running'",
+            (*params, match_id, claimed_at),
+        )
+        return cur.rowcount == 1
 
     async def add_set(self, match_id: UUID, replay: SetReplay) -> None:
         """Raises `psycopg.errors.UniqueViolation` when the set index exists."""
@@ -57,6 +139,9 @@ class MatchRepo:
             ),
         )
 
+    async def delete_sets(self, match_id: UUID) -> None:
+        await self._conn.execute("delete from sets where match_id = %s", (match_id,))
+
     async def list_set_results(self, match_id: UUID) -> list[SetResult]:
         cur = await self._conn.execute(
             f"select {SET_RESULT_COLUMNS} from sets where match_id = %s order by index",
@@ -64,19 +149,9 @@ class MatchRepo:
         )
         return [SetResult.model_validate(row) for row in await cur.fetchall()]
 
-    async def get_set_replay(self, match_id: UUID, index: int) -> dict[str, Any] | None:
+    async def get_set_replay(self, match_id: UUID, index: int) -> SetReplay | None:
         cur = await self._conn.execute(
             "select replay from sets where match_id = %s and index = %s", (match_id, index)
         )
         row = await cur.fetchone()
-        if row is None:
-            return None
-        replay: dict[str, Any] = row["replay"]
-        return replay
-
-    async def complete(self, match_id: UUID, set_wins: list[int], winner_team: int | None) -> None:
-        await self._conn.execute(
-            "update matches set status = 'done', set_wins = %s, winner_team = %s, "
-            "completed_at = now() where id = %s",
-            (Jsonb(set_wins), winner_team, match_id),
-        )
+        return None if row is None else SetReplay.model_validate(row["replay"])

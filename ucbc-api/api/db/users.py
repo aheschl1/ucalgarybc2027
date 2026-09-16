@@ -1,7 +1,7 @@
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
-from api.models import StoredUser
+from api.models.users import StoredUser
 
 COLUMNS = "id, username, password_hash, is_admin, created_at"
 

@@ -42,11 +42,12 @@ export type SetResult = {
 export type Match = {
   id: string;
   game: string;
-  engine_version: string;
+  engine_version: string | null;
   teams: { id: number; name: string }[];
-  status: "running" | "done";
+  status: "queued" | "running" | "done" | "error";
   set_wins: number[] | null;
   winner_team: number | null;
+  error: string | null;
   created_at: string;
   sets: SetResult[];
 };

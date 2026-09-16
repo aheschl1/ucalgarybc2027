@@ -4,7 +4,7 @@ members = [
     "ucbc-engine",
     "ucbc-tictactoe",
     "ucbc-py",
-    "ucbc-cli",
+    "ucbc-dev",
 ]
 
 [workspace.package]

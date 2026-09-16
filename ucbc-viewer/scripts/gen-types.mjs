@@ -18,7 +18,7 @@ const options = {
 };
 
 function devCli(...args) {
-  const out = execFileSync("cargo", ["run", "-q", "-p", "ucbc-cli", "--", ...args], {
+  const out = execFileSync("cargo", ["run", "-q", "-p", "ucbc-dev", "--", ...args], {
     cwd: root,
     encoding: "utf8",
   });

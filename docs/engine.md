@@ -6,15 +6,15 @@
 graph LR
     engine[ucbc-engine<br/>game-agnostic core]
     ttt[ucbc-tictactoe<br/>impl Game]
-    py[ucbc-py<br/>ucbc._engine + bot runtime]
-    cli[ucbc-cli<br/>ucbc-dev]
-    sdk[ucbc-sdk<br/>python: handle, games/, cli]
+    py[ucbc-py<br/>ucbc_engine._engine + bot process]
+    cli[ucbc-dev]
+    sdk[ucbc-sdk<br/>python: handle, games/]
     ttt --> engine
     py --> engine
     py -. feature per game .-> ttt
     cli --> engine
     cli --> ttt
-    sdk -. runs inside .-> py
+    py -. imported by the bot process .-> sdk
 ```
 
 ## Vocabulary
@@ -137,89 +137,34 @@ BotFailure::Exception / Crash                    -> engine drops the bot, game.b
 
 ## Python bots
 
-One subinterpreter per bot, own GIL. PyO3 objects never enter it; the bridge is two
-C functions and JSON strings.
+One process per bot: `python -m ucbc_engine._bot` (`ucbc-py/src/process.rs`,
+`ucbc_engine/_bot.py`), line-delimited JSON over its stdin and stdout. The process
+is the unit of isolation: `RLIMIT_AS` for memory, `SIGSTOP` at the step deadline,
+`SIGKILL` on despawn. See [resourcelimits.md](resourcelimits.md).
 
 ```mermaid
 sequenceDiagram
-    participant R as runner thread<br/>(main interpreter, detached)
-    participant T as bot thread
-    participant I as bot subinterpreter
-
-    R->>T: ToBot::Step(StepToken)
-    T->>T: bridge.begin_step(token)
-    T->>I: _bootstrap.run_step(set, tick)
-    I->>I: step(handle)
-    I->>T: query("{...}")  via C function
-    T->>R: FromBot::Query(value)
-    R->>R: ctx.query -> game.handle_query
-    R->>T: ToBot::QueryReply
-    T->>I: '{"ok": ...}'
-    I->>T: return '{"stdout": "...", "error": null}'
-    T->>T: token = bridge.end_step()
-    T->>R: FromBot::Done(result, token)
+    participant R as runner
+    participant B as bot process
+    R->>B: init {identity, source, path, memory_bytes}
+    B->>B: import ucbc + PRELOAD, setrlimit, _engine.lockdown()
+    B-->>R: ready
+    B-->>R: loaded (failure | null)
+    loop each turn
+        R->>B: step {set_index, tick}
+        B->>R: query | act
+        R-->>B: reply {ok} | {err}
+        B-->>R: done {stdout, error, memory}
+    end
 ```
 
-Lifecycle of a bot thread:
+Inside the process: `_bot.py` takes the real stdin/stdout for the link before
+`main.py` runs, buffers the bot's prints, and after `lockdown()` the process can open
+no files, so a bot may import only `ucbc` and the stdlib modules in `PRELOAD`.
+`ucbc.handle.Handle` wraps the link as `_query(dict)` and `_act(dict)`;
+`ucbc.games.<g>.HANDLE` is the typed subclass a bot's `step` receives.
 
-```text
-memory::enter(limit)       this thread's allocations count against the bot
-Interp::create()           PyGILState_Ensure -> Py_NewInterpreterFromConfig -> swap back -> Release
-attached(boot)             import ucbc._bootstrap; bridge functions
-send Started(Warden)       the warden thread, through which the runner freezes and thaws the bot
-attached(load)             _b.load(SOURCE, PATH, IDENTITY, BRIDGE)      under the step budget
-loop recv Step             attached(_b.run_step(SET_INDEX, TICK))       under the step budget
-Shutdown                   Interp::destroy() -> Py_EndInterpreter
-runner gone                return; the interpreter stays alive (abandoned bot, warden holds its GIL)
-```
-
-The runner waits `step_time` for `Loaded`/`Done`, then has the warden freeze the bot by
-taking its GIL. The bot's next turn thaws it and ends when that work returns.
-See [resourcelimits.md](resourcelimits.md).
-
-Interpreter config:
-
-```rust
-PyInterpreterConfig {
-    use_main_obmalloc: 0,
-    allow_fork: 0,
-    allow_exec: 0,
-    allow_threads: 0,
-    allow_daemon_threads: 0,
-    check_multi_interp_extensions: 1,
-    gil: PyInterpreterConfig_OWN_GIL,
-}
-```
-
-## StepToken
-
-```mermaid
-stateDiagram-v2
-    [*] --> Runner: StepToken::new (per step, not Clone)
-    Runner --> Bridge: ToBot::Step
-    Bridge --> Bridge: query/act allowed
-    Bridge --> Runner: FromBot::Done
-    Runner --> [*]: dropped
-```
-
-No token in the bridge: `query`/`act` raise `RuntimeError("no step in progress")`.
-While a set ends the runner answers every call with `StepOver`: `RuntimeError("the step
-is over")`. At most one live token exists in the process at a time.
-
-## Inside the interpreter
-
-```text
-ucbc/_bootstrap.py   load(source, path, identity, bridge) -> failure json | null
-                     run_step(set_index, tick) -> json {"stdout", "error"}
-ucbc/handle.py       Identity(bot_id, team, team_name, seed, game)
-                     Handle(identity, bridge): _query(dict) -> dict, _act(dict) -> dict
-                     QueryError, ActionError, SetOver
-ucbc/games/<g>.py    class <G>Handle(Handle); HANDLE = <G>Handle
-```
-
-`bridge` is a dict `{"query": fn, "act": fn}` of C functions bound to the bot's `Bridge`.
-
-Bridge reply format:
+Reply format:
 
 ```json
 {"ok": {...}}
@@ -247,7 +192,7 @@ ucbc-foo/src/game.rs                  impl Game for Foo { const NAME = "foo"; ..
                                       every Query/Action/Response/Snapshot type derives JsonSchema
 ucbc-py/Cargo.toml                    foo = ["dep:ucbc-foo"]     (+ in default)
 ucbc-py/src/lib.rs                    #[cfg(feature = "foo")] registry.register::<ucbc_foo::Foo>();
-ucbc-cli/src/main.rs                  registry.register::<Foo>();
+ucbc-dev/src/main.rs                  registry.register::<Foo>();
 ucbc-sdk/ucbc/games/foo/_api.py       generated by `make sdk` (ucbc-dev gen-sdk): FooApi(Handle) with
                                       one method per query and action, one class per response type
 ucbc-sdk/ucbc/games/foo/__init__.py   class FooHandle(FooApi): conveniences; HANDLE = FooHandle

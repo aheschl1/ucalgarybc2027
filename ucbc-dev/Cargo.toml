@@ -1,13 +1,9 @@
 [package]
-name = "ucbc-cli"
+name = "ucbc-dev"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "Developer CLI: run Rust-vs-Rust matches and inspect replays (no Python)"
-
-[[bin]]
-name = "ucbc-dev"
-path = "src/main.rs"
 
 [dependencies]
 ucbc-engine = { workspace = true }

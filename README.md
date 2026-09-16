@@ -67,17 +67,20 @@ builds the frontend into the API package. `ENV=prod` reads `.env.prod` over `.en
 
 ## Layout
 
-| Path | |
-| --- | --- |
-| `ucbc-engine/` | game-agnostic engine |
-| `ucbc-tictactoe/` | example game + its viewer renderer |
-| `ucbc-py/` | `ucbc` wheel: extension, bot runtime, CLI |
-| `ucbc-sdk/` | `ucbc` package bots import |
-| `ucbc-cli/` | `ucbc-dev`, Rust-only dev binary |
-| `ucbc-viewer/` | replay viewer (TS, Vite) |
-| `ucbc-api/` | platform API (FastAPI, Postgres) |
-| `ucbc-worker/` | plays queued matches with `ucbc run` |
-| `ucbc-web/` | platform frontend (React, Vite) |
+| Path | Builds | Reached as |
+| --- | --- | --- |
+| `ucbc-engine/` | crate: game-agnostic engine | `use ucbc_engine` |
+| `ucbc-tictactoe/` | crate: example game + its viewer renderer | registered in `ucbc-py` and `ucbc-dev` |
+| `ucbc-py/` | pip dist `ucbc`: extension, bot process, CLI | `uv run ucbc`, `import ucbc_engine` |
+| `ucbc-sdk/` | pip dist `ucbc-sdk` | `import ucbc` inside a bot |
+| `ucbc-dev/` | cargo bin `ucbc-dev`, Rust only | `cargo run -p ucbc-dev`, `make sdk` |
+| `ucbc-viewer/` | replay viewer (TS, Vite) | `ucbc view`, `make viewer` |
+| `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
+| `ucbc-worker/` | pip dist `ucbc-worker` | `uv run ucbc-worker` |
+| `ucbc-web/` | platform frontend (React, Vite) | served by `ucbc-api` at `/`, `make web` |
+
+`pip install ucbc` gives both the command and the SDK. Bots import `ucbc`; the runner
+imports `ucbc_engine`.
 | `bots/<game>/` | sample bots |
 | `tests/` | Python integration tests |
 

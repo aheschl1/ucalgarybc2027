@@ -9,7 +9,7 @@ build:
 	cargo build --workspace
 
 sdk:
-	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games
+	cargo run -q -p ucbc-dev -- gen-sdk ucbc-sdk/ucbc/games
 
 # TypeScript types for the viewer, from the replay schema and each game's API.
 viewer-types:
@@ -58,7 +58,7 @@ test-viewer:
 	npm test --workspaces
 
 lint:
-	cargo run -q -p ucbc-cli -- gen-sdk ucbc-sdk/ucbc/games --check
+	cargo run -q -p ucbc-dev -- gen-sdk ucbc-sdk/ucbc/games --check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
 	uv run ruff check ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots

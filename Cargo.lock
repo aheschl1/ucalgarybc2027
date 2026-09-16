@@ -496,7 +496,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ucbc-cli"
+name = "ucbc-dev"
 version = "0.1.0"
 dependencies = [
  "clap",

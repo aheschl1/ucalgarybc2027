@@ -11,7 +11,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock Cargo.toml Cargo.lock ./
 COPY ucbc-engine/ ucbc-engine/
 COPY ucbc-tictactoe/ ucbc-tictactoe/
-COPY ucbc-cli/ ucbc-cli/
+COPY ucbc-dev/ ucbc-dev/
 COPY ucbc-py/ ucbc-py/
 COPY ucbc-sdk/ ucbc-sdk/
 COPY ucbc-api/ ucbc-api/

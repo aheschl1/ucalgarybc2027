@@ -80,4 +80,5 @@ builds the frontend into the API package. `ENV=prod` reads `.env.prod` over `.en
 | `bots/<game>/` | sample bots |
 | `tests/` | Python integration tests |
 
-Engine internals and adding a game: [docs/engine.md](docs/engine.md).
+Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and
+worker: [docs/platform.md](docs/platform.md).

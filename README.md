@@ -52,13 +52,17 @@ uv run ucbc run bots/tictactoe/mine bots/tictactoe/random
 
 ```bash
 cp .env.example .env && cp .env.local.example .env.local
-make up                                 # Postgres + API in Docker on :8000, /docs for routes
+make up                                 # Postgres, API + web on :8000 (/api/docs), worker
 uv run ucbc-api-cli create-admin
 make test-api
 ```
 
-`make db` + `make migrate` + `make api` runs the API from the checkout instead. `ENV=prod`
-reads `.env.prod` over `.env.local`. Migrations: `uv run alembic revision -m "..."`, raw SQL in `op.execute`.
+`POST /matches/queue` queues a match between two bot directories on the worker host;
+`make worker` plays queued matches from the checkout, `UCBC_WORKER_SLOTS` at a time.
+
+`make db` + `make migrate` + `make api` runs the API from the checkout instead, and
+`npm run dev -w ucbc-web` serves the frontend on :5173 with `/api` proxied to it; `make web`
+builds the frontend into the API package. `ENV=prod` reads `.env.prod` over `.env.local`. Migrations: `uv run alembic revision -m "..."`, raw SQL in `op.execute`.
 
 ## Layout
 
@@ -71,6 +75,7 @@ reads `.env.prod` over `.env.local`. Migrations: `uv run alembic revision -m "..
 | `ucbc-cli/` | `ucbc-dev`, Rust-only dev binary |
 | `ucbc-viewer/` | replay viewer (TS, Vite) |
 | `ucbc-api/` | platform API (FastAPI, Postgres) |
+| `ucbc-worker/` | plays queued matches with `ucbc run` |
 | `ucbc-web/` | platform frontend (React, Vite) |
 | `bots/<game>/` | sample bots |
 | `tests/` | Python integration tests |

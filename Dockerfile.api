@@ -1,3 +1,15 @@
+# The web app, built once.
+FROM node:22-alpine AS web
+WORKDIR /src
+COPY package.json package-lock.json ./
+COPY ucbc-web/package.json ucbc-web/
+COPY ucbc-viewer/package.json ucbc-viewer/
+COPY ucbc-tictactoe/viewer/package.json ucbc-tictactoe/viewer/
+RUN npm ci -w ucbc-web
+COPY ucbc-web/ ucbc-web/
+RUN npm run build -w ucbc-web -- --outDir /out --emptyOutDir
+
+# The API, serving the web app at / and itself at /api.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/app/.venv/bin:$PATH"
@@ -7,10 +19,12 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY ucbc-sdk/pyproject.toml ucbc-sdk/
 COPY ucbc-py/pyproject.toml ucbc-py/
+COPY ucbc-worker/pyproject.toml ucbc-worker/
 COPY ucbc-api/ ucbc-api/
 COPY alembic.ini ./
 COPY alembic/ alembic/
 RUN uv sync --frozen --no-dev --package ucbc-api
+COPY --from=web /out ucbc-api/api/static
 
 RUN useradd --create-home api && chown -R api:api /app
 USER api

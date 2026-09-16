@@ -15,6 +15,7 @@ services:
       timeout: 2s
       retries: 15
 
+  # The API and the web app; migrates first.
   api:
     build:
       context: .
@@ -33,16 +34,32 @@ services:
       db:
         condition: service_healthy
     command: sh -c "alembic upgrade head && ucbc-api"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
-  web:
-    build: ./ucbc-web
+  # Plays queued matches. Waits for the API so the schema is migrated. Bot directories named
+  # in a queued match resolve under /app, where the checkout's bots/ is mounted.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    env_file:
+      - .env
+      - .env.${ENV:-local}
     environment:
-      # Inside the compose network the API is `api`, not localhost.
-      UCBC_API_PROXY: http://api:8000
-    ports:
-      - "5173:5173"
+      ENV: ${ENV:-local}
+      UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_WORKER_SLOTS: ${UCBC_WORKER_SLOTS:-2}
+    volumes:
+      - ./bots:/app/bots:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    # SIGTERM lets running matches finish.
+    stop_grace_period: 10m
 
 volumes:
   pgdata:

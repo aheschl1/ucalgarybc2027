@@ -4,7 +4,7 @@ UCalgary Battlecode: Python bots, Rust engine. Work tracked in [Linear](https://
 
 ## Setup
 
-Rust 1.85+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+.
+Rust 1.85+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
 ```bash
 uv sync         # builds the engine extension into .venv

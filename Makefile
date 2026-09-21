@@ -57,8 +57,9 @@ else
 	  && uv build -o dist $$tmp/sdk && rm -rf $$tmp
 endif
 
-# Publishing: `make release` uploads dist/ to PyPI with PYPI_API_TOKEN (from the shell, else
-# .env.prod) and tags the commit. A version can be uploaded once, ever. release-check refuses
+# Publishing: `ENV=prod make release` uploads dist/ to PyPI and tags the commit; any other
+# ENV is refused. PYPI_API_TOKEN comes from the environment, else .env.$(ENV) over .env,
+# like every other setting. A version can be uploaded once, ever. release-check refuses
 # versions that disagree or a dirty tree, then installs the x86_64 wheel in clean containers
 # and plays a match.
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-py/pyproject.toml)
@@ -74,8 +75,11 @@ release-check: wheels
 	    "pip install -q --find-links /dist ucbc==$(VERSION) && ucbc run /bots/tictactoe/random /bots/tictactoe/first_empty" \
 	    || exit 1; done
 
-release: release-check
-	@UV_PUBLISH_TOKEN=$${PYPI_API_TOKEN:-$$(sed -n 's/^PYPI_API_TOKEN=//p' .env.prod)} uv publish dist/*
+release:
+	@test "$(ENV)" = prod || { echo "publishing is a prod action: ENV=prod make release"; exit 1; }
+	$(MAKE) release-check
+	@UV_PUBLISH_TOKEN=$${PYPI_API_TOKEN:-$$(cat .env .env.$(ENV) | sed -n 's/^PYPI_API_TOKEN=//p' | tail -1)} \
+	  uv publish dist/*
 	git tag v$(VERSION)
 
 # tests/api starts its own Postgres through testcontainers; needs Docker.

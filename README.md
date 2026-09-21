@@ -103,7 +103,7 @@ pip install ucbc-sdk    # any platform: the SDK alone, for types and completion
 
 Bots import `ucbc`; the runner imports `ucbc_engine`. To release, set the same version in
 `Cargo.toml`, `ucbc-py/pyproject.toml` (and its `ucbc-sdk==` pin) and
-`ucbc-sdk/pyproject.toml`, commit, then `make release` (PyPI, with `PYPI_API_TOKEN` from
+`ucbc-sdk/pyproject.toml`, commit, then `ENV=prod make release` (PyPI, with `PYPI_API_TOKEN` from
 `.env.prod`) and `make deploy`, so the platform plays the engine people can install.
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and

@@ -1,16 +1,28 @@
 # Run through `make up` / `make db`, which pass .env and .env.<ENV> for ${...} substitution.
+#
+# Postgres comes from one of two places, chosen in that env file:
+#   COMPOSE_PROFILES=db            start the `db` service below with POSTGRES_USER/PASSWORD
+#   COMPOSE_PROFILES= POSTGRES_HOST=<host>   reuse a Postgres that already exists; the role
+#                                  and database must exist there (POSTGRES_DB, default the user)
+# host.docker.internal names the machine running compose.
+
+# The database as the api and worker reach it, inside the compose network.
+x-database-url: &database_url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-${POSTGRES_USER}}
+
 services:
   db:
     image: postgres:17
+    profiles: [db]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-${POSTGRES_USER}}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 2s
       timeout: 2s
       retries: 15
@@ -44,15 +56,18 @@ services:
       - .env.${ENV:-local}
     environment:
       ENV: ${ENV:-local}
-      # Inside the compose network the database is `db`, not localhost.
-      UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_DATABASE_URL: *database_url
       UCBC_BLOB_URL: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000/ucbc
       UCBC_API_HOST: 0.0.0.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
+      # Waits for the bundled Postgres when it is enabled; ignored when it is not.
       db:
         condition: service_healthy
+        required: false
       minio:
         condition: service_healthy
     command: sh -c "alembic upgrade head && ucbc-api"
@@ -73,9 +88,11 @@ services:
       - .env.${ENV:-local}
     environment:
       ENV: ${ENV:-local}
-      UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_DATABASE_URL: *database_url
       UCBC_BLOB_URL: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000/ucbc
       UCBC_WORKER_SLOTS: ${UCBC_WORKER_SLOTS:-2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./bots:/app/bots:ro
     depends_on:

@@ -18,3 +18,4 @@ dist/
 node_modules/
 ucbc-py/python/ucbc_engine/viewer/static/
 ucbc-api/api/static/
+compose.override.yaml

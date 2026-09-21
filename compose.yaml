@@ -1,29 +1,40 @@
 # Run through `make up` / `make db`, which pass .env and .env.<ENV> for ${...} substitution.
+# COMPOSE_PROFILES=db starts `db`; without it, POSTGRES_HOST names an existing Postgres.
+# UCBC_BIND is the host address the ports are published on (default: every interface);
+# MINIO_PORT and MINIO_CONSOLE_PORT move MinIO's host ports off one already running there.
+# UCBC_RESTART is the restart policy (default: no; prod uses unless-stopped). The api and
+# worker images are tagged so `make deploy` can ship them to a host that does not build.
+x-database-url: &database_url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-${POSTGRES_USER}}
+
 services:
   db:
     image: postgres:17
+    profiles: [db]
+    restart: ${UCBC_RESTART:-no}
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-${POSTGRES_USER}}
     ports:
-      - "5432:5432"
+      - "${UCBC_BIND:-0.0.0.0}:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 2s
       timeout: 2s
       retries: 15
 
   minio:
     image: quay.io/minio/minio
+    restart: ${UCBC_RESTART:-no}
     command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${UCBC_BIND:-0.0.0.0}:${MINIO_PORT:-9000}:9000"
+      - "${UCBC_BIND:-0.0.0.0}:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - blobdata:/data
     healthcheck:
@@ -34,6 +45,8 @@ services:
 
   # The API and the web app; migrates first. `make up GAME=...` narrows the web app's viewer.
   api:
+    image: ucbc-api:${UCBC_TAG:-latest}
+    restart: ${UCBC_RESTART:-no}
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -44,27 +57,32 @@ services:
       - .env.${ENV:-local}
     environment:
       ENV: ${ENV:-local}
-      # Inside the compose network the database is `db`, not localhost.
-      UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_DATABASE_URL: *database_url
       UCBC_BLOB_URL: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000/ucbc
       UCBC_API_HOST: 0.0.0.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
-      - "8000:8000"
+      - "${UCBC_BIND:-0.0.0.0}:8000:8000"
     depends_on:
       db:
         condition: service_healthy
+        required: false
       minio:
         condition: service_healthy
     command: sh -c "alembic upgrade head && ucbc-api"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 2s
-      timeout: 2s
+      # Starting Python alone takes seconds on a slow host.
+      timeout: 10s
       retries: 30
 
   # Plays queued matches. Waits for the API so the schema is migrated. Bot directories named
   # in a queued match resolve under /app, where the checkout's bots/ is mounted.
   worker:
+    image: ucbc-worker:${UCBC_TAG:-latest}
+    restart: ${UCBC_RESTART:-no}
     build:
       context: .
       dockerfile: Dockerfile.worker
@@ -73,9 +91,11 @@ services:
       - .env.${ENV:-local}
     environment:
       ENV: ${ENV:-local}
-      UCBC_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER}
+      UCBC_DATABASE_URL: *database_url
       UCBC_BLOB_URL: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000/ucbc
       UCBC_WORKER_SLOTS: ${UCBC_WORKER_SLOTS:-2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./bots:/app/bots:ro
     depends_on:

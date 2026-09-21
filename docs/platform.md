@@ -17,7 +17,11 @@ graph LR
 ```
 
 Two images from root Dockerfiles: `Dockerfile.api` (API plus the built web app) and
-`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `db`, `minio`, `api`, `worker`.
+`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `minio`, `api`,
+`worker`, and `db` when `COMPOSE_PROFILES=db` in `.env.<ENV>`; with it empty, `POSTGRES_HOST`
+(and `POSTGRES_PORT`, `POSTGRES_DB`) name an existing Postgres instead. To reach one on
+another Docker network, a git-ignored `compose.override.yaml` can attach `api` and `worker`
+to that network and `POSTGRES_HOST` its container name.
 
 ## Auth
 

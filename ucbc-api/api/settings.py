@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     blob_url: str
     api_host: str = "127.0.0.1"
     api_port: int = 8000
+    # Proxies whose X-Forwarded-For is trusted for the client address ("*": any). Behind a
+    # tunnel every request otherwise shares one address, and with it one login rate limit.
+    forwarded_allow_ips: str = "127.0.0.1"
     # Read by `ucbc-api-cli create-admin` only.
     admin_email: str | None = None
     admin_password: str | None = None

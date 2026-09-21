@@ -96,4 +96,10 @@ async def rate_limited(_request: Request, exc: Exception) -> JSONResponse:
 
 
 def main() -> None:
-    uvicorn.run(create_site(), host=settings.api_host, port=settings.api_port)
+    uvicorn.run(
+        create_site(),
+        host=settings.api_host,
+        port=settings.api_port,
+        proxy_headers=True,
+        forwarded_allow_ips=settings.forwarded_allow_ips,
+    )

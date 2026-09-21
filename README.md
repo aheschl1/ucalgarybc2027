@@ -7,13 +7,13 @@ UCalgary Battlecode: Python bots, Rust engine. Work tracked in [Linear](https://
 Rust 1.85+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
 ```bash
-uv sync         # builds the engine extension into .venv
-make viewer     # builds the replay viewer
-make test
+make setup      # engine extension into .venv, replay viewer
+make dev        # after Rust changes
+make test       # rust, python, api (needs Docker), viewer; `make test-api` for the API alone
 make lint
 ```
 
-`make dev` after Rust changes.
+`GAME=tictactoe` on any target builds that game alone.
 
 ## Run a match
 
@@ -54,16 +54,23 @@ uv run ucbc run bots/tictactoe/mine bots/tictactoe/random
 cp .env.example .env && cp .env.local.example .env.local
 make up                                 # Postgres, MinIO (:9001 console), API + web on :8000 (/api/docs), worker
 uv run ucbc-api-cli create-admin
-make test-api
+make down
 ```
 
 `POST /submissions` uploads a zipped bot (main.py at the top, 1 MiB) to blob storage;
-`POST /matches/queue` queues a match between two bot directories on the worker host;
-`make worker` plays queued matches from the checkout, `UCBC_WORKER_SLOTS` at a time.
+`POST /matches/queue` queues a match between two bot directories on the worker host.
 
-`make db` + `make migrate` + `make api` runs the API from the checkout instead, and
-`npm run dev -w ucbc-web` serves the frontend on :5173 with `/api` proxied to it; `make web`
-builds the frontend into the API package. `ENV=prod` reads `.env.prod` over `.env.local`. Migrations: `uv run alembic revision -m "..."`, raw SQL in `op.execute`.
+From the checkout instead of compose:
+
+```bash
+make db && uv run alembic upgrade head 
+uv run ucbc-api                         # API on :8000; `make web` builds the frontend into it
+uv run ucbc-worker                      # plays queued matches, UCBC_WORKER_SLOTS at a time
+npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
+```
+
+`ENV=prod` reads `.env.prod` over `.env.local`. Migrations: `uv run alembic revision -m "..."`,
+raw SQL in `op.execute`.
 
 ## Layout
 
@@ -78,11 +85,11 @@ builds the frontend into the API package. `ENV=prod` reads `.env.prod` over `.en
 | `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
 | `ucbc-worker/` | pip dist `ucbc-worker` | `uv run ucbc-worker` |
 | `ucbc-web/` | platform frontend (React, Vite) | served by `ucbc-api` at `/`, `make web` |
+| `bots/<game>/` | sample bots | |
+| `tests/` | Python integration tests | `make test` |
 
 `pip install ucbc` gives both the command and the SDK. Bots import `ucbc`; the runner
 imports `ucbc_engine`.
-| `bots/<game>/` | sample bots |
-| `tests/` | Python integration tests |
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and
 worker: [docs/platform.md](docs/platform.md).

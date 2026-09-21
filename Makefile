@@ -1,4 +1,4 @@
-.PHONY: build sdk viewer-types viewer dev wheels test test-rust test-py test-api test-viewer lint clean up down db migrate api worker web
+.PHONY: setup dev sdk viewer-types viewer web wheels test test-api lint clean up down db
 
 # `make <target> GAME=tictactoe` builds one game everywhere: the engine with that cargo
 # feature, the SDK with that game's handle, the viewer and web app with its renderer, the
@@ -7,29 +7,38 @@ GAME ?=
 FEATURES := $(if $(GAME),--no-default-features -F $(GAME),)
 export UCBC_GAME := $(GAME)
 
-build:
-	cargo build --workspace
+# `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.
+ENV ?= local
+COMPOSE := docker compose --env-file .env --env-file .env.$(ENV)
+
+PY := ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots
+
+# First setup: the engine extension into .venv, and the viewer.
+setup: viewer
+	uv sync
+
+# After Rust changes: regenerate the SDK and rebuild the extension.
+dev: sdk
+	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
+
+node_modules: package-lock.json
+	npm ci
+	touch $@
 
 sdk:
 	cargo run -q -p ucbc-dev -- gen-sdk ucbc-sdk/ucbc/games
 
 # TypeScript types for the viewer, from the replay schema and each game's API.
-viewer-types:
-	npm ci
+viewer-types: node_modules
 	node ucbc-viewer/scripts/gen-types.mjs
 
 # The viewer page, built into the ucbc_engine package for `ucbc view`.
-viewer:
-	npm ci
+viewer: node_modules
 	npm run build -w @ucbc/viewer -- --outDir ../ucbc-py/python/ucbc_engine/viewer/static --emptyOutDir
 
 # The platform frontend, built into the API package so `ucbc-api` serves it at /.
-web:
-	npm ci
+web: node_modules
 	npm run build -w ucbc-web -- --outDir ../ucbc-api/api/static --emptyOutDir
-
-dev: sdk
-	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
 
 # Release wheels into dist/: ucbc (engine, runtime, CLI) and ucbc-sdk.
 wheels: sdk viewer
@@ -43,28 +52,21 @@ else
 	  && uv build --wheel -o dist $$tmp/sdk && rm -rf $$tmp
 endif
 
-test: test-rust test-py test-api test-viewer
-
-test-rust:
+# tests/api starts its own Postgres through testcontainers; needs Docker.
+test: dev node_modules
 	cargo test --workspace
+	uv run pytest
+	npm test --workspaces --if-present
 
-test-py: dev
-	uv run pytest --ignore=tests/api
-
-# Starts its own Postgres through testcontainers; needs Docker.
 test-api: dev
 	uv run pytest tests/api
 
-test-viewer:
-	npm ci
-	npm test --workspaces --if-present
-
-lint:
+lint: node_modules
 	cargo run -q -p ucbc-dev -- gen-sdk ucbc-sdk/ucbc/games --check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	uv run ruff check ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots
-	uv run ruff format --check ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots
+	uv run ruff check $(PY)
+	uv run ruff format --check $(PY)
 	uv run mypy
 	node ucbc-viewer/scripts/gen-types.mjs --check
 	npm run typecheck --workspaces
@@ -74,11 +76,8 @@ clean:
 	rm -rf .venv dist node_modules ucbc-api/api/static
 
 # Platform: Postgres, the API with the web app, and a worker. `make up` builds the images,
-# migrates, and serves on :8000.
-# `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.
-ENV ?= local
-COMPOSE := docker compose --env-file .env --env-file .env.$(ENV)
-
+# migrates, and serves on :8000. `make db` is Postgres alone, for running the API from
+# the checkout.
 up:
 	$(COMPOSE) up --build
 
@@ -87,12 +86,3 @@ down:
 
 db:
 	$(COMPOSE) up -d --wait db
-
-migrate:
-	uv run alembic upgrade head
-
-api:
-	uv run ucbc-api
-
-worker:
-	uv run ucbc-worker

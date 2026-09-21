@@ -57,7 +57,7 @@ test-api: dev
 
 test-viewer:
 	npm ci
-	npm test --workspaces
+	npm test --workspaces --if-present
 
 lint:
 	cargo run -q -p ucbc-dev -- gen-sdk ucbc-sdk/ucbc/games --check

@@ -44,7 +44,8 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
       <button disabled={busy || !email || !password}>log in</button>
       {error && <p className="error">{error}</p>}
       <p className="dim center">
-        <Link to="/register">create an account</Link>
+        <Link to="/register">create an account</Link> ·{" "}
+        <Link to="/docs">docs</Link>
       </p>
     </form>
   );

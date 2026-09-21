@@ -75,10 +75,9 @@ clean:
 	cargo clean
 	rm -rf .venv dist node_modules ucbc-api/api/static
 
-# Platform: Postgres, MinIO, the API with the web app, and a worker. `make up` builds the
-# images, migrates, and serves on :8000. `make db` is the bundled Postgres alone, for running
-# the API from the checkout. Whether `up` starts that Postgres or reuses an existing one is
-# set in .env.$(ENV) (COMPOSE_PROFILES, POSTGRES_HOST), so nothing here defaults them.
+# Platform: Postgres, the API with the web app, and a worker. `make up` builds the images,
+# migrates, and serves on :8000. `make db` is Postgres alone, for running the API from
+# the checkout. COMPOSE_PROFILES in .env.$(ENV) decides whether `up` starts Postgres.
 up:
 	$(COMPOSE) up --build
 

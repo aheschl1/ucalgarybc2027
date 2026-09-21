@@ -1,12 +1,5 @@
 # Run through `make up` / `make db`, which pass .env and .env.<ENV> for ${...} substitution.
-#
-# Postgres comes from one of two places, chosen in that env file:
-#   COMPOSE_PROFILES=db            start the `db` service below with POSTGRES_USER/PASSWORD
-#   COMPOSE_PROFILES= POSTGRES_HOST=<host>   reuse a Postgres that already exists; the role
-#                                  and database must exist there (POSTGRES_DB, default the user)
-# host.docker.internal names the machine running compose.
-
-# The database as the api and worker reach it, inside the compose network.
+# COMPOSE_PROFILES=db starts `db`; without it, POSTGRES_HOST names an existing Postgres.
 x-database-url: &database_url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-${POSTGRES_USER}}
 
 services:
@@ -64,7 +57,6 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      # Waits for the bundled Postgres when it is enabled; ignored when it is not.
       db:
         condition: service_healthy
         required: false

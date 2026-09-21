@@ -24,5 +24,3 @@ def step(handle: TicTacToeHandle) -> None:
 ```bash
 ucbc run path/to/mine path/to/other --view
 ```
-
-Submit bots and watch ranked matches at https://ucbc.andrewheschl.ca.

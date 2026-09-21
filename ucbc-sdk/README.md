@@ -12,4 +12,3 @@ def step(handle: TicTacToeHandle) -> None:
     handle.place(*handle.empty_cells()[0])
 ```
 
-https://ucbc.andrewheschl.ca

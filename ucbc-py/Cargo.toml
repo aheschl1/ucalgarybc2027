@@ -19,7 +19,8 @@ default = ["tictactoe"]
 tictactoe = ["dep:ucbc-tictactoe"]
 
 [dependencies]
-pyo3 = { workspace = true, features = ["extension-module"] }
+# abi3: one wheel per platform serves every Python from 3.12 on.
+pyo3 = { workspace = true, features = ["extension-module", "abi3-py312"] }
 ucbc-engine = { workspace = true }
 ucbc-tictactoe = { workspace = true, optional = true }
 serde = { workspace = true }

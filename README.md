@@ -94,8 +94,17 @@ raw SQL in `op.execute`.
 | `bots/<game>/` | sample bots | |
 | `tests/` | Python integration tests | `make test` |
 
-`pip install ucbc` gives both the command and the SDK. Bots import `ucbc`; the runner
-imports `ucbc_engine`.
+## Install and release
+
+```bash
+pip install ucbc        # Linux x86_64/aarch64 (WSL2 or a container elsewhere): engine, `ucbc`, SDK
+pip install ucbc-sdk    # any platform: the SDK alone, for types and completion
+```
+
+Bots import `ucbc`; the runner imports `ucbc_engine`. To release, set the same version in
+`Cargo.toml`, `ucbc-py/pyproject.toml` (and its `ucbc-sdk==` pin) and
+`ucbc-sdk/pyproject.toml`, commit, then `make release` (PyPI, with `PYPI_API_TOKEN` from
+`.env.prod`) and `make deploy`, so the platform plays the engine people can install.
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and
 worker: [docs/platform.md](docs/platform.md).

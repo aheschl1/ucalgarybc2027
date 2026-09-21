@@ -1,4 +1,4 @@
-.PHONY: setup dev sdk viewer-types viewer web wheels test test-api lint clean up down db deploy
+.PHONY: setup dev sdk viewer-types viewer web wheels test test-api lint clean up down db deploy release-check release
 
 # `make <target> GAME=tictactoe` builds one game everywhere: the engine with that cargo
 # feature, the SDK with that game's handle, the viewer and web app with its renderer, the
@@ -40,17 +40,43 @@ viewer: node_modules
 web: node_modules
 	npm run build -w ucbc-web -- --outDir ../ucbc-api/api/static --emptyOutDir
 
-# Release wheels into dist/: ucbc (engine, runtime, CLI) and ucbc-sdk.
+# Release files into dist/: ucbc (engine, runtime, CLI) as one abi3 manylinux wheel per
+# TARGETS entry, cross-compiled with zig (`rustup target add` each once), and ucbc-sdk.
+# ucbc gets no sdist: a platform without a wheel should fail to find one, not try to build.
+TARGETS := x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 wheels: sdk viewer
 	rm -rf dist && mkdir -p dist
-	uv build --package ucbc --wheel -o dist -C build-args="$(FEATURES)"
+	for t in $(TARGETS); do \
+	  uv run maturin build --release --zig --compatibility manylinux2014 --target $$t \
+	    -m ucbc-py/Cargo.toml -o dist $(FEATURES) || exit 1; done
 ifeq ($(GAME),)
-	uv build --package ucbc-sdk --wheel -o dist
+	uv build --package ucbc-sdk -o dist
 else
 	tmp=$$(mktemp -d) && cp -r ucbc-sdk $$tmp/sdk \
 	  && find $$tmp/sdk/ucbc/games -mindepth 1 -maxdepth 1 -type d ! -name $(GAME) -exec rm -rf {} + \
-	  && uv build --wheel -o dist $$tmp/sdk && rm -rf $$tmp
+	  && uv build -o dist $$tmp/sdk && rm -rf $$tmp
 endif
+
+# Publishing: `make release` uploads dist/ to PyPI with PYPI_API_TOKEN (from the shell, else
+# .env.prod) and tags the commit. A version can be uploaded once, ever. release-check refuses
+# versions that disagree or a dirty tree, then installs the x86_64 wheel in clean containers
+# and plays a match.
+VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-py/pyproject.toml)
+release-check: wheels
+	@grep -q '^version = "$(VERSION)"' ucbc-sdk/pyproject.toml \
+	  && grep -q '^version = "$(VERSION)"' Cargo.toml \
+	  && grep -q '"ucbc-sdk==$(VERSION)"' ucbc-py/pyproject.toml \
+	  || { echo "versions disagree with ucbc-py $(VERSION)"; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "commit or stash first"; exit 1; }
+	uvx twine check dist/*
+	for py in 3.12 3.14; do \
+	  docker run --rm -v $(CURDIR)/dist:/dist:ro -v $(CURDIR)/bots:/bots:ro python:$$py-slim sh -c \
+	    "pip install -q --find-links /dist ucbc==$(VERSION) && ucbc run /bots/tictactoe/random /bots/tictactoe/first_empty" \
+	    || exit 1; done
+
+release: release-check
+	@UV_PUBLISH_TOKEN=$${PYPI_API_TOKEN:-$$(sed -n 's/^PYPI_API_TOKEN=//p' .env.prod)} uv publish dist/*
+	git tag v$(VERSION)
 
 # tests/api starts its own Postgres through testcontainers; needs Docker.
 test: dev node_modules

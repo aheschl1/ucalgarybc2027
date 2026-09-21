@@ -6,8 +6,13 @@ build-backend = "uv_build"
 name = "ucbc-sdk"
 version = "0.1.0"
 description = "UCalgary Battlecode: the `ucbc` package a bot imports, one handle per game"
+readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+classifiers = ["Programming Language :: Python :: 3", "Typing :: Typed"]
+
+[project.urls]
+Homepage = "https://ucbc.andrewheschl.ca"
 
 [tool.uv.build-backend]
 module-name = "ucbc"

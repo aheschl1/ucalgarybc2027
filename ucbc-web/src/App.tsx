@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { get, logOut, makeApi, type User } from "./api";
 import Login from "./Login";
@@ -6,6 +6,20 @@ import Profile from "./Profile";
 import Register from "./Register";
 import Tree from "./Tree";
 import Viewer from "./Viewer";
+
+// Its markdown renderer is only fetched when the page is opened.
+const Docs = lazy(() => import("./Docs"));
+// Public: in both route tables below.
+const docs = (
+  <Route
+    path="/docs"
+    element={
+      <Suspense fallback={null}>
+        <Docs />
+      </Suspense>
+    }
+  />
+);
 
 export default function App() {
   // undefined until the API says whether the session cookie is live.
@@ -26,6 +40,7 @@ export default function App() {
     return (
       <Routes>
         <Route path="/register" element={<Register onLogIn={setUser} />} />
+        {docs}
         <Route path="*" element={<Login onLogIn={setUser} />} />
       </Routes>
     );
@@ -40,6 +55,7 @@ export default function App() {
       />
       <Route path="/profile" element={<Profile user={user} api={api} />} />
       <Route path="/viewer/:matchId" element={<Viewer api={api} />} />
+      {docs}
       {/* Where signing up lands: the session arrives while the browser is still here. */}
       <Route path="/register" element={<Navigate to="/profile" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />

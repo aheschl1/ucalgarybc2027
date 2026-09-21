@@ -57,7 +57,8 @@ export default function Register({
       </button>
       {error && <p className="error">{error}</p>}
       <p className="dim center">
-        <Link to="/">already have an account?</Link>
+        <Link to="/">already have an account?</Link> ·{" "}
+        <Link to="/docs">docs</Link>
       </p>
     </form>
   );

@@ -173,6 +173,44 @@ body {
   margin-top: 24px;
 }
 
+.docs h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 16px 0 4px;
+}
+
+.docs p {
+  margin: 8px 0;
+}
+
+.docs ul,
+.docs ol {
+  padding-left: 20px;
+}
+
+.docs ul {
+  list-style: disc;
+}
+
+.docs code {
+  font-size: 12px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #f4f4f4;
+}
+
+.docs pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f4f4f4;
+}
+
+.docs pre code {
+  padding: 0;
+  background: none;
+}
+
 .viewer {
   padding: 16px 32px;
 }

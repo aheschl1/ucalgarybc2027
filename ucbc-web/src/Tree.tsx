@@ -83,6 +83,9 @@ export default function Tree({
                 </details>
               </li>
               <li>
+                <Link to="/docs">docs</Link>
+              </li>
+              <li>
                 <a
                   href="#"
                   onClick={(e) => {

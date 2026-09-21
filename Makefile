@@ -1,4 +1,4 @@
-.PHONY: setup dev sdk viewer-types viewer web wheels test test-api lint clean up down db
+.PHONY: setup dev sdk viewer-types viewer web wheels test test-api lint clean up down db deploy
 
 # `make <target> GAME=tictactoe` builds one game everywhere: the engine with that cargo
 # feature, the SDK with that game's handle, the viewer and web app with its renderer, the
@@ -86,3 +86,15 @@ down:
 
 db:
 	$(COMPOSE) up -d --wait db
+
+# Production on another host, which builds nothing: images built here are loaded there and
+# started as ENV=prod. DEPLOY_SSH is the ssh command that reaches it. That host needs
+# Docker, and ~/ucbc/.env and .env.prod (from .env.prod.example) written by hand, since
+# neither is in git. `make deploy SERVICES="db minio"` starts only those.
+DEPLOY_SSH ?= ssh ucbc-vm
+SERVICES ?=
+deploy:
+	docker compose build api worker
+	docker save ucbc-api:latest ucbc-worker:latest | gzip | $(DEPLOY_SSH) 'gunzip | docker load'
+	tar -c --exclude=__pycache__ compose.yaml bots | $(DEPLOY_SSH) 'mkdir -p ucbc && tar -x -C ucbc'
+	$(DEPLOY_SSH) 'cd ucbc && ENV=prod docker compose --env-file .env --env-file .env.prod up -d --no-build $(SERVICES)'

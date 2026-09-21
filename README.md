@@ -72,7 +72,10 @@ uv run ucbc-worker                      # plays queued matches, UCBC_WORKER_SLOT
 npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
 ```
 
-`ENV=prod` reads `.env.prod` over `.env.local`. Migrations: `uv run alembic revision -m "..."`,
+`ENV=prod` reads `.env.prod` over `.env.local`. `make deploy DEPLOY_SSH="ssh <host>"` builds
+the images here and runs them as prod on that host, which needs Docker and its own
+`~/ucbc/.env` and `.env.prod` (see `.env.prod.example`); serve it over HTTPS, the session
+cookie is `Secure`. Migrations: `uv run alembic revision -m "..."`,
 raw SQL in `op.execute`.
 
 ## Layout

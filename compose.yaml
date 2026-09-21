@@ -1,5 +1,7 @@
 # Run through `make up` / `make db`, which pass .env and .env.<ENV> for ${...} substitution.
 # COMPOSE_PROFILES=db starts `db`; without it, POSTGRES_HOST names an existing Postgres.
+# UCBC_BIND is the host address the ports are published on (default: every interface);
+# MINIO_PORT and MINIO_CONSOLE_PORT move MinIO's host ports off one already running there.
 x-database-url: &database_url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-${POSTGRES_USER}}
 
 services:
@@ -11,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-${POSTGRES_USER}}
     ports:
-      - "5432:5432"
+      - "${UCBC_BIND:-0.0.0.0}:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -27,8 +29,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${UCBC_BIND:-0.0.0.0}:${MINIO_PORT:-9000}:9000"
+      - "${UCBC_BIND:-0.0.0.0}:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - blobdata:/data
     healthcheck:
@@ -55,7 +57,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8000:8000"
+      - "${UCBC_BIND:-0.0.0.0}:8000:8000"
     depends_on:
       db:
         condition: service_healthy

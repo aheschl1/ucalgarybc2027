@@ -1576,7 +1576,7 @@ wheels = [
 
 [[package]]
 name = "ucbc"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "ucbc-py" }
 dependencies = [
     { name = "click" },

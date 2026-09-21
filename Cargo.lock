@@ -497,7 +497,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-dev"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "rand",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-engine"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "rand",
  "rand_chacha",
@@ -521,7 +521,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-py"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "nix",
  "pyo3",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-tictactoe"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "schemars",
  "serde",

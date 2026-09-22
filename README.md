@@ -6,17 +6,17 @@ UCalgary Battlecode: Python bots, Rust engine. Work tracked in [Linear](https://
 
 Rust 1.85+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
-`cp .env.local.example .env.local`
-`cp .env.example .env`
-
 ```bash
-make setup      # engine extension into .venv, replay viewer
-make dev        # after Rust changes
+make setup      # env files from the examples, generated code, viewer, engine into .venv
+make dev        # after Rust changes: regenerate the SDK and viewer types, rebuild the extension
 make test       # rust, python, api (needs Docker), viewer; `make test-api` for the API alone
 make lint
+make up         # the platform in compose
 ```
 
-`GAME=tictactoe` on any target builds that game alone.
+`make` alone lists these. Every target regenerates what it depends on, so the generated
+files (`ucbc-sdk/ucbc/games/*/_api.py`, `*.gen.ts`) only ever show up in `git status`,
+never as a failure. `GAME=tictactoe` on any target builds that game alone.
 
 ## Run a match
 
@@ -54,7 +54,6 @@ uv run ucbc run bots/tictactoe/mine bots/tictactoe/random
 ## Platform API
 
 ```bash
-cp .env.example .env && cp .env.local.example .env.local
 make up                                 # Postgres, MinIO (:9001 console), API + web on :8000 (/api/docs), worker
 uv run ucbc-api-cli create-admin
 make down

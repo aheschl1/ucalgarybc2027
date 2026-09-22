@@ -1,13 +1,12 @@
 // Generates TypeScript types from the engine's JSON Schemas: the replay format, and each
-// game's snapshot and action. `--check` fails instead of writing when a file is stale.
+// game's snapshot and action.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { compile } from "json-schema-to-typescript";
 
 const root = resolve(import.meta.dirname, "../..");
-const check = process.argv.includes("--check");
 
 // The games with a renderer are the viewer's `@ucbc/viewer-<game>` dependencies (as in
 // ../vite/games.ts); each gets its types next to its renderer.
@@ -70,16 +69,8 @@ for (const game of games) {
   });
 }
 
-let stale = false;
 for (const [path, schema] of Object.entries(outputs)) {
   const ts = await compile(anyValues(schema), schema.title, options);
-  const file = resolve(root, path);
-  if (!check) {
-    writeFileSync(file, ts);
-    console.log(`wrote ${path}`);
-  } else if (!existsSync(file) || readFileSync(file, "utf8") !== ts) {
-    console.error(`${path} is out of date; run \`make viewer-types\``);
-    stale = true;
-  }
+  writeFileSync(resolve(root, path), ts);
+  console.log(`wrote ${path}`);
 }
-process.exit(stale ? 1 : 0);

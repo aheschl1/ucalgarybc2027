@@ -202,8 +202,9 @@ ucbc-foo/viewer/                      package @ucbc/viewer-foo exporting `render
                                       find it
 ```
 
-`ucbc-dev api foo` prints the schemas the generator reads. `make lint` fails when a
-generated module is out of date.
+`ucbc-dev api foo` prints the schemas the generator reads. Both generated files are
+committed; `make gen` (run by `dev`, `lint`, `test`, `viewer`, `web`) rewrites them, so a
+stale one shows up in `git status` after any of those.
 
 ```bash
 make dev && uv run ucbc run bots/foo/a bots/foo/b

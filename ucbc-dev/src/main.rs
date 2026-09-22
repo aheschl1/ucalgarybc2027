@@ -56,9 +56,6 @@ enum Command {
     GenSdk {
         /// The `ucbc/games` directory.
         games: PathBuf,
-        /// Fail instead of writing when a module is out of date.
-        #[arg(long)]
-        check: bool,
     },
 }
 
@@ -135,21 +132,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             );
             Ok(())
         }
-        Command::GenSdk { games, check } => {
+        Command::GenSdk { games } => {
             let registry = registry();
             for name in registry.names() {
                 let module = sdk::generate(&registry.api(name)?)?;
                 let path = games.join(name).join("_api.py");
-                if check {
-                    if std::fs::read_to_string(&path).ok().as_deref() != Some(module.as_str()) {
-                        return Err(
-                            format!("{} is out of date; run `make sdk`", path.display()).into()
-                        );
-                    }
-                } else {
-                    std::fs::write(&path, module)?;
-                    println!("wrote {}", path.display());
-                }
+                std::fs::write(&path, module)?;
+                println!("wrote {}", path.display());
             }
             Ok(())
         }

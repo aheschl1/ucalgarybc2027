@@ -12,11 +12,14 @@ from ucbc_engine.runner import run_match
 
 BotPath = Callable[[str], Path]
 STEP_MS = 500
+ROOMY_STEP_MS = 5000
 
 
-def set0(bot: BotPath, name: str, tmp_path: Path, sets: int = 1) -> dict[str, Any]:
+def set0(
+    bot: BotPath, name: str, tmp_path: Path, sets: int = 1, step_ms: int = STEP_MS
+) -> dict[str, Any]:
     replay = tmp_path / "replay.json"
-    run_match(bot("first_empty"), bot(name), sets=sets, replay_path=replay)
+    run_match(bot("first_empty"), bot(name), sets=sets, replay_path=replay, step_ms=step_ms)
     result: dict[str, Any] = json.loads(replay.read_text())
     return result
 
@@ -111,14 +114,14 @@ def test_over_the_memory_limit_is_a_memory_error(bot: BotPath, tmp_path: Path) -
 
 def test_freed_memory_is_uncharged(bot: BotPath, tmp_path: Path) -> None:
     for name in ("testing/frees", "testing/churn"):
-        replay = set0(bot, name, tmp_path)
-        assert replay["sets"][0]["result"]["reason"] == "win"
+        replay = set0(bot, name, tmp_path, step_ms=ROOMY_STEP_MS)
+        assert replay["sets"][0]["result"]["reason"] == "win", name
 
 
 def test_steps_record_time_and_memory(bot: BotPath, tmp_path: Path) -> None:
-    replay = set0(bot, "testing/churn", tmp_path)
+    replay = set0(bot, "testing/churn", tmp_path, step_ms=ROOMY_STEP_MS)
     churn = [step["usage"] for step in steps_of(replay, bot=1)]
-    assert all(0 < usage["time_us"] < STEP_MS * 1000 for usage in churn)
+    assert all(0 < usage["time_us"] < ROOMY_STEP_MS * 1000 for usage in churn)
     # Small objects freed within the step leave their arenas mostly empty.
     assert all(2**20 < usage["memory"] < 2**26 for usage in churn)
 

@@ -22,4 +22,4 @@ jobs:
         with:
           python-version-file: .python-version
       - uses: astral-sh/setup-uv@v10.2.0
-      - run: make test
+      - run: make test > /tmp/ucbc-test.log 2>&1 || { tail -n 100 /tmp/ucbc-test.log; exit 1; }

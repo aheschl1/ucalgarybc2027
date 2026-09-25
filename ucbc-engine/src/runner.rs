@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use crate::bot::TeamSpec;
 use crate::bot::registry::{BotHandle, BotLookupError, BotRegistry};
 use crate::error::{BotFailure, EngineError};
-use crate::game::{GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
+use crate::game::{GameFactory, GameRegistry, GameStatus, SetSetup};
 use crate::ids::{BotRef, TeamId};
 use crate::replay::{MatchConfig, Replay, SetReplay, SetResult, Step, Tick, Usage, write_replay};
 use crate::rng::set_seed;
@@ -179,7 +179,7 @@ fn run_set(
         }
         let tick = ticks.len() as u32;
         if tick >= config.max_ticks {
-            break Outcome::draw(format!("tick limit of {} reached", config.max_ticks));
+            break game.tick_limit(config.max_ticks);
         }
 
         let schedule = game.schedule();

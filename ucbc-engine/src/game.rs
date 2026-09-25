@@ -89,7 +89,8 @@ pub enum GameStatus {
 /// [`despawned`](Self::despawned). After the last step it calls
 /// [`end_tick`](Self::end_tick), unless the set completed during the tick. The game
 /// decides which bots exist, which team owns each, and the step order. A set ends
-/// when the game reports one team left, a draw, or the tick limit is reached.
+/// when the game reports a completed status, or at the tick limit with the outcome
+/// from [`tick_limit`](Self::tick_limit).
 pub trait Game: Send + 'static {
     /// Registry key, e.g. `"tictactoe"`.
     const NAME: &'static str;
@@ -137,6 +138,11 @@ pub trait Game: Send + 'static {
 
     fn status(&self) -> GameStatus;
 
+    /// The outcome of a set still in progress after its last tick.
+    fn tick_limit(&self, max_ticks: u32) -> Outcome {
+        Outcome::draw(format!("tick limit of {max_ticks} reached"))
+    }
+
     /// Full state, recorded once per tick.
     fn snapshot(&self) -> Self::Snapshot;
 }
@@ -152,6 +158,7 @@ pub trait DynGame: Send {
     fn end_tick(&mut self);
     fn despawned(&mut self) -> Vec<BotId>;
     fn status(&self) -> GameStatus;
+    fn tick_limit(&self, max_ticks: u32) -> Outcome;
     fn snapshot(&self) -> Value;
 }
 
@@ -188,6 +195,10 @@ impl<G: Game> DynGame for G {
 
     fn status(&self) -> GameStatus {
         Game::status(self)
+    }
+
+    fn tick_limit(&self, max_ticks: u32) -> Outcome {
+        Game::tick_limit(self, max_ticks)
     }
 
     fn snapshot(&self) -> Value {

@@ -5,6 +5,7 @@ from api.errors import Conflict
 from api.models.teams import Team
 from api.models.users import User
 from api.passwords import hash_password, verify_password
+from api.services.teams import new_code
 
 
 def normalise(email: str) -> str:
@@ -34,7 +35,7 @@ async def _solo_team(db: DBConnection, name: str) -> Team:
     while True:
         try:
             async with db.conn.transaction():
-                return await db.team_repo.insert(name if n == 1 else f"{name} {n}")
+                return await db.team_repo.insert(name if n == 1 else f"{name} {n}", new_code())
         except UniqueViolation:
             n += 1
 

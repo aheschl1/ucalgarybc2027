@@ -23,6 +23,9 @@ class UserRepo:
         assert row is not None
         return StoredUser.model_validate(row)
 
+    async def set_team(self, id: int, team_id: int) -> None:
+        await self._conn.execute("update users set team_id = %s where id = %s", (team_id, id))
+
     async def get_by_email(self, email: str) -> StoredUser | None:
         cur = await self._conn.execute(f"select {COLUMNS} from users where email = %s", (email,))
         row = await cur.fetchone()

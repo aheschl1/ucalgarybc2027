@@ -56,6 +56,10 @@ exactly one (`users.team_id`); signup creates one named after the display name. 
 are unique ignoring case, so a clashing display name gets the first free number
 (`Alice 2`).
 
+`/api/teams` acts on the caller's team only. Every member sees its join code and may replace
+it. Anyone with the code joins; creating a team or joining one moves the caller out of the
+last, which keeps its submissions and its name. Members are equal and there is no size cap.
+
 ## Submissions
 
 A submission is a zip with `main.py` at the top, at most 1 MiB, checked on upload for member

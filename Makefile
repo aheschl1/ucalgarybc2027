@@ -23,7 +23,7 @@ setup: .env .env.local gen viewer  ## first setup: env files, generated code, vi
 dev: gen  ## after Rust changes: regenerate the SDK and viewer types, rebuild the extension
 	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
 
-test: dev  ## rust, python, api (needs Docker), viewer
+test: dev .env  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
 	uv run pytest
 	npm test --workspaces --if-present

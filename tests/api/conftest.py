@@ -23,6 +23,7 @@ from api.services.users import create_user
 ROOT = Path(__file__).resolve().parents[2]
 ADMIN = ("root@example.com", "root-pw")
 MEMBER = ("alice@example.com", "alice-pw")
+TEAMMATE = ("carol@example.com", "carol-pw")
 
 
 def alembic(url: str, *args: str) -> None:
@@ -111,4 +112,16 @@ async def admin_client(app: FastAPI, admin: User) -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 async def member_client(app: FastAPI, member: User) -> AsyncIterator[AsyncClient]:
     async with log_in(app, MEMBER) as c:
+        yield c
+
+
+@pytest.fixture
+async def teammate_client(
+    app: FastAPI, db: DBConnection, member_client: AsyncClient
+) -> AsyncIterator[AsyncClient]:
+    """Carol, who joined the member's team with its code."""
+    await create_user(db, TEAMMATE[0], "Carol", TEAMMATE[1], is_admin=False)
+    code = (await member_client.get("/teams/me")).json()["join_code"]
+    async with log_in(app, TEAMMATE) as c:
+        assert (await c.post("/teams/join", json={"code": code})).status_code == 200
         yield c

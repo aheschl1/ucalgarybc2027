@@ -65,7 +65,8 @@ last, which keeps its submissions and its name. Members are equal and there is n
 A submission is a zip with `main.py` at the top, at most 1 MiB, checked on upload for member
 paths that escape the directory. The row (`submissions`: uploader, the uploader's team, name,
 game, size, sha256) is in Postgres; the zip is in the bucket at `submissions/<id>.zip`
-(`api/blobs.py`, one boto3 client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not.
+(`api/blobs.py`, one boto3 client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not; `?mine=true` narrows the
+list to the caller's team's.
 
 ## Queue
 

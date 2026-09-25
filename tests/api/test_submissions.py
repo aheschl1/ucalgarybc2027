@@ -11,7 +11,6 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from api.blobs import BlobMissing, BlobStore
-from api.db import DBConnection
 from api.models.users import User
 from api.services.submissions import MAX_ZIP, key_for
 
@@ -45,7 +44,6 @@ async def upload(client: AsyncClient, data: bytes, form: dict[str, str] | None =
 
 async def test_upload_list_get(
     app: FastAPI,
-    db: DBConnection,
     member: User,
     member_client: AsyncClient,
     admin_client: AsyncClient,
@@ -58,12 +56,10 @@ async def test_upload_list_get(
     assert body["name"] == "mybot"
     assert body["game"] == "tictactoe"
     assert body["display_name"] == "Alice"
+    assert body["team_id"] == member.team_id
+    assert body["team_name"] == "Alice"
     assert body["size"] == len(data)
     assert body["sha256"] == hashlib.sha256(data).hexdigest()
-
-    # It belongs to the uploader's team.
-    cur = await db.conn.execute("select team_id from submissions where id = %s", (body["id"],))
-    assert await cur.fetchone() == {"team_id": member.team_id}
 
     r = await upload(admin_client, data, form={"name": "theirs"})
     assert r.status_code == 201
@@ -81,6 +77,33 @@ async def test_upload_list_get(
     # The zip is in the bucket under the derived key.
     blobs: BlobStore = app.state.blobs
     assert await blobs.get(key_for(body["id"])) == data
+
+
+async def test_mine_is_the_team(
+    member_client: AsyncClient, teammate_client: AsyncClient, admin_client: AsyncClient
+) -> None:
+    bot = zip_of({"main.py": b""})
+    for client, name in [(member_client, "a"), (teammate_client, "b"), (admin_client, "c")]:
+        assert (await upload(client, bot, form={"name": name})).status_code == 201
+
+    async def mine(client: AsyncClient) -> list[str]:
+        r = await client.get("/submissions", params={"mine": "true"})
+        return [s["name"] for s in r.json()]
+
+    assert await mine(member_client) == ["b", "a"]
+    assert await mine(teammate_client) == ["b", "a"]
+    assert await mine(admin_client) == ["c"]
+
+    # The uploader is Carol, the owner her team.
+    b = (await teammate_client.get("/submissions")).json()[1]
+    assert (b["name"], b["display_name"], b["team_name"]) == ("b", "Carol", "Alice")
+
+    # Moving leaves the bots with the old team.
+    assert (await member_client.post("/teams", json={"name": "Crabs"})).status_code == 201
+    assert await mine(member_client) == []
+    assert await mine(teammate_client) == ["b", "a"]
+    a = (await member_client.get("/submissions")).json()[2]
+    assert (a["name"], a["team_name"]) == ("a", "Alice")
 
 
 async def test_rejected_uploads(

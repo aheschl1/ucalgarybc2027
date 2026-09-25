@@ -6,8 +6,9 @@ from psycopg.rows import DictRow
 from api.models.submissions import Submission
 
 COLUMNS = (
-    "s.id, s.user_id, s.name, s.game, s.size, s.sha256, s.created_at, u.display_name "
-    "from submissions s join users u on u.id = s.user_id"
+    "s.id, s.user_id, s.team_id, s.name, s.game, s.size, s.sha256, s.created_at, "
+    "u.display_name, t.name as team_name "
+    "from submissions s join users u on u.id = s.user_id join teams t on t.id = s.team_id"
 )
 
 
@@ -29,11 +30,11 @@ class SubmissionRepo:
         row = await cur.fetchone()
         return None if row is None else Submission.model_validate(row)
 
-    async def list_recent(self, user_id: int | None) -> list[Submission]:
-        """Newest first; every user's when `user_id` is None."""
+    async def list_recent(self, team_id: int | None) -> list[Submission]:
+        """Newest first; every team's when `team_id` is None."""
         cur = await self._conn.execute(
-            f"select {COLUMNS} where %s::bigint is null or s.user_id = %s "
+            f"select {COLUMNS} where %s::bigint is null or s.team_id = %s "
             "order by s.created_at desc",
-            (user_id, user_id),
+            (team_id, team_id),
         )
         return [Submission.model_validate(row) for row in await cur.fetchall()]

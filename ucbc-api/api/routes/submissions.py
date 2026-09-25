@@ -34,7 +34,7 @@ async def upload(
 
 @router.get("")
 async def list_submissions(db: DB, user: CurrentUser, mine: bool = False) -> list[Submission]:
-    """Every user's submissions, newest first; `mine` narrows to the caller's."""
+    """Every team's submissions, newest first; `mine` narrows to the caller's team's."""
     return await submissions.list_submissions(db, user, mine)
 
 

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::bot::TeamSpec;
-use crate::bot::registry::{BotHandle, BotRegistry};
+use crate::bot::registry::{BotHandle, BotLookupError, BotRegistry};
 use crate::error::{BotFailure, EngineError};
 use crate::game::{GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
 use crate::ids::{BotRef, TeamId};
@@ -209,7 +209,8 @@ fn run_set(
                     let time = started.elapsed().saturating_sub(ctx.engine_time());
                     (result, team.clone(), time)
                 }
-                Err(failure) => (
+                Err(BotLookupError::Game(error)) => return Err(error),
+                Err(BotLookupError::Bot(failure)) => (
                     StepResult::failed(failure),
                     bots.team_info(bot_ref.team),
                     Duration::ZERO,
@@ -267,15 +268,7 @@ fn run_set(
 fn check_schedule(schedule: &[BotRef], bots: &BotRegistry) -> Result<(), EngineError> {
     let mut seen = HashSet::with_capacity(schedule.len());
     for bot in schedule {
-        if !bots.has_team(bot.team) {
-            return Err(EngineError::Game(format!(
-                "scheduled bot {} for unknown team {}",
-                bot.id, bot.team
-            )));
-        }
-        if bots.is_dead(bot.id) {
-            return Err(EngineError::Game(format!("scheduled dead bot {}", bot.id)));
-        }
+        bots.validate_ref(*bot)?;
         if !seen.insert(bot.id) {
             return Err(EngineError::Game(format!("scheduled bot {} twice", bot.id)));
         }

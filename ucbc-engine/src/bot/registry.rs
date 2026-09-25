@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::bot::{Bot, BotFactory, BotResourceLimit, SpawnCtx, TeamSpec};
-use crate::error::BotFailure;
+use crate::error::{BotFailure, EngineError};
 use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
 use crate::rng::bot_seed;
 
@@ -16,6 +16,11 @@ pub struct BotHandle {
     pub bot: Box<dyn Bot>,
     pub team: Arc<TeamInfo>,
     pub seed: u64,
+}
+
+pub enum BotLookupError {
+    Game(EngineError),
+    Bot(BotFailure),
 }
 
 /// The teams of a match and every live bot. Ids released this set stay dead so a
@@ -71,9 +76,32 @@ impl BotRegistry {
         self.dead.contains(&id)
     }
 
-    /// The bot for `bot`, created from its team's spec on first use. The team must
-    /// exist and the bot must not be dead.
-    pub fn bot_mut(&mut self, bot: BotRef) -> Result<&mut BotHandle, BotFailure> {
+    /// Validate a ref before scheduling or acquiring its runtime. A bot ID is owned
+    /// by the team that first spawned it for the duration of this set.
+    pub fn validate_ref(&self, bot: BotRef) -> Result<(), EngineError> {
+        if !self.has_team(bot.team) {
+            return Err(EngineError::Game(format!(
+                "scheduled bot {} for unknown team {}",
+                bot.id, bot.team
+            )));
+        }
+        if self.is_dead(bot.id) {
+            return Err(EngineError::Game(format!("scheduled dead bot {}", bot.id)));
+        }
+        if let Some(handle) = self.bots.get(&bot.id)
+            && handle.team.id != bot.team
+        {
+            return Err(EngineError::Game(format!(
+                "bot {} belongs to team {}, not team {}",
+                bot.id, handle.team.id, bot.team
+            )));
+        }
+        Ok(())
+    }
+
+    /// The bot for `bot`, created from its team's spec on first use.
+    pub fn bot_mut(&mut self, bot: BotRef) -> Result<&mut BotHandle, BotLookupError> {
+        self.validate_ref(bot).map_err(BotLookupError::Game)?;
         if !self.bots.contains_key(&bot.id) {
             let entry = &mut self.teams[bot.team.0 as usize];
             let ctx = SpawnCtx::new(
@@ -82,7 +110,7 @@ impl BotRegistry {
                 bot_seed(self.set_seed, bot),
                 self.limits,
             );
-            let created = (entry.factory)(&ctx)?;
+            let created = (entry.factory)(&ctx).map_err(BotLookupError::Bot)?;
             let handle = BotHandle {
                 bot: created,
                 team: ctx.team,

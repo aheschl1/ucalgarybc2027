@@ -282,6 +282,30 @@ fn tick_limit_ends_the_set_as_a_draw() {
 }
 
 #[test]
+fn a_bot_id_cannot_be_reused_under_another_team() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    let reg = registry();
+    let steps = Arc::new(AtomicU32::new(0));
+    let make_team = |name: &str| {
+        let steps = steps.clone();
+        scripted(name, move |_ctx| {
+            steps.fetch_add(1, Ordering::SeqCst);
+            StepResult::ok()
+        })
+    };
+    let cfg = config(1, 1)
+        .max_ticks(2)
+        .game_config(json!({"misattribute_after_first_tick": true}));
+    let match_spec = MatchSpec::new("test", cfg, vec![make_team("a"), make_team("b")]);
+    let error = MatchRunner::new(&reg, match_spec).unwrap().run().err().unwrap();
+    assert!(matches!(error, EngineError::Game(message) if message.contains("bot 0 belongs to team 0, not team 1")));
+    // Both bots acted in the first tick; neither acted after the bad ref was scheduled.
+    assert_eq!(steps.load(Ordering::SeqCst), 2);
+}
+
+#[test]
 fn seeded_bots_replay_identically() {
     fn random_team(name: &str) -> TeamSpec {
         scripted(name, |ctx| {

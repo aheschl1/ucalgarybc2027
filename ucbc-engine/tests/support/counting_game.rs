@@ -55,6 +55,7 @@ pub struct CountingGame {
     /// Live bots in step order.
     order: Vec<BotRef>,
     acted: bool,
+    misattribute_after_first_tick: bool,
     dead: Vec<BotId>,
     status: GameStatus,
 }
@@ -84,6 +85,7 @@ impl Game for CountingGame {
             counts: vec![0; teams as usize],
             order,
             acted: false,
+            misattribute_after_first_tick: cfg["misattribute_after_first_tick"] == true,
             dead: Vec::new(),
             status: GameStatus::InProgress,
         })
@@ -147,7 +149,12 @@ impl Game for CountingGame {
         }
     }
 
-    fn end_tick(&mut self) {}
+    fn end_tick(&mut self) {
+        if self.misattribute_after_first_tick {
+            self.order[0].team = TeamId((self.order[0].team.0 + 1) % self.counts.len() as u32);
+            self.misattribute_after_first_tick = false;
+        }
+    }
 
     fn despawned(&mut self) -> Vec<BotId> {
         std::mem::take(&mut self.dead)

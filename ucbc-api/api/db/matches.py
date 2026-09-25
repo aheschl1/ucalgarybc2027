@@ -23,15 +23,15 @@ COLUMNS = (
 )
 QUALIFIED = ", ".join(f"matches.{c}" for c in COLUMNS.split(", "))
 SET_RESULT_COLUMNS = "index, first_team, winner_team, reason, detail, ticks"
-# A match with a submission the user owns.
+# A match with a submission the team owns.
 OWNED = """
     exists (
         select 1 from jsonb_array_elements(matches.bots) b
         join submissions s on s.id = (b->>'id')::uuid
-        where b->>'kind' = 'submission' and s.user_id = %s
+        where b->>'kind' = 'submission' and s.team_id = %s
     )
 """
-# What a user may see on top of that: platform matches. A null user sees everything.
+# What a team may see on top of that: platform matches. A null team sees everything.
 VISIBLE = f"%s::bigint is null or matches.origin = 'platform' or {OWNED}"
 
 
@@ -70,21 +70,21 @@ class MatchRepo:
         id: UUID = row["id"]
         return id
 
-    async def get(self, match_id: UUID, user_id: int | None = None) -> MatchRow | None:
-        """The match, when `user_id` is None or may see it."""
+    async def get(self, match_id: UUID, team_id: int | None = None) -> MatchRow | None:
+        """The match, when `team_id` is None or may see it."""
         cur = await self._conn.execute(
             f"select {COLUMNS} from matches where id = %s and ({VISIBLE})",
-            (match_id, user_id, user_id),
+            (match_id, team_id, team_id),
         )
         row = await cur.fetchone()
         return None if row is None else MatchRow.model_validate(row)
 
     async def list_recent(
-        self, user_id: int | None, limit: int, owned_only: bool = False
+        self, team_id: int | None, limit: int, owned_only: bool = False
     ) -> list[MatchRow]:
-        """Newest first; what `user_id` may see, or every match when None. `owned_only`
-        narrows to matches with one of that user's submissions."""
-        where, args = (OWNED, (user_id,)) if owned_only else (VISIBLE, (user_id, user_id))
+        """Newest first; what `team_id` may see, or every match when None. `owned_only`
+        narrows to matches with one of that team's submissions."""
+        where, args = (OWNED, (team_id,)) if owned_only else (VISIBLE, (team_id, team_id))
         cur = await self._conn.execute(
             f"select {COLUMNS} from matches where {where} order by created_at desc limit %s",
             (*args, limit),

@@ -13,6 +13,8 @@ from httpx import AsyncClient
 from api.db import DBConnection
 from api.models.matches import MatchReplay, SetReplay
 from api.services import matches
+from api.services.users import create_user
+from tests.api.conftest import log_in
 from tests.api.test_submissions import upload, zip_dir
 
 LEASE = timedelta(seconds=30)
@@ -281,3 +283,67 @@ async def test_members_queue_and_see_their_own(
         admin_match,
         match_id,
     ]
+
+
+async def test_teams_share_matches(
+    app: FastAPI,
+    db: DBConnection,
+    admin_client: AsyncClient,
+    member_client: AsyncClient,
+    teammate_client: AsyncClient,
+    bot: Callable[[str], Path],
+) -> None:
+    code = zip_dir(bot("random"))
+
+    async def uploaded(client: AsyncClient, name: str) -> dict[str, str]:
+        r = await upload(client, code, form={"name": name})
+        return submission(r.json()["id"])
+
+    async def queue(client: AsyncClient, bots: list[dict[str, str]]) -> Any:
+        body = {"game": "tictactoe", "bots": bots, "config": {"seed": 1}}
+        return await client.post("/matches/queue", json=body)
+
+    async def ids(client: AsyncClient, mine: bool = False) -> list[str]:
+        r = await client.get("/matches", params={"mine": "true"} if mine else {})
+        return [m["id"] for m in r.json()]
+
+    alices = await uploaded(member_client, "alices")
+    admins = await uploaded(admin_client, "admins")
+
+    # Carol queues with her teammate's bot alone; the whole team sees the match.
+    r = await queue(teammate_client, [alices, admins])
+    assert r.status_code == 201, r.text
+    match_id = r.json()["id"]
+    for client in [member_client, teammate_client]:
+        assert await ids(client) == [match_id]
+        assert await ids(client, mine=True) == [match_id]
+        assert (await client.get(f"/matches/{match_id}")).status_code == 200
+        r = await client.get(f"/matches/{match_id}/sets/0")
+        assert r.status_code == 404
+        assert r.json()["detail"].startswith("no set")
+
+    # Another team sees none of it and cannot queue with the team's bots alone.
+    await create_user(db, "dave@example.com", "Dave", "dave-pw", is_admin=False)
+    async with log_in(app, ("dave@example.com", "dave-pw")) as dave:
+        assert await ids(dave) == []
+        assert (await dave.get(f"/matches/{match_id}")).status_code == 404
+        r = await dave.get(f"/matches/{match_id}/sets/0")
+        assert r.json()["detail"].startswith("no match")
+        r = await queue(dave, [alices, admins])
+        assert r.status_code == 403
+        assert "your team's submission" in r.json()["detail"]
+        # With a bot of his own he may play against them.
+        daves = await uploaded(dave, "daves")
+        r = await queue(dave, [daves, alices])
+        assert r.status_code == 201
+        daves_match = r.json()["id"]
+        assert await ids(dave) == [daves_match]
+    # Alice's team is in Dave's match too; an admin sees both.
+    assert await ids(member_client) == [daves_match, match_id]
+    assert await ids(admin_client) == [daves_match, match_id]
+
+    # Moving leaves the matches with the old team.
+    assert (await member_client.post("/teams", json={"name": "Crabs"})).status_code == 201
+    assert await ids(member_client, mine=True) == []
+    assert (await member_client.get(f"/matches/{match_id}")).status_code == 404
+    assert match_id in await ids(teammate_client, mine=True)

@@ -11,6 +11,7 @@ submitted bot.
 - [debugging with print](#debugging-with-print)
 - [limits](#limits)
 - [submit](#submit)
+- [teams](#teams)
 - [watch the match](#watch-the-match)
 
 ## requirements
@@ -144,12 +145,22 @@ An upload may be at most 1 MiB zipped and 8 MiB unpacked.
    Without `zip` installed, `python3 -m zipfile -c ../mybot.zip main.py` does the same.
 3. On the [home page](/), under **submissions**, choose the zip, optionally give it a
    name, leave the game as `tictactoe`, and press **upload zip**.
-4. Under **matches**, pick your submission, pick an opponent (any submission, including
-   your own), set a seed if you like, and press **queue match**.
+4. Under **matches**, pick one of your team's submissions, pick an opponent (any
+   submission, including your own), set a seed if you like, and press **queue match**.
 
-Everyone can see a submission's name and owner, and can queue matches against it.
-Nobody but you can see its code. To update a bot, upload a new zip: submissions are
-never changed once uploaded.
+Everyone can see a submission's name, team and uploader, and can queue matches
+against it. Nobody else can see its code. To update a bot, upload a new zip:
+submissions are never changed once uploaded.
+
+## teams
+
+Every account starts on a team of its own, named after you. To play as a group, one of
+you starts a team on the [profile](/profile) page and the others paste its join code
+into **join** on theirs. Everyone on a team shares its bots and matches: any member can
+queue a match with any of the team's bots, and any member can replace the join code.
+
+Joining or starting a team moves you out of your last one, and its bots and matches
+stay with it. Team names are unique and cannot be changed.
 
 ## watch the match
 

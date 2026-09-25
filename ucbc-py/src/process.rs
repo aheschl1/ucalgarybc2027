@@ -22,6 +22,9 @@ use ucbc_engine::{ActionError, Bot, BotFailure, SpawnCtx, StepCtx, StepResult};
 /// the bot's: its load budget starts when it reports `Ready`.
 const STARTUP: Duration = Duration::from_secs(10);
 
+// Only interpreter setup needed by source installs; never inherit worker credentials.
+const BOT_ENV_ALLOWLIST: &[&str] = &["PYTHONPATH"];
+
 #[derive(Deserialize)]
 struct Failure {
     kind: String,
@@ -118,7 +121,14 @@ pub struct PyBot {
 impl PyBot {
     /// Starts the process and, once it is ready, loads `main.py` within the step budget.
     fn spawn(ctx: &SpawnCtx, team: &PyTeam) -> Result<Self, BotFailure> {
-        let mut child = Command::new(&team.python)
+        let mut command = Command::new(&team.python);
+        command.env_clear();
+        for name in BOT_ENV_ALLOWLIST {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
+        }
+        let mut child = command
             .args(["-m", "ucbc_engine._bot"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

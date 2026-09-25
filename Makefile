@@ -23,12 +23,12 @@ setup: .env .env.local gen viewer  ## first setup: env files, generated code, vi
 dev: gen  ## after Rust changes: regenerate the SDK and viewer types, rebuild the extension
 	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
 
-test: dev  ## rust, python, api (needs Docker), viewer
+test: dev .env .env.local  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
 	uv run pytest
 	npm test --workspaces --if-present
 
-test-api: dev  ## API and worker tests alone
+test-api: dev .env .env.local  ## API and worker tests alone
 	uv run pytest tests/api
 
 lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale checkout shows in git status

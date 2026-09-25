@@ -21,7 +21,7 @@ graph LR
 
 ```text
 match  = sets            (first team rotates each set)
-set    = ticks           (game.status() Complete, or max_ticks -> draw)
+set    = ticks           (game.status() Complete, or max_ticks -> game.tick_limit())
 tick   = one run of game.schedule()
 step   = one bot's turn within a tick
 team   = one code submission; owns many bots
@@ -34,7 +34,7 @@ bot    = one unit the game asks to step; own runtime, own namespace
 flowchart TD
     A[for set in 0..sets] --> B[game = Game::create]
     B --> C{status Complete<br/>or tick == max_ticks?}
-    C -- yes --> Z[SetResult]
+    C -- yes --> Z[SetResult<br/>at max_ticks: game.tick_limit]
     C -- no --> D[schedule = game.schedule]
     D --> E[for bot in schedule]
     E --> G[registry.bot_mut: spawn on first use]
@@ -70,6 +70,7 @@ pub trait Game: Send + 'static {
     fn end_tick(&mut self);
     fn despawned(&mut self) -> Vec<BotId> { Vec::new() }
     fn status(&self) -> GameStatus;
+    fn tick_limit(&self, max_ticks: u32) -> Outcome { Outcome::draw(..) }
     fn snapshot(&self) -> Self::Snapshot;
 }
 ```

@@ -282,6 +282,25 @@ fn tick_limit_ends_the_set_as_a_draw() {
 }
 
 #[test]
+fn game_decides_the_outcome_at_the_tick_limit() {
+    let reg = registry();
+    let cfg = config(1, 1)
+        .max_ticks(2)
+        .game_config(json!({"target": 100, "leader_wins_at_limit": true}));
+    let fast = scripted("fast", |ctx| {
+        ctx.act(&json!({"type": "increment", "by": 3})).unwrap();
+        StepResult::ok()
+    });
+    let s = MatchSpec::new("test", cfg, vec![plus_one("slow"), fast]);
+    let report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
+    let set = &report.replay.sets[0];
+    assert_eq!(set.result.reason, Reason::Win);
+    assert_eq!(set.result.winner_team, Some(TeamId(1)));
+    assert_eq!(set.result.ticks, 2);
+    assert_eq!(report.replay.result.set_wins, vec![0, 1]);
+}
+
+#[test]
 fn a_bot_id_cannot_be_reused_under_another_team() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -299,8 +318,14 @@ fn a_bot_id_cannot_be_reused_under_another_team() {
         .max_ticks(2)
         .game_config(json!({"misattribute_after_first_tick": true}));
     let match_spec = MatchSpec::new("test", cfg, vec![make_team("a"), make_team("b")]);
-    let error = MatchRunner::new(&reg, match_spec).unwrap().run().err().unwrap();
-    assert!(matches!(error, EngineError::Game(message) if message.contains("bot 0 belongs to team 0, not team 1")));
+    let error = MatchRunner::new(&reg, match_spec)
+        .unwrap()
+        .run()
+        .err()
+        .unwrap();
+    assert!(
+        matches!(error, EngineError::Game(message) if message.contains("bot 0 belongs to team 0, not team 1"))
+    );
     // Both bots acted in the first tick; neither acted after the bad ref was scheduled.
     assert_eq!(steps.load(Ordering::SeqCst), 2);
 }

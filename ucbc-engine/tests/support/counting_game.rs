@@ -3,7 +3,8 @@
 //! standing wins by forfeit.
 //!
 //! `game_config`: `{"bots_per_team": n, "target": t}` (defaults 1 and 5). Bot ids are
-//! `team + teams * k` for the k-th bot of a team.
+//! `team + teams * k` for the k-th bot of a team. With `"leader_wins_at_limit": true`,
+//! a set at the tick limit goes to the highest count instead of a draw.
 
 use std::collections::BTreeSet;
 
@@ -56,6 +57,7 @@ pub struct CountingGame {
     order: Vec<BotRef>,
     acted: bool,
     misattribute_after_first_tick: bool,
+    leader_wins_at_limit: bool,
     dead: Vec<BotId>,
     status: GameStatus,
 }
@@ -86,6 +88,7 @@ impl Game for CountingGame {
             order,
             acted: false,
             misattribute_after_first_tick: cfg["misattribute_after_first_tick"] == true,
+            leader_wins_at_limit: cfg["leader_wins_at_limit"] == true,
             dead: Vec::new(),
             status: GameStatus::InProgress,
         })
@@ -162,6 +165,17 @@ impl Game for CountingGame {
 
     fn status(&self) -> GameStatus {
         self.status.clone()
+    }
+
+    fn tick_limit(&self, max_ticks: u32) -> Outcome {
+        let best = self.counts.iter().max().copied().unwrap_or(0);
+        let leaders: Vec<usize> = (0..self.counts.len())
+            .filter(|&t| self.counts[t] == best)
+            .collect();
+        match leaders[..] {
+            [leader] if self.leader_wins_at_limit => Outcome::win(TeamId(leader as u32)),
+            _ => Outcome::draw(format!("tick limit of {max_ticks} reached")),
+        }
     }
 
     fn snapshot(&self) -> Snapshot {

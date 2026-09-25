@@ -124,13 +124,14 @@ function SubmissionsBranch({
       .then(setAll, (err) => setError(describe(err)));
   }, [version]);
 
-  const mine = all.filter((s) => s.user_id === user.id);
-  const others = all.filter((s) => s.user_id !== user.id);
+  const mine = all.filter((s) => s.team_id === user.team_id);
+  const others = all.filter((s) => s.team_id !== user.team_id);
   const row = (s: Submission) => (
     <li key={s.id}>
       {s.name}{" "}
       <span className="dim">
-        {s.game} · {s.display_name} · {s.created_at.slice(0, 10)} · {s.id}
+        {s.game} · {s.team_name} · by {s.display_name} ·{" "}
+        {s.created_at.slice(0, 10)} · {s.id}
       </span>
     </li>
   );
@@ -234,7 +235,7 @@ function QueueForm({
       .then(setAll, (err) => setError(describe(err)));
   }, [version]);
 
-  const own = all.filter((s) => s.user_id === user.id);
+  const own = all.filter((s) => s.team_id === user.team_id);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const a = all.find((s) => s.id === mine);
@@ -260,13 +261,13 @@ function QueueForm({
 
   const option = (s: Submission) => (
     <option key={s.id} value={s.id}>
-      {s.name} ({s.display_name}, {s.game})
+      {s.name} ({s.team_name}, {s.game})
     </option>
   );
   return (
     <form className="lookup" onSubmit={submit}>
       <select value={mine} onChange={(e) => setMine(e.target.value)}>
-        <option value="">my submission</option>
+        <option value="">our submission</option>
         {own.map(option)}
       </select>
       <select value={opponent} onChange={(e) => setOpponent(e.target.value)}>

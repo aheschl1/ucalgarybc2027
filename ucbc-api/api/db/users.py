@@ -3,7 +3,7 @@ from psycopg.rows import DictRow
 
 from api.models.users import StoredUser
 
-COLUMNS = "id, email, display_name, password_hash, is_admin, created_at"
+COLUMNS = "id, email, display_name, password_hash, is_admin, team_id, created_at"
 
 
 class UserRepo:
@@ -11,13 +11,13 @@ class UserRepo:
         self._conn = conn
 
     async def insert(
-        self, email: str, display_name: str, password_hash: str, is_admin: bool
+        self, email: str, display_name: str, password_hash: str, is_admin: bool, team_id: int
     ) -> StoredUser:
         """Raises `psycopg.errors.UniqueViolation` when the email has an account."""
         cur = await self._conn.execute(
-            f"insert into users (email, display_name, password_hash, is_admin) "
-            f"values (%s, %s, %s, %s) returning {COLUMNS}",
-            (email, display_name, password_hash, is_admin),
+            f"insert into users (email, display_name, password_hash, is_admin, team_id) "
+            f"values (%s, %s, %s, %s, %s) returning {COLUMNS}",
+            (email, display_name, password_hash, is_admin, team_id),
         )
         row = await cur.fetchone()
         assert row is not None

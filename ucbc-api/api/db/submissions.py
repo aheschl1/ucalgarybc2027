@@ -16,12 +16,12 @@ class SubmissionRepo:
         self._conn = conn
 
     async def insert(
-        self, id: UUID, user_id: int, name: str, game: str, size: int, sha256: str
+        self, id: UUID, user_id: int, team_id: int, name: str, game: str, size: int, sha256: str
     ) -> None:
         await self._conn.execute(
-            "insert into submissions (id, user_id, name, game, size, sha256) "
-            "values (%s, %s, %s, %s, %s, %s)",
-            (id, user_id, name, game, size, sha256),
+            "insert into submissions (id, user_id, team_id, name, game, size, sha256) "
+            "values (%s, %s, %s, %s, %s, %s, %s)",
+            (id, user_id, team_id, name, game, size, sha256),
         )
 
     async def get(self, id: UUID) -> Submission | None:

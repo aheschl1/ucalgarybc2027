@@ -49,12 +49,19 @@ paths it owns, each served the app shell so a reload of one works; anything else
 is a built file or a 404. Signed out, every path is the login form except `/register` and
 `/docs`, the participant guide, which renders `ucbc-web/src/docs.md`.
 
+## Teams
+
+A participant team (not the engine's in-game teams) owns submissions. Every user is on
+exactly one (`users.team_id`); signup creates one named after the display name. Team names
+are unique ignoring case, so a clashing display name gets the first free number
+(`Alice 2`).
+
 ## Submissions
 
 A submission is a zip with `main.py` at the top, at most 1 MiB, checked on upload for member
-paths that escape the directory. The row (`submissions`: owner, name, game, size, sha256) is
-in Postgres; the zip is in the bucket at `submissions/<id>.zip` (`api/blobs.py`, one boto3
-client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not.
+paths that escape the directory. The row (`submissions`: uploader, the uploader's team, name,
+game, size, sha256) is in Postgres; the zip is in the bucket at `submissions/<id>.zip`
+(`api/blobs.py`, one boto3 client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not.
 
 ## Queue
 

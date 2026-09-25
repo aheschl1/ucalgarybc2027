@@ -11,6 +11,7 @@ class User(BaseModel):
     email: str
     display_name: str
     is_admin: bool
+    team_id: int
     created_at: datetime
 
 

@@ -41,7 +41,7 @@ def database_url() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def blob_url() -> Iterator[str]:
-    with MinioContainer("minio/minio:latest") as minio:
+    with MinioContainer("pgsty/minio") as minio:
         cfg = minio.get_config()
         yield f"http://{cfg['access_key']}:{cfg['secret_key']}@{cfg['endpoint']}/test"
 

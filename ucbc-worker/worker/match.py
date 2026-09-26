@@ -17,7 +17,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from api.blobs import BlobStore
-from api.models.matches import BotSource, MatchReplay, MatchRow, PathSource
+from api.models.matches import MatchReplay, MatchRow
 from api.services.submissions import check_member_name, key_for
 
 log = logging.getLogger(__name__)
@@ -37,13 +37,11 @@ class StartFailed(Exception):
     """The engine process could not start; the match goes back to the queue."""
 
 
-async def fetch(source: BotSource, scratch: Path, blobs: BlobStore) -> Path:
-    """The directory holding the bot's main.py: a path as given, or a submission's zip
-    downloaded and unpacked into `scratch`."""
-    if isinstance(source, PathSource):
-        return Path(source.path)
-    data = await blobs.get(key_for(source.id))
-    log.debug("submission %s: %d bytes into %s", source.id, len(data), scratch)
+async def fetch(submission: UUID, scratch: Path, blobs: BlobStore) -> Path:
+    """The directory holding the bot's main.py: the submission's zip downloaded and unpacked
+    into `scratch`."""
+    data = await blobs.get(key_for(submission))
+    log.debug("submission %s: %d bytes into %s", submission, len(data), scratch)
     with zipfile.ZipFile(io.BytesIO(data)) as zf:
         for name in zf.namelist():
             check_member_name(name)

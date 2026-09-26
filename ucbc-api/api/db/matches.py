@@ -7,7 +7,6 @@ from psycopg.rows import DictRow
 from psycopg.types.json import Jsonb
 
 from api.models.matches import (
-    BotSource,
     MatchConfig,
     MatchOrigin,
     MatchRow,
@@ -26,9 +25,9 @@ SET_RESULT_COLUMNS = "index, first_team, winner_team, reason, detail, ticks"
 # A match with a submission the team owns.
 OWNED = """
     exists (
-        select 1 from jsonb_array_elements(matches.bots) b
-        join submissions s on s.id = (b->>'id')::uuid
-        where b->>'kind' = 'submission' and s.team_id = %s
+        select 1 from jsonb_array_elements_text(matches.bots) b
+        join submissions s on s.id = b::uuid
+        where s.team_id = %s
     )
 """
 # What a team may see on top of that: platform matches. A null team sees everything.
@@ -50,7 +49,7 @@ class MatchRepo:
         game: str,
         teams: list[TeamInfo],
         config: MatchConfig,
-        bots: list[BotSource],
+        bots: list[UUID],
         priority: int,
     ) -> UUID:
         cur = await self._conn.execute(
@@ -61,7 +60,7 @@ class MatchRepo:
                 game,
                 Jsonb([t.model_dump() for t in teams]),
                 Jsonb(config.model_dump()),
-                Jsonb([b.model_dump(mode="json") for b in bots]),
+                Jsonb([str(b) for b in bots]),
                 priority,
             ),
         )

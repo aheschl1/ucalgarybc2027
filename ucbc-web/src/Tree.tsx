@@ -245,10 +245,7 @@ function QueueForm({
     try {
       await api.post("/matches/queue", {
         game: a.game,
-        bots: [
-          { kind: "submission", id: mine },
-          { kind: "submission", id: opponent },
-        ],
+        bots: [mine, opponent],
         config: { seed },
       });
       onQueued();

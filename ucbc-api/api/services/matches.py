@@ -8,7 +8,6 @@ from api.models.matches import (
     MatchEnqueue,
     MatchReplay,
     MatchRow,
-    PathSource,
     SetReplay,
     TeamInfo,
 )
@@ -26,21 +25,16 @@ class LostLease(Exception):
 
 
 async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID:
-    """Admins queue anything. A member queues submissions only, at least one their team's,
-    at normal priority."""
+    """Admins queue any submissions at any priority. A member needs one of their team's
+    submissions in the match, at normal priority."""
     names: list[str] = []
     owned = False
     for bot in req.bots:
-        if isinstance(bot, PathSource):
-            if not user.is_admin:
-                raise Forbidden("only admins may run bots from a path")
-            names.append(bot.name)
-        else:
-            submission = await get_submission(db, bot.id)
-            if submission.game != req.game:
-                raise ApiError(f"submission {bot.id} is for {submission.game}, not {req.game}")
-            owned = owned or submission.team_id == user.team_id
-            names.append(submission.name)
+        submission = await get_submission(db, bot)
+        if submission.game != req.game:
+            raise ApiError(f"submission {bot} is for {submission.game}, not {req.game}")
+        owned = owned or submission.team_id == user.team_id
+        names.append(submission.name)
     if not user.is_admin and not owned:
         raise Forbidden("one of the bots must be your team's submission")
     priority = req.priority if user.is_admin else 0

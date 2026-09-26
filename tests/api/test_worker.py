@@ -33,13 +33,14 @@ def worker(app: FastAPI) -> Worker:
     )
 
 
-async def enqueue(client: AsyncClient, bots: list[Path], **override: Any) -> UUID:
-    body = {
-        "game": "tictactoe",
-        "bots": [{"kind": "path", "path": str(b)} for b in bots],
-        "config": {"seed": 7},
-        **override,
-    }
+async def enqueue(client: AsyncClient, bots: list[Path], game: str = "tictactoe") -> UUID:
+    """Uploads each bot directory as a submission of the client's team and queues them."""
+    ids = []
+    for b in bots:
+        r = await upload(client, zip_dir(b), form={"name": b.name, "game": game})
+        assert r.status_code == 201, r.text
+        ids.append(r.json()["id"])
+    body = {"game": game, "bots": ids, "config": {"seed": 7}}
     r = await client.post("/matches/queue", json=body)
     assert r.status_code == 201, r.text
     return UUID(r.json()["id"])
@@ -61,7 +62,8 @@ async def test_worker_plays_a_queued_match(
 
     assert await worker.run_once(db)
     match = await get(admin_client, match_id)
-    assert match["status"] == "done"
+    assert match["status"] == "done", match["error"]
+    assert [t["name"] for t in match["teams"]] == ["random", "first_empty"]
     assert match["attempts"] == 1
     assert match["engine_version"]
     assert [s["index"] for s in match["sets"]] == [0, 1, 2]
@@ -69,19 +71,6 @@ async def test_worker_plays_a_queued_match(
     replay = (await admin_client.get(f"/matches/{match_id}/sets/0")).json()
     assert {"detail": "", **replay["result"]} == match["sets"][0]
 
-    assert not await worker.run_once(db)
-
-
-async def test_missing_bot_dir_errors_the_match(
-    admin_client: AsyncClient, db: DBConnection, worker: Worker, bot: BotPath, tmp_path: Path
-) -> None:
-    match_id = await enqueue(admin_client, [tmp_path / "missing", bot("random")])
-
-    assert await worker.run_once(db)
-    match = await get(admin_client, match_id)
-    assert match["status"] == "error"
-    assert "does not exist" in match["error"]
-    assert match["attempts"] == 1
     assert not await worker.run_once(db)
 
 
@@ -141,36 +130,6 @@ async def test_lost_lease_stops_the_engine(
     assert match["status"] == "running"
     assert match["claimed_by"] == "w2"
     assert match["attempts"] == 2
-
-
-async def test_worker_plays_uploaded_submissions(
-    admin_client: AsyncClient,
-    member_client: AsyncClient,
-    db: DBConnection,
-    worker: Worker,
-    bot: BotPath,
-) -> None:
-    mine = (await upload(member_client, zip_dir(bot("random")), form={"name": "mine"})).json()
-    theirs = (
-        await upload(admin_client, zip_dir(bot("first_empty")), form={"name": "theirs"})
-    ).json()
-    body = {
-        "game": "tictactoe",
-        "bots": [
-            {"kind": "submission", "id": mine["id"]},
-            {"kind": "submission", "id": theirs["id"]},
-        ],
-        "config": {"seed": 7},
-    }
-    r = await member_client.post("/matches/queue", json=body)
-    assert r.status_code == 201, r.text
-    match_id = UUID(r.json()["id"])
-
-    assert await worker.run_once(db)
-    match = (await member_client.get(f"/matches/{match_id}")).json()
-    assert match["status"] == "done", match["error"]
-    assert [t["name"] for t in match["teams"]] == ["mine", "theirs"]
-    assert len(match["sets"]) == 3
 
 
 async def test_serve_runs_slots_and_drains(

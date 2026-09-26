@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg.types.json import Jsonb
 
 from tests.api.conftest import alembic
 
@@ -78,3 +79,44 @@ def test_teams_backfill(fresh_url: str) -> None:
     with psycopg.connect(fresh_url) as conn:
         assert conn.execute("select to_regclass('teams')").fetchone() == (None,)
         assert conn.execute("select count(*) from submissions").fetchone() == (3,)
+
+
+def test_submission_bots(fresh_url: str) -> None:
+    alembic(fresh_url, "upgrade", "0008")
+    a, b = str(uuid4()), str(uuid4())
+
+    def source(bot: str) -> dict[str, str]:
+        return {"kind": "submission", "id": bot} if bot in (a, b) else {"kind": "path", "path": bot}
+
+    with psycopg.connect(fresh_url, autocommit=True) as conn:
+        ids = {}
+        for name, bots in [
+            ("paths", ["bots/x", "bots/y"]),
+            ("mixed", [a, "bots/y"]),
+            ("submissions", [b, a]),
+            ("empty", []),
+        ]:
+            row = conn.execute(
+                "insert into matches (origin, game, teams, config, bots, status) "
+                "values ('user', 'tictactoe', '[]', '{}', %s, 'done') returning id",
+                (Jsonb([source(bot) for bot in bots]),),
+            ).fetchone()
+            assert row is not None
+            ids[name] = row[0]
+        conn.execute(
+            "insert into sets (match_id, index, first_team, reason, ticks, replay) "
+            "values (%s, 0, 0, 'draw', 1, '{}')",
+            (ids["paths"],),
+        )
+
+    # Matches with a directory go, sets and all; the rest name their submissions in order.
+    alembic(fresh_url, "upgrade", "0009")
+    with psycopg.connect(fresh_url) as conn:
+        rows = conn.execute("select id, bots from matches order by created_at").fetchall()
+        assert rows == [(ids["submissions"], [b, a]), (ids["empty"], [])]
+        assert conn.execute("select count(*) from sets").fetchone() == (0,)
+
+    alembic(fresh_url, "downgrade", "0008")
+    with psycopg.connect(fresh_url) as conn:
+        rows = conn.execute("select bots from matches order by created_at").fetchall()
+        assert rows == [([source(b), source(a)],), ([],)]

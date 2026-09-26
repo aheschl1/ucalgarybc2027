@@ -26,7 +26,7 @@ class LostLease(Exception):
 
 
 async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID:
-    """Admins queue anything. A member queues submissions only, at least one their own,
+    """Admins queue anything. A member queues submissions only, at least one their team's,
     at normal priority."""
     names: list[str] = []
     owned = False
@@ -39,10 +39,10 @@ async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID
             submission = await get_submission(db, bot.id)
             if submission.game != req.game:
                 raise ApiError(f"submission {bot.id} is for {submission.game}, not {req.game}")
-            owned = owned or submission.user_id == user.id
+            owned = owned or submission.team_id == user.team_id
             names.append(submission.name)
     if not user.is_admin and not owned:
-        raise Forbidden("one of the bots must be your own submission")
+        raise Forbidden("one of the bots must be your team's submission")
     priority = req.priority if user.is_admin else 0
     teams = [TeamInfo(id=i, name=name) for i, name in enumerate(names)]
     return await db.match_repo.insert("user", req.game, teams, req.config, req.bots, priority)
@@ -63,17 +63,17 @@ async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: in
 
 
 async def list_matches(db: DBConnection, user: User, mine: bool = False) -> list[MatchRow]:
-    """Platform matches and matches with one of the caller's submissions, newest first;
-    every match for an admin. `mine` narrows to the caller's own, admin or not."""
+    """Platform matches and matches with one of the caller's team's submissions, newest
+    first; every match for an admin. `mine` narrows to the team's own, admin or not."""
     if mine:
-        return await db.match_repo.list_recent(user.id, LIST_LIMIT, owned_only=True)
-    return await db.match_repo.list_recent(None if user.is_admin else user.id, LIST_LIMIT)
+        return await db.match_repo.list_recent(user.team_id, LIST_LIMIT, owned_only=True)
+    return await db.match_repo.list_recent(None if user.is_admin else user.team_id, LIST_LIMIT)
 
 
 async def _visible(db: DBConnection, user: User, match_id: UUID) -> MatchRow:
-    """A platform match or one with the caller's submission, or any for an admin; otherwise
-    as if missing."""
-    row = await db.match_repo.get(match_id, None if user.is_admin else user.id)
+    """A platform match or one with the caller's team's submission, or any for an admin;
+    otherwise as if missing."""
+    row = await db.match_repo.get(match_id, None if user.is_admin else user.team_id)
     if row is None:
         raise NotFound(f"no match {match_id}")
     return row

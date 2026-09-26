@@ -12,14 +12,14 @@ router = APIRouter(prefix="/matches", tags=["matches"])
 
 @router.post("/queue", status_code=status.HTTP_201_CREATED)
 async def enqueue(body: MatchEnqueue, db: DB, user: CurrentUser) -> MatchCreated:
-    """Queue a match for a worker to play. Members use submissions, one of them their own."""
+    """Queue a match for a worker to play. Members use submissions, one their team's."""
     return MatchCreated(id=await matches.enqueue_match(db, user, body))
 
 
 @router.get("")
 async def list_matches(db: DB, user: CurrentUser, mine: bool = False) -> list[MatchRow]:
-    """Platform matches and the caller's own, newest first; every match for an admin.
-    `mine` narrows to matches the caller has a bot in."""
+    """Platform matches and the caller's team's, newest first; every match for an admin.
+    `mine` narrows to matches the caller's team has a bot in."""
     return await matches.list_matches(db, user, mine)
 
 

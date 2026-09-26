@@ -91,9 +91,9 @@ lets another worker take the match, after which the old holder's writes match no
 `worker/match.py::command` is the one place the engine process is described.
 
 Who sees a match: admins see all; everyone sees `origin = 'platform'` matches (from schedules,
-not built yet); a user sees matches with one of their own submissions. `?mine=true` narrows
-any caller to the matches one of their own submissions is in. A member may queue a
-match between submissions when one is their own.
+not built yet); a user sees matches with one of their team's submissions. `?mine=true`
+narrows any caller to the matches one of their team's submissions is in. A member may queue
+a match between submissions when one is their team's.
 
 `/viewer/<match id>` in the web app plays a done match: it reads the match and each of its
 sets through these endpoints and hands the assembled replay to the viewer (`ucbc-viewer`), so

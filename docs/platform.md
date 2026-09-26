@@ -86,14 +86,16 @@ A worker claims with `for update skip locked`, heartbeats while the engine runs,
 the sets and result in one transaction. `(id, claimed_at)` is the lease: a stale heartbeat
 lets another worker take the match, after which the old holder's writes match no row.
 
-`matches.bots` names each bot's code: `{kind: "path", path}` (admins only) or
-`{kind: "submission", id}`, which the worker downloads and unpacks (`worker/match.py::fetch`).
+`matches.bots` is the submission ids in slot order: the engine's team `i` plays `bots[i]`,
+whose participant team is that submission's `team_id`. The worker downloads and unpacks each
+(`worker/match.py::fetch`). The platform never runs bot directories; `ucbc run <dir> <dir>`
+does that locally.
 `worker/match.py::command` is the one place the engine process is described.
 
 Who sees a match: admins see all; everyone sees `origin = 'platform'` matches (from schedules,
 not built yet); a user sees matches with one of their team's submissions. `?mine=true`
-narrows any caller to the matches one of their team's submissions is in. A member may queue
-a match between submissions when one is their team's.
+narrows any caller to the matches one of their team's submissions is in. An admin may queue
+any submissions at any priority; a member needs one of their team's, at normal priority.
 
 `/viewer/<match id>` in the web app plays a done match: it reads the match and each of its
 sets through these endpoints and hands the assembled replay to the viewer (`ucbc-viewer`), so

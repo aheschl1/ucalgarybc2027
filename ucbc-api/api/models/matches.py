@@ -1,6 +1,5 @@
 from datetime import datetime
-from pathlib import PurePath
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -56,26 +55,6 @@ class MatchConfig(BaseModel):
     memory_bytes: int = Field(default=2**30, ge=1)
 
 
-class PathSource(BaseModel):
-    """A bot directory on the worker host."""
-
-    kind: Literal["path"] = "path"
-    path: str
-
-    @property
-    def name(self) -> str:
-        return PurePath(self.path).name
-
-
-class SubmissionSource(BaseModel):
-    """An uploaded submission, fetched from blob storage."""
-
-    kind: Literal["submission"] = "submission"
-    id: UUID
-
-
-BotSource = Annotated[PathSource | SubmissionSource, Field(discriminator="kind")]
-
 MatchStatus = Literal["queued", "running", "done", "error"]
 # Who made the match: a user, or the platform from a schedule. Platform matches are public.
 MatchOrigin = Literal["user", "platform"]
@@ -85,7 +64,8 @@ class MatchEnqueue(BaseModel):
     """A match for a worker to play."""
 
     game: str
-    bots: list[BotSource] = Field(min_length=2, max_length=2)
+    # Submission ids; the engine's team i plays bots[i].
+    bots: list[UUID] = Field(min_length=2, max_length=2)
     config: MatchConfig = MatchConfig()
     priority: int = 0
 
@@ -103,7 +83,7 @@ class MatchRow(BaseModel):
     engine_version: str | None
     teams: list[TeamInfo]
     config: MatchConfig
-    bots: list[BotSource]
+    bots: list[UUID]
     status: MatchStatus
     set_wins: list[int] | None
     winner_team: int | None

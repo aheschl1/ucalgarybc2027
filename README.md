@@ -63,7 +63,7 @@ Have a Postgres already? In `.env.local` leave `COMPOSE_PROFILES` empty and set
 `POSTGRES_HOST` to it (the example file shows the block); compose then skips its own.
 
 `POST /submissions` uploads a zipped bot (main.py at the top, 1 MiB) to blob storage;
-`POST /matches/queue` queues a match between two bot directories on the worker host.
+`POST /matches/queue` queues a match between two submissions.
 
 From the checkout instead of compose:
 

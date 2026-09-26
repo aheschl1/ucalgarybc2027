@@ -133,14 +133,11 @@ export type Submission = {
   created_at: string;
 };
 
-export type BotSource =
-  { kind: "path"; path: string } | { kind: "submission"; id: string };
-
 export type Match = {
   id: string;
   origin: "user" | "platform";
   game: string;
-  bots: BotSource[];
+  bots: string[];
   engine_version: string | null;
   teams: { id: number; name: string }[];
   config: { sets: number; seed: number; step_ms: number; memory_bytes: number };

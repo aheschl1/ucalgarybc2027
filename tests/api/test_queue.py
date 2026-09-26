@@ -19,14 +19,6 @@ from tests.api.test_submissions import upload, zip_dir
 
 LEASE = timedelta(seconds=30)
 MISSING = "00000000-0000-0000-0000-000000000000"
-REQUEST: dict[str, Any] = {
-    "game": "tictactoe",
-    "bots": [
-        {"kind": "path", "path": "bots/tictactoe/random"},
-        {"kind": "path", "path": "bots/tictactoe/first_empty"},
-    ],
-    "config": {"seed": 7},
-}
 
 
 def set_replay(index: int, winner: int | None) -> dict[str, Any]:
@@ -68,8 +60,18 @@ async def other(app: FastAPI) -> AsyncIterator[DBConnection]:
         yield DBConnection(conn)
 
 
-async def enqueue(client: AsyncClient, **override: Any) -> UUID:
-    r = await client.post("/matches/queue", json={**REQUEST, **override})
+@pytest.fixture
+async def body(admin_client: AsyncClient, bot: Callable[[str], Path]) -> dict[str, Any]:
+    """A match between two of the admin's submissions."""
+    ids = []
+    for name in ["random", "first_empty"]:
+        r = await upload(admin_client, zip_dir(bot(name)), form={"name": name})
+        ids.append(r.json()["id"])
+    return {"game": "tictactoe", "bots": ids, "config": {"seed": 7}}
+
+
+async def enqueue(client: AsyncClient, body: dict[str, Any], **override: Any) -> UUID:
+    r = await client.post("/matches/queue", json={**body, **override})
     assert r.status_code == 201, r.text
     return UUID(r.json()["id"])
 
@@ -81,13 +83,13 @@ async def get(client: AsyncClient, match_id: UUID) -> dict[str, Any]:
     return body
 
 
-async def test_enqueue_and_get(admin_client: AsyncClient) -> None:
-    match_id = await enqueue(admin_client)
+async def test_enqueue_and_get(admin_client: AsyncClient, body: dict[str, Any]) -> None:
+    match_id = await enqueue(admin_client, body)
 
     match = await get(admin_client, match_id)
     assert match["status"] == "queued"
     assert match["engine_version"] is None
-    assert match["bots"] == REQUEST["bots"]
+    assert match["bots"] == body["bots"]
     assert [t["name"] for t in match["teams"]] == ["random", "first_empty"]
     assert match["config"] == {"sets": 3, "seed": 7, "step_ms": 500, "memory_bytes": 2**30}
     assert match["attempts"] == 0
@@ -96,13 +98,22 @@ async def test_enqueue_and_get(admin_client: AsyncClient) -> None:
 
 
 async def test_permissions_and_validation(
-    client: AsyncClient, admin_client: AsyncClient, member_client: AsyncClient
+    client: AsyncClient,
+    admin_client: AsyncClient,
+    member_client: AsyncClient,
+    body: dict[str, Any],
 ) -> None:
-    assert (await member_client.post("/matches/queue", json=REQUEST)).status_code == 403
-    one_bot = {**REQUEST, "bots": REQUEST["bots"][:1]}
+    assert (await member_client.post("/matches/queue", json=body)).status_code == 403
+    one_bot = {**body, "bots": body["bots"][:1]}
     assert (await admin_client.post("/matches/queue", json=one_bot)).status_code == 422
+    # Bots are submission ids, even for an admin: no directories, no source objects.
+    path = {"kind": "path", "path": "bots/tictactoe/random"}
+    wrapped = {"kind": "submission", "id": body["bots"][0]}
+    for bot in [path, wrapped]:
+        bad = {**body, "bots": [bot, body["bots"][1]]}
+        assert (await admin_client.post("/matches/queue", json=bad)).status_code == 422
 
-    match_id = await enqueue(admin_client)
+    match_id = await enqueue(admin_client, body)
     assert (await client.get(f"/matches/{match_id}")).status_code == 401
     assert (await member_client.get(f"/matches/{match_id}")).status_code == 404
     assert (await admin_client.get(f"/matches/{MISSING}")).status_code == 404
@@ -110,9 +121,9 @@ async def test_permissions_and_validation(
 
 
 async def test_claim_is_exclusive(
-    admin_client: AsyncClient, db: DBConnection, other: DBConnection
+    admin_client: AsyncClient, db: DBConnection, other: DBConnection, body: dict[str, Any]
 ) -> None:
-    match_id = await enqueue(admin_client)
+    match_id = await enqueue(admin_client, body)
 
     held = await matches.claim_match(db, "w1", LEASE)
     assert held is not None and held.id == match_id
@@ -142,19 +153,21 @@ async def test_claim_is_exclusive(
     assert (await admin_client.get(f"/matches/{match_id}/sets/3")).status_code == 404
 
 
-async def test_priority_and_order(admin_client: AsyncClient, db: DBConnection) -> None:
-    first = await enqueue(admin_client)
-    urgent = await enqueue(admin_client, priority=1)
-    second = await enqueue(admin_client)
+async def test_priority_and_order(
+    admin_client: AsyncClient, db: DBConnection, body: dict[str, Any]
+) -> None:
+    first = await enqueue(admin_client, body)
+    urgent = await enqueue(admin_client, body, priority=1)
+    second = await enqueue(admin_client, body)
 
     claimed = [await matches.claim_match(db, "w", LEASE) for _ in range(3)]
     assert [m.id for m in claimed if m is not None] == [urgent, first, second]
 
 
 async def test_stale_lease_is_reclaimed(
-    admin_client: AsyncClient, db: DBConnection, other: DBConnection
+    admin_client: AsyncClient, db: DBConnection, other: DBConnection, body: dict[str, Any]
 ) -> None:
-    match_id = await enqueue(admin_client)
+    match_id = await enqueue(admin_client, body)
     held = await matches.claim_match(db, "w1", LEASE)
     assert held is not None
     assert await matches.heartbeat(db, held)
@@ -187,8 +200,10 @@ async def test_stale_lease_is_reclaimed(
     assert [s["winner_team"] for s in match["sets"]] == [None, 0, 0]
 
 
-async def test_fail_and_requeue(admin_client: AsyncClient, db: DBConnection) -> None:
-    match_id = await enqueue(admin_client)
+async def test_fail_and_requeue(
+    admin_client: AsyncClient, db: DBConnection, body: dict[str, Any]
+) -> None:
+    match_id = await enqueue(admin_client, body)
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None
 
@@ -208,9 +223,11 @@ async def test_fail_and_requeue(admin_client: AsyncClient, db: DBConnection) -> 
     assert await matches.claim_match(db, "w", LEASE) is None
 
 
-async def test_attempts_are_capped(admin_client: AsyncClient, db: DBConnection) -> None:
-    exhausted = await enqueue(admin_client)
-    fresh = await enqueue(admin_client)
+async def test_attempts_are_capped(
+    admin_client: AsyncClient, db: DBConnection, body: dict[str, Any]
+) -> None:
+    exhausted = await enqueue(admin_client, body)
+    fresh = await enqueue(admin_client, body)
     await db.conn.execute("update matches set attempts = 3 where id = %s", (exhausted,))
 
     held = await matches.claim_match(db, "w", LEASE)
@@ -218,10 +235,6 @@ async def test_attempts_are_capped(admin_client: AsyncClient, db: DBConnection) 
     match = await get(admin_client, exhausted)
     assert match["status"] == "error"
     assert match["error"] == "gave up after 3 attempts"
-
-
-def submission(id: str) -> dict[str, str]:
-    return {"kind": "submission", "id": id}
 
 
 async def test_members_queue_and_see_their_own(
@@ -238,27 +251,26 @@ async def test_members_queue_and_see_their_own(
         "id"
     ]
 
-    async def queue(bots: list[dict[str, str]], client: AsyncClient = member_client) -> Any:
+    async def queue(bots: list[str], client: AsyncClient = member_client) -> Any:
         body = {"game": "tictactoe", "bots": bots, "config": {"seed": 1}, "priority": 5}
         return await client.post("/matches/queue", json=body)
 
-    r = await queue([submission(mine), submission(theirs)])
+    r = await queue([mine, theirs])
     assert r.status_code == 201, r.text
     match_id = r.json()["id"]
     match = (await member_client.get(f"/matches/{match_id}")).json()
     assert match["priority"] == 0
     assert [t["name"] for t in match["teams"]] == ["mine", "theirs"]
-    assert match["bots"] == [submission(mine), submission(theirs)]
+    assert match["bots"] == [mine, theirs]
 
-    assert (await queue([submission(theirs), submission(theirs)])).status_code == 403
-    assert (await queue([submission(mine), REQUEST["bots"][1]])).status_code == 403
-    r = await queue([submission(mine), submission(chess)])
+    assert (await queue([theirs, theirs])).status_code == 403
+    r = await queue([mine, chess])
     assert r.status_code == 400
     assert "is for chess" in r.json()["detail"]
-    assert (await queue([submission(mine), submission(MISSING)])).status_code == 404
+    assert (await queue([mine, MISSING])).status_code == 404
 
     # A match without the member's submissions is invisible to them and absent from their list.
-    admin_match = (await queue([submission(theirs), submission(theirs)], admin_client)).json()["id"]
+    admin_match = (await queue([theirs, theirs], admin_client)).json()["id"]
     assert (await member_client.get(f"/matches/{admin_match}")).status_code == 404
     assert (await member_client.get(f"/matches/{admin_match}/sets/0")).status_code == 404
     assert [m["id"] for m in (await member_client.get("/matches")).json()] == [match_id]
@@ -295,11 +307,12 @@ async def test_teams_share_matches(
 ) -> None:
     code = zip_dir(bot("random"))
 
-    async def uploaded(client: AsyncClient, name: str) -> dict[str, str]:
+    async def uploaded(client: AsyncClient, name: str) -> str:
         r = await upload(client, code, form={"name": name})
-        return submission(r.json()["id"])
+        id: str = r.json()["id"]
+        return id
 
-    async def queue(client: AsyncClient, bots: list[dict[str, str]]) -> Any:
+    async def queue(client: AsyncClient, bots: list[str]) -> Any:
         body = {"game": "tictactoe", "bots": bots, "config": {"seed": 1}}
         return await client.post("/matches/queue", json=body)
 
@@ -347,3 +360,25 @@ async def test_teams_share_matches(
     assert await ids(member_client, mine=True) == []
     assert (await member_client.get(f"/matches/{match_id}")).status_code == 404
     assert match_id in await ids(teammate_client, mine=True)
+
+
+async def test_one_team_in_both_slots(
+    member_client: AsyncClient, teammate_client: AsyncClient, bot: Callable[[str], Path]
+) -> None:
+    """Each slot is its own submission, even when one team, or one submission, fills both."""
+    alices = (await upload(member_client, zip_dir(bot("random")), form={"name": "alices"})).json()
+    carols = (
+        await upload(teammate_client, zip_dir(bot("first_empty")), form={"name": "carols"})
+    ).json()
+    assert alices["team_id"] == carols["team_id"]
+
+    for bots, names in [
+        ([alices["id"], carols["id"]], ["alices", "carols"]),
+        ([alices["id"], alices["id"]], ["alices", "alices"]),
+    ]:
+        body = {"game": "tictactoe", "bots": bots}
+        r = await member_client.post("/matches/queue", json=body)
+        assert r.status_code == 201, r.text
+        match = (await teammate_client.get(f"/matches/{r.json()['id']}")).json()
+        assert match["bots"] == bots
+        assert match["teams"] == [{"id": i, "name": n} for i, n in enumerate(names)]

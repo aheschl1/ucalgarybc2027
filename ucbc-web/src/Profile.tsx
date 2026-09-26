@@ -1,17 +1,38 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { Link } from "react-router";
-import { describe, type Api, type Submission, type User } from "./api";
+import {
+  describe,
+  type Api,
+  type Submission,
+  type Team,
+  type User,
+} from "./api";
 import { MatchList } from "./matches";
 
-export default function Profile({ user, api }: { user: User; api: Api }) {
+export default function Profile({
+  user,
+  api,
+  onMove,
+}: {
+  user: User;
+  api: Api;
+  onMove: (team: Team) => void;
+}) {
   const [bots, setBots] = useState<Submission[]>([]);
   const [error, setError] = useState("");
+  // Bumped after a move to another team so the team's lists refetch.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     api
       .load<Submission[]>("/submissions?mine=true")
       .then(setBots, (err) => setError(describe(err)));
-  }, []);
+  }, [version]);
+
+  const moved = (team: Team) => {
+    onMove(team);
+    setVersion((v) => v + 1);
+  };
 
   return (
     <main className="page">
@@ -20,6 +41,9 @@ export default function Profile({ user, api }: { user: User; api: Api }) {
         {user.email} · {user.is_admin ? "admin" : "user"} · joined{" "}
         {user.created_at.slice(0, 10)}
       </p>
+
+      <h2>team</h2>
+      <TeamSection api={api} onMove={moved} />
 
       <h2>bots</h2>
       {error ? (
@@ -32,7 +56,8 @@ export default function Profile({ user, api }: { user: User; api: Api }) {
           <li key={s.id}>
             {s.name}{" "}
             <span className="dim">
-              {s.game} · {s.created_at.slice(0, 10)} · {s.id}
+              {s.game} · by {s.display_name} · {s.created_at.slice(0, 10)} ·{" "}
+              {s.id}
             </span>
           </li>
         ))}
@@ -40,12 +65,116 @@ export default function Profile({ user, api }: { user: User; api: Api }) {
 
       <h2>matches</h2>
       <ul>
-        <MatchList api={api} version={0} mine />
+        <MatchList api={api} version={version} mine />
       </ul>
 
       <p className="back">
         <Link to="/">back</Link>
       </p>
     </main>
+  );
+}
+
+function TeamSection({
+  api,
+  onMove,
+}: {
+  api: Api;
+  onMove: (team: Team) => void;
+}) {
+  const [team, setTeam] = useState<Team | null>(null);
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.load<Team>("/teams/me").then(setTeam, (err) => setError(describe(err)));
+  }, []);
+
+  const act = async (call: () => Promise<Team>, moves: boolean) => {
+    setBusy(true);
+    setError("");
+    try {
+      const next = await call();
+      setTeam(next);
+      setCode("");
+      setName("");
+      if (moves) onMove(next);
+    } catch (err) {
+      setError(describe(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Only members see the code, so the last one out leaves nobody able to join.
+  const leave = () =>
+    !team ||
+    team.members.length > 1 ||
+    window.confirm(
+      `You are the last member of ${team.name}. Once you leave nobody can join it, ` +
+        "and its bots stay with it.",
+    );
+
+  const join = (e: FormEvent) => {
+    e.preventDefault();
+    if (leave())
+      act(() => api.post<Team>("/teams/join", { code: code.trim() }), true);
+  };
+  const start = (e: FormEvent) => {
+    e.preventDefault();
+    if (leave())
+      act(() => api.post<Team>("/teams", { name: name.trim() }), true);
+  };
+  const newCode = (e: MouseEvent) => {
+    e.preventDefault();
+    act(() => api.post<Team>("/teams/me/code", undefined), false);
+  };
+
+  return (
+    <>
+      {team && (
+        <>
+          <p>
+            {team.name} <span className="dim">· {team.members.join(", ")}</span>
+          </p>
+          <p className="dim">
+            join code <code>{team.join_code}</code> ·{" "}
+            <a href="#" onClick={newCode}>
+              new code
+            </a>
+          </p>
+        </>
+      )}
+      <ul>
+        <li>
+          <form className="lookup" onSubmit={join}>
+            <input
+              placeholder="another team's join code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+            />
+            <button disabled={busy || !code.trim()}>join</button>
+          </form>
+        </li>
+        <li>
+          <form className="lookup" onSubmit={start}>
+            <input
+              placeholder="new team name"
+              maxLength={64}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button disabled={busy || !name.trim()}>start team</button>
+          </form>
+        </li>
+      </ul>
+      {error && <p className="error">{error}</p>}
+      <p className="dim">
+        Joining or starting a team moves you out of this one; its bots and
+        matches stay with it.
+      </p>
+    </>
   );
 }

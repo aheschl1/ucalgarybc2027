@@ -97,6 +97,16 @@ export type User = {
   email: string;
   display_name: string;
   is_admin: boolean;
+  team_id: number;
+  created_at: string;
+};
+
+// A participant team, not the engine's in-game teams. Only its members are sent one.
+export type Team = {
+  id: number;
+  name: string;
+  join_code: string;
+  members: string[];
   created_at: string;
 };
 
@@ -114,6 +124,8 @@ export type Submission = {
   id: string;
   user_id: number;
   display_name: string;
+  team_id: number;
+  team_name: string;
   name: string;
   game: string;
   size: number;

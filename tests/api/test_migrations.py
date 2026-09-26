@@ -68,6 +68,12 @@ def test_teams_backfill(fresh_url: str) -> None:
         ).fetchall()
         assert nullable == [("submissions", "NO"), ("users", "NO")]
 
+    # Every team gets its own join code.
+    alembic(fresh_url, "upgrade", "0008")
+    with psycopg.connect(fresh_url) as conn:
+        codes = conn.execute("select count(distinct join_code) from teams").fetchone()
+        assert codes == (5,)
+
     alembic(fresh_url, "downgrade", "0006")
     with psycopg.connect(fresh_url) as conn:
         assert conn.execute("select to_regclass('teams')").fetchone() == (None,)

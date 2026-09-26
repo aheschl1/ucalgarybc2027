@@ -11,6 +11,7 @@ from psycopg_pool import AsyncConnectionPool
 from api.db.matches import MatchRepo
 from api.db.sessions import SessionRepo
 from api.db.submissions import SubmissionRepo
+from api.db.teams import TeamRepo
 from api.db.users import UserRepo
 
 
@@ -21,6 +22,7 @@ class DBConnection:
         self.match_repo = MatchRepo(conn)
         self.submission_repo = SubmissionRepo(conn)
         self.session_repo = SessionRepo(conn)
+        self.team_repo = TeamRepo(conn)
 
 
 def create_pool(database_url: str, size: int = 4) -> AsyncConnectionPool[AsyncConnection[DictRow]]:

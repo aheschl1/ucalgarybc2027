@@ -55,7 +55,7 @@ async def upload(
     await blobs.put(key_for(id), data, "application/zip")
     try:
         await db.submission_repo.insert(
-            id, user.id, name, game, len(data), hashlib.sha256(data).hexdigest()
+            id, user.id, user.team_id, name, game, len(data), hashlib.sha256(data).hexdigest()
         )
     except Exception:
         await blobs.delete(key_for(id))

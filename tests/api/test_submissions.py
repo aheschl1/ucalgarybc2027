@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from api.blobs import BlobMissing, BlobStore
+from api.db import DBConnection
+from api.models.users import User
 from api.services.submissions import MAX_ZIP, key_for
 
 BotPath = Callable[[str], Path]
@@ -42,7 +44,12 @@ async def upload(client: AsyncClient, data: bytes, form: dict[str, str] | None =
 
 
 async def test_upload_list_get(
-    app: FastAPI, member_client: AsyncClient, admin_client: AsyncClient, bot: BotPath
+    app: FastAPI,
+    db: DBConnection,
+    member: User,
+    member_client: AsyncClient,
+    admin_client: AsyncClient,
+    bot: BotPath,
 ) -> None:
     data = zip_dir(bot("random"))
     r = await upload(member_client, data)
@@ -53,6 +60,10 @@ async def test_upload_list_get(
     assert body["display_name"] == "Alice"
     assert body["size"] == len(data)
     assert body["sha256"] == hashlib.sha256(data).hexdigest()
+
+    # It belongs to the uploader's team.
+    cur = await db.conn.execute("select team_id from submissions where id = %s", (body["id"],))
+    assert await cur.fetchone() == {"team_id": member.team_id}
 
     r = await upload(admin_client, data, form={"name": "theirs"})
     assert r.status_code == 201

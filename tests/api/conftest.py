@@ -25,17 +25,21 @@ ADMIN = ("root@example.com", "root-pw")
 MEMBER = ("alice@example.com", "alice-pw")
 
 
+def alembic(url: str, *args: str) -> None:
+    subprocess.run(
+        [sys.executable, "-m", "alembic", *args],
+        cwd=ROOT,
+        env={**os.environ, "UCBC_DATABASE_URL": url},
+        check=True,
+        capture_output=True,
+    )
+
+
 @pytest.fixture(scope="session")
 def database_url() -> Iterator[str]:
     with PostgresContainer("postgres:17", driver=None) as pg:
         url = pg.get_connection_url()
-        subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=ROOT,
-            env={**os.environ, "UCBC_DATABASE_URL": url},
-            check=True,
-            capture_output=True,
-        )
+        alembic(url, "upgrade", "head")
         yield url
 
 
@@ -54,7 +58,8 @@ async def app(database_url: str, blob_url: str) -> AsyncIterator[FastAPI]:
     async with app.router.lifespan_context(app):
         async with app.state.pool.connection() as conn:
             await conn.execute(
-                "truncate users, sessions, matches, sets, submissions restart identity cascade"
+                "truncate users, teams, sessions, matches, sets, submissions "
+                "restart identity cascade"
             )
         yield app
 

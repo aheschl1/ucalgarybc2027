@@ -18,9 +18,8 @@ make up         # the platform in compose
 files (`ucbc-sdk/ucbc/games/*/_api.py`, `*.gen.ts`) only ever show up in `git status`,
 never as a failure.
 
-`ucbc-games/Cargo.toml` lists every game, and its `default` feature line picks the games a
-build includes. `GAMES=tictactoe` (or `GAMES=all`) on any target picks others; `make test`
-always builds every game.
+`default` in `ucbc-games/Cargo.toml` picks the games a build includes; `make test` builds
+every game.
 
 ## Run a match
 

@@ -1,6 +1,5 @@
 # The worker plays matches with `ucbc run`, so its environment holds the engine wheel,
-# built here from source with the Rust toolchain. UCBC_GAMES (empty: ucbc-games' default)
-# picks the games compiled in.
+# built here from source with the Rust toolchain, with ucbc-games' default games.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/root/.cargo/bin:/app/.venv/bin:$PATH"
@@ -9,15 +8,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
-# Every crate and Python package; Dockerfile.worker.dockerignore says which, by pattern, so
-# a new game needs no edit here.
-COPY . .
-# Declared here, not at the top, so a new choice reuses the toolchain layer. Each game is a
-# feature of ucbc-games, as in the Makefile's FEATURES.
-ARG UCBC_GAMES=
-RUN features=$(echo $UCBC_GAMES | sed 's#[^ ][^ ]*#ucbc-games/&#g; s# #,#g') \
-    && MATURIN_PEP517_ARGS="${features:+--no-default-features -F $features}" \
-    uv sync --frozen --no-dev --package ucbc-worker
+COPY pyproject.toml uv.lock Cargo.toml Cargo.lock ./
+COPY ucbc-engine/ ucbc-engine/
+COPY ucbc-games/ ucbc-games/
+COPY games/ games/
+COPY ucbc-dev/ ucbc-dev/
+COPY ucbc-py/ ucbc-py/
+COPY ucbc-sdk/ ucbc-sdk/
+COPY ucbc-api/ ucbc-api/
+COPY ucbc-worker/ ucbc-worker/
+RUN uv sync --frozen --no-dev --package ucbc-worker
 
 RUN useradd --create-home worker && chown -R worker:worker /app
 USER worker

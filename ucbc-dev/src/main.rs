@@ -26,8 +26,7 @@ enum Command {
     Api { game: String },
     /// Print the replay format, as JSON Schema.
     ReplaySchema,
-    /// Write every game's Python API module under `games`, as `<game>/_api.py`, and a
-    /// starter `<game>/__init__.py` for a game without one.
+    /// Write every game's Python API module under `games`, as `<game>/_api.py`.
     GenSdk {
         /// The `ucbc/games` directory.
         games: PathBuf,
@@ -69,17 +68,12 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::GenSdk { games } => {
             let registry = registry();
             for name in registry.names() {
-                let api = registry.api(name)?;
+                let module = sdk::generate(&registry.api(name)?)?;
                 let dir = games.join(name);
                 std::fs::create_dir_all(&dir)?;
                 let path = dir.join("_api.py");
-                std::fs::write(&path, sdk::generate(&api)?)?;
+                std::fs::write(&path, module)?;
                 println!("wrote {}", path.display());
-                let init = dir.join("__init__.py");
-                if !init.exists() {
-                    std::fs::write(&init, sdk::starter(&api))?;
-                    println!("wrote {}", init.display());
-                }
             }
             Ok(())
         }

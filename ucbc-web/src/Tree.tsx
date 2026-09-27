@@ -1,4 +1,3 @@
-import { renderers } from "@ucbc/viewer";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
@@ -160,13 +159,10 @@ function SubmissionsBranch({
   );
 }
 
-/** The games a submission can be for: those this build's viewer renders. */
-const GAMES = renderers.map((r) => r.game);
-
 function UploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [game, setGame] = useState(GAMES[0] ?? "");
+  const [game, setGame] = useState("tictactoe");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -204,12 +200,12 @@ function UploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }) {
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
-      <select value={game} onChange={(e) => setGame(e.target.value)}>
-        {GAMES.map((g) => (
-          <option key={g}>{g}</option>
-        ))}
-      </select>
-      <button disabled={!file || !game || busy}>upload zip</button>
+      <input
+        placeholder="game"
+        value={game}
+        onChange={(e) => setGame(e.target.value)}
+      />
+      <button disabled={!file || !game.trim() || busy}>upload zip</button>
       {error && <span className="error">{error}</span>}
     </form>
   );

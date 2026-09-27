@@ -1,14 +1,9 @@
 .PHONY: help setup dev gen sdk viewer-types viewer web wheels test test-api lint clean up down db deploy release-check release
 .DEFAULT_GOAL := help
 
-# The games a build includes, space-separated, or `all`: ucbc-games' default features unless
-# `make <target> GAMES=...` names others. It picks the engine's cargo features, the SDK and
-# viewer contents, and the images' games alike. Exported so npm and compose see the same
-# choice. Tests build every game: tic-tac-toe is the bot runtime's test fixture.
-GAMES ?= $(shell sed -n 's/^default = \[\(.*\)\]/\1/p' ucbc-games/Cargo.toml | tr -d '",')
-FEATURES = --no-default-features -F "$(addprefix ucbc-games/,$(GAMES))"
-export UCBC_GAMES = $(GAMES)
-test test-api: GAMES = all
+# Builds include ucbc-games' default games. The tests build every game: they play
+# tic-tac-toe, the bot runtime's fixture.
+test test-api: FEATURES = -F ucbc-games/all
 
 # `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.
 ENV ?= local
@@ -92,14 +87,8 @@ wheels: sdk viewer
 	rm -rf dist && mkdir -p dist
 	for t in $(TARGETS); do \
 	  uv run maturin build --release --zig --compatibility manylinux2014 --target $$t \
-	    -m ucbc-py/Cargo.toml -o dist $(FEATURES) || exit 1; done
-ifeq ($(GAMES),all)
+	    -m ucbc-py/Cargo.toml -o dist || exit 1; done
 	uv build --package ucbc-sdk -o dist
-else
-	tmp=$$(mktemp -d) && cp -r ucbc-sdk $$tmp/sdk \
-	  && find $$tmp/sdk/ucbc/games -mindepth 1 -maxdepth 1 -type d $(foreach g,$(GAMES),! -name $(g)) -exec rm -rf {} + \
-	  && uv build -o dist $$tmp/sdk && rm -rf $$tmp
-endif
 
 # Publishing: `ENV=prod make release` uploads dist/ to PyPI and tags the commit; any other
 # ENV is refused. PYPI_API_TOKEN comes from the environment, else .env.$(ENV) over .env,

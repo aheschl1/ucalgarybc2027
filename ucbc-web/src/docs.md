@@ -144,7 +144,7 @@ An upload may be at most 1 MiB zipped and 8 MiB unpacked.
 
    Without `zip` installed, `python3 -m zipfile -c ../mybot.zip main.py` does the same.
 3. On the [home page](/), under **submissions**, choose the zip, optionally give it a
-   name, pick the game, and press **upload zip**.
+   name, leave the game as `tictactoe`, and press **upload zip**.
 4. Under **matches**, pick one of your team's submissions, pick an opponent (any
    submission, including your own), set a seed if you like, and press **queue match**.
 

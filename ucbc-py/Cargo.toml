@@ -13,8 +13,7 @@ doctest = false
 bench = false
 
 [features]
-# The games compiled in: ucbc-games' default, or others with `--no-default-features
-# -F ucbc-games/<game>` (the Makefile's GAMES).
+# The games compiled in: ucbc-games' default.
 default = ["ucbc-games/default"]
 
 [dependencies]

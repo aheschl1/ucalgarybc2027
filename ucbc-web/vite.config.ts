@@ -4,9 +4,8 @@ import { defineConfig } from "vite";
 import { games } from "../ucbc-viewer/vite/games.ts";
 
 // The app calls /api/*; this forwards it to the API so the browser stays same-origin.
-// `UCBC_GAMES` (from `make ... GAMES=`) picks the viewer's bundled renderers.
 export default defineConfig({
-  plugins: [react(), games(process.env.UCBC_GAMES)],
+  plugins: [react(), games()],
   server: {
     proxy: {
       "/api": {

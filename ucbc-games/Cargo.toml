@@ -5,9 +5,8 @@ edition.workspace = true
 repository.workspace = true
 description = "Every game the engine can be built with, and which ones a build includes"
 
-# One feature per game, named as the game. `default` is what every build includes unless
-# told otherwise (the Makefile's GAMES reads that line); `all` is for tooling that covers
-# every game, like SDK and viewer-type generation.
+# One feature per game, named as the game. `default` is what a build includes; `all` is for
+# the tests and for tooling that covers every game, like SDK and viewer-type generation.
 [features]
 default = ["tictactoe"]
 all = ["tictactoe"]

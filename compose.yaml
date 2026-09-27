@@ -43,17 +43,13 @@ services:
       timeout: 2s
       retries: 15
 
-  # The API and the web app; migrates first. `make up GAMES=...` picks the web app's renderers
-  # and the worker's games alike; unset, the web app has every renderer and the worker
-  # ucbc-games' default.
+  # The API and the web app; migrates first.
   api:
     image: ucbc-api:${UCBC_TAG:-latest}
     restart: ${UCBC_RESTART:-no}
     build:
       context: .
       dockerfile: Dockerfile.api
-      args:
-        UCBC_GAMES: ${UCBC_GAMES:-}
     env_file:
       - .env
       - .env.${ENV:-local}
@@ -88,8 +84,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
-      args:
-        UCBC_GAMES: ${UCBC_GAMES:-}
     env_file:
       - .env
       - .env.${ENV:-local}

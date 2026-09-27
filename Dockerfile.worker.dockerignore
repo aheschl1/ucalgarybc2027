@@ -1,0 +1,17 @@
+# Used instead of .dockerignore for Dockerfile.worker: the Cargo and uv workspaces, every
+# ucbc-* crate and Python package, every game, and none of the web app.
+*
+!Cargo.toml
+!Cargo.lock
+!pyproject.toml
+!uv.lock
+!ucbc-*/
+!games/
+ucbc-web/
+ucbc-viewer/
+games/*/viewer/
+ucbc-api/api/static/
+ucbc-py/python/ucbc_engine/viewer/static/
+**/node_modules/
+**/target/
+**/__pycache__/

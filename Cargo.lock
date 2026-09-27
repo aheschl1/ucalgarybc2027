@@ -500,11 +500,10 @@ name = "ucbc-dev"
 version = "0.1.1"
 dependencies = [
  "clap",
- "rand",
  "schemars",
  "serde_json",
  "ucbc-engine",
- "ucbc-tictactoe",
+ "ucbc-games",
 ]
 
 [[package]]
@@ -520,6 +519,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ucbc-games"
+version = "0.1.1"
+dependencies = [
+ "ucbc-engine",
+ "ucbc-tictactoe",
+]
+
+[[package]]
 name = "ucbc-py"
 version = "0.1.1"
 dependencies = [
@@ -529,7 +536,7 @@ dependencies = [
  "serde",
  "serde_json",
  "ucbc-engine",
- "ucbc-tictactoe",
+ "ucbc-games",
 ]
 
 [[package]]

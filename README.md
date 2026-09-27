@@ -16,7 +16,11 @@ make up         # the platform in compose
 
 `make` alone lists these. Every target regenerates what it depends on, so the generated
 files (`ucbc-sdk/ucbc/games/*/_api.py`, `*.gen.ts`) only ever show up in `git status`,
-never as a failure. `GAME=tictactoe` on any target builds that game alone.
+never as a failure.
+
+`ucbc-games/Cargo.toml` lists every game, and its `default` feature line picks the games a
+build includes. `GAMES=tictactoe` (or `GAMES=all`) on any target picks others; `make test`
+always builds every game.
 
 ## Run a match
 
@@ -85,10 +89,11 @@ raw SQL in `op.execute`.
 | Path | Builds | Reached as |
 | --- | --- | --- |
 | `ucbc-engine/` | crate: game-agnostic engine | `use ucbc_engine` |
-| `ucbc-tictactoe/` | crate: example game + its viewer renderer | registered in `ucbc-py` and `ucbc-dev` |
+| `ucbc-games/` | crate: every game, and which a build includes | `ucbc-py`, `ucbc-dev` |
+| `games/<game>/` | crate: one game + its viewer renderer in `viewer/` | listed in `ucbc-games` |
 | `ucbc-py/` | pip dist `ucbc`: extension, bot process, CLI | `uv run ucbc`, `import ucbc_engine` |
 | `ucbc-sdk/` | pip dist `ucbc-sdk` | `import ucbc` inside a bot |
-| `ucbc-dev/` | cargo bin `ucbc-dev`, Rust only | `cargo run -p ucbc-dev`, `make sdk` |
+| `ucbc-dev/` | cargo bin `ucbc-dev`: replays, schemas, SDK generation | `cargo run -p ucbc-dev`, `make sdk` |
 | `ucbc-viewer/` | replay viewer (TS, Vite) | `ucbc view`, `make viewer` |
 | `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
 | `ucbc-worker/` | pip dist `ucbc-worker` | `uv run ucbc-worker` |

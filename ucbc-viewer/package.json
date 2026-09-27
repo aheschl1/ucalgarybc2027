@@ -8,8 +8,5 @@
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@ucbc/viewer-tictactoe": "*"
   }
 }

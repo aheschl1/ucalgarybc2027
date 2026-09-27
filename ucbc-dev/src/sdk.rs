@@ -506,6 +506,27 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
     Ok(out)
 }
 
+/// A new game's `__init__.py`: the handle a bot receives, with nothing added to the
+/// generated API yet. Written once; after that it is edited by hand.
+pub fn starter(api: &GameApi) -> String {
+    let (name, t) = (api.name, api.type_name);
+    format!(
+        r#""""The `{name}` game as a bot sees it. A bot's ``step`` receives a :class:`{t}Handle`."""
+
+from ucbc.games.{name}._api import {t}Api
+
+__all__ = ["HANDLE", "{t}Handle"]
+
+
+class {t}Handle({t}Api):
+    """Conveniences over the generated queries and actions go here."""
+
+
+HANDLE = {t}Handle
+"#
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -581,5 +602,17 @@ mod tests {
         bad.query_response = json!({"title": "Odd", "type": "object",
             "properties": {"inline": {"type": "object", "properties": {}}}});
         assert!(generate(&bad).unwrap_err().contains("inline objects"));
+    }
+
+    #[test]
+    fn starts_a_handle_on_the_generated_api() {
+        let py = starter(&api());
+        for line in [
+            "from ucbc.games.demo._api import DemoApi",
+            "class DemoHandle(DemoApi):",
+            "HANDLE = DemoHandle",
+        ] {
+            assert!(py.contains(line), "missing {line:?} in:\n{py}");
+        }
     }
 }

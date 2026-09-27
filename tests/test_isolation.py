@@ -30,14 +30,16 @@ def test_bot_inherits_only_allowlisted_env(
         "    handle.place(*handle.empty_cells()[0])\n"
     )
     replay = tmp_path / "replay.json"
-    run_match(team, bot("first_empty"), sets=1, replay_path=replay)
+    run_match(team, bot("first_empty"), game="tictactoe", sets=1, replay_path=replay)
     output = json.loads(replay.read_text())["sets"][0]["ticks"][0]["steps"][0]["stdout"]
     assert output.splitlines() == [pythonpath, "None", "None", "None"]
 
 
 def test_output_is_captured_per_step(bot: BotPath, tmp_path: Path) -> None:
     replay = tmp_path / "replay.json"
-    run_match(bot("testing/prints"), bot("first_empty"), sets=1, replay_path=replay)
+    run_match(
+        bot("testing/prints"), bot("first_empty"), game="tictactoe", sets=1, replay_path=replay
+    )
     ticks = json.loads(replay.read_text())["sets"][0]["ticks"]
     # Output written while main.py loads arrives with the first step.
     assert ticks[0]["steps"][0]["stdout"] == "loaded utf-8 True\ntick 0 as X\n"
@@ -47,7 +49,9 @@ def test_output_is_captured_per_step(bot: BotPath, tmp_path: Path) -> None:
 
 def test_bots_have_separate_globals_and_memory(bot: BotPath, tmp_path: Path) -> None:
     replay = tmp_path / "replay.json"
-    run_match(bot("testing/counter"), bot("testing/counter"), sets=2, replay_path=replay)
+    run_match(
+        bot("testing/counter"), bot("testing/counter"), game="tictactoe", sets=2, replay_path=replay
+    )
     sets = json.loads(replay.read_text())["sets"]
     out = [st["stdout"].strip() for t in sets[0]["ticks"] for st in t["steps"]]
     # Each bot counts its own steps; neither sees the other's globals or memory.

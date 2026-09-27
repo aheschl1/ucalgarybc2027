@@ -13,7 +13,7 @@ BotPath = Callable[[str], Path]
 
 def set0(bot: BotPath, name: str, tmp_path: Path) -> dict[str, Any]:
     replay = tmp_path / "replay.json"
-    run_match(bot("first_empty"), bot(name), sets=1, replay_path=replay)
+    run_match(bot("first_empty"), bot(name), game="tictactoe", sets=1, replay_path=replay)
     result: dict[str, Any] = json.loads(replay.read_text())["sets"][0]
     return result
 
@@ -32,7 +32,9 @@ def test_missing_step_fails_to_load(bot: BotPath, tmp_path: Path) -> None:
 
 def test_set_over_and_rejections_are_distinct(bot: BotPath, tmp_path: Path) -> None:
     replay = tmp_path / "replay.json"
-    run_match(bot("testing/set_over"), bot("first_empty"), sets=1, replay_path=replay)
+    run_match(
+        bot("testing/set_over"), bot("first_empty"), game="tictactoe", sets=1, replay_path=replay
+    )
     s = json.loads(replay.read_text())["sets"][0]
     assert s["result"]["reason"] == "win"
     out = [st["stdout"].strip() for st in steps_of(s, 0)]

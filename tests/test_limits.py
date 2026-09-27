@@ -19,7 +19,14 @@ def set0(
     bot: BotPath, name: str, tmp_path: Path, sets: int = 1, step_ms: int = STEP_MS
 ) -> dict[str, Any]:
     replay = tmp_path / "replay.json"
-    run_match(bot("first_empty"), bot(name), sets=sets, replay_path=replay, step_ms=step_ms)
+    run_match(
+        bot("first_empty"),
+        bot(name),
+        game="tictactoe",
+        sets=sets,
+        replay_path=replay,
+        step_ms=step_ms,
+    )
     result: dict[str, Any] = json.loads(replay.read_text())
     return result
 
@@ -128,12 +135,24 @@ def test_steps_record_time_and_memory(bot: BotPath, tmp_path: Path) -> None:
 
 def test_limits_are_set_per_match_and_recorded(bot: BotPath, tmp_path: Path) -> None:
     replay = tmp_path / "replay.json"
-    run_match(bot("first_empty"), bot("testing/churn"), sets=1, replay_path=replay, step_ms=50)
+    run_match(
+        bot("first_empty"),
+        bot("testing/churn"),
+        game="tictactoe",
+        sets=1,
+        replay_path=replay,
+        step_ms=50,
+    )
     slow = json.loads(replay.read_text())
     assert slow["config"]["limits"] == {"step_ms": 50, "memory_bytes": 2**30}
     assert "did not place a mark" in forfeited(slow)
     run_match(
-        bot("first_empty"), bot("testing/churn"), sets=1, replay_path=replay, memory_bytes=2**26
+        bot("first_empty"),
+        bot("testing/churn"),
+        game="tictactoe",
+        sets=1,
+        replay_path=replay,
+        memory_bytes=2**26,
     )
     small = json.loads(replay.read_text())
     assert small["config"]["limits"] == {"step_ms": STEP_MS, "memory_bytes": 2**26}
@@ -146,6 +165,7 @@ def test_a_bot_that_swallows_everything_is_killed_at_set_end(bot: BotPath, tmp_p
     replay = tmp_path / "replay.json"
     cmd = [sys.executable, "-c", "from ucbc_engine.cli import main; main()", "run"]
     args = [str(bot("first_empty")), str(bot("testing/swallows")), "--sets", "1"]
+    args += ["--game", "tictactoe"]
     done = subprocess.run(
         [*cmd, *args, "--replay", str(replay)],
         capture_output=True,

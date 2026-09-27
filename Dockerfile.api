@@ -1,16 +1,15 @@
-# The web app, built once. UCBC_GAME (empty: every game) picks the bundled viewer renderer.
+# syntax=docker/dockerfile:1.20
+
+# The web app, built once. UCBC_GAMES (empty: every game) picks the bundled viewer renderers.
+# Renderers are found by path, `games/*/viewer`, so a new game needs no edit here.
 FROM node:22-alpine AS web
-ARG UCBC_GAME=
-ENV UCBC_GAME=$UCBC_GAME
+ARG UCBC_GAMES=
+ENV UCBC_GAMES=$UCBC_GAMES
 WORKDIR /src
-COPY package.json package-lock.json tsconfig.base.json ./
-COPY ucbc-web/package.json ucbc-web/
-COPY ucbc-viewer/package.json ucbc-viewer/
-COPY ucbc-tictactoe/viewer/package.json ucbc-tictactoe/viewer/
-RUN npm ci -w ucbc-web
-COPY ucbc-viewer/ ucbc-viewer/
-COPY ucbc-tictactoe/viewer/ ucbc-tictactoe/viewer/
-COPY ucbc-web/ ucbc-web/
+COPY --parents package.json package-lock.json tsconfig.base.json ucbc-viewer/package.json \
+    ucbc-web/package.json games/*/viewer/package.json ./
+RUN npm ci
+COPY --parents ucbc-viewer ucbc-web games/*/viewer ./
 RUN npm run build -w ucbc-web -- --outDir /out --emptyOutDir
 
 # The API, serving the web app at / and itself at /api.

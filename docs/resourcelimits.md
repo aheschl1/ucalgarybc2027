@@ -15,7 +15,6 @@ MatchConfig::new("tictactoe", 3, seed, 2, BotResourceLimit::new(50, 256 << 20))
 
 ```bash
 uv run ucbc run a/ b/ --step-ms 50 --memory-mb 256          # defaults: 500 ms, 1024 MiB
-cargo run -p ucbc-dev -- run --step-ms 50 --memory-mb 256   # same defaults
 ```
 
 ```python

@@ -13,16 +13,15 @@ doctest = false
 bench = false
 
 [features]
-# One feature per game; `maturin build --no-default-features -F <game>` builds a
-# single-game wheel.
-default = ["tictactoe"]
-tictactoe = ["dep:ucbc-tictactoe"]
+# The games compiled in: ucbc-games' default, or others with `--no-default-features
+# -F ucbc-games/<game>` (the Makefile's GAMES).
+default = ["ucbc-games/default"]
 
 [dependencies]
 # abi3: one wheel per platform serves every Python from 3.12 on.
 pyo3 = { workspace = true, features = ["extension-module", "abi3-py312"] }
 ucbc-engine = { workspace = true }
-ucbc-tictactoe = { workspace = true, optional = true }
+ucbc-games = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 nix = { workspace = true }

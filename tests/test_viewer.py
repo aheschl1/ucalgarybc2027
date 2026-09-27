@@ -59,7 +59,8 @@ def test_run_view_writes_a_replay_and_opens_it(
     opened: list[Path] = []
     monkeypatch.setattr(viewer, "open_viewer", lambda replay: opened.append(replay))
     result = CliRunner().invoke(
-        main, ["run", str(bot("first_empty")), str(bot("random")), "--view"]
+        main,
+        ["run", str(bot("first_empty")), str(bot("random")), "--game", "tictactoe", "--view"],
     )
     assert result.exit_code == 0, result.output
     assert len(opened) == 1 and opened[0].is_file()
@@ -70,7 +71,8 @@ def test_run_view_fails_before_the_match_when_unbuilt(
 ) -> None:
     monkeypatch.setattr(viewer, "STATIC", tmp_path)
     result = CliRunner().invoke(
-        main, ["run", str(bot("first_empty")), str(bot("random")), "--view"]
+        main,
+        ["run", str(bot("first_empty")), str(bot("random")), "--game", "tictactoe", "--view"],
     )
     assert result.exit_code != 0
     assert "make viewer" in result.output

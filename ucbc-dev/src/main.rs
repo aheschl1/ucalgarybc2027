@@ -1,6 +1,6 @@
-//! Developer CLI: Rust-vs-Rust tic-tac-toe matches and replay inspection, no Python.
+//! Developer CLI: replay inspection, schemas, and SDK generation, no Python. Sees every
+//! game in the repo, whatever a build includes.
 
-mod bots;
 mod sdk;
 
 use std::path::PathBuf;
@@ -8,14 +8,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use ucbc_engine::replay::read_replay;
-use ucbc_engine::{
-    BotResourceLimit, Game, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Replay, SetReplay,
-    TeamId, TeamInfo,
-};
-use ucbc_tictactoe::{Board, TicTacToe};
+use ucbc_engine::{Replay, SetReplay, TeamId, TeamInfo};
+use ucbc_games::registry;
 
 #[derive(Parser)]
-#[command(name = "ucbc-dev", about = "Run and inspect matches without Python")]
+#[command(name = "ucbc-dev", about = "Inspect replays and generate code")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -23,36 +20,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Play two built-in Rust bots against each other.
-    Run {
-        /// Bot kind for team a.
-        #[arg(long, default_value = "first-empty", value_parser = bots::KINDS)]
-        a: String,
-        /// Bot kind for team b.
-        #[arg(long, default_value = "random", value_parser = bots::KINDS)]
-        b: String,
-        #[arg(long, default_value_t = 3)]
-        sets: u32,
-        #[arg(long, default_value_t = 0)]
-        seed: u64,
-        /// Time budget per bot step, in milliseconds.
-        #[arg(long, default_value_t = 500)]
-        step_ms: u64,
-        /// Memory budget per bot, in mebibytes.
-        #[arg(long, default_value_t = 1024)]
-        memory_mb: u64,
-        #[arg(long)]
-        replay: Option<PathBuf>,
-        #[arg(long)]
-        summary: Option<PathBuf>,
-    },
-    /// Print the sets and final boards of a replay file.
+    /// Print the sets and result of a replay file.
     Inspect { replay: PathBuf },
     /// Print what a game exposes to bots, as JSON Schema.
     Api { game: String },
     /// Print the replay format, as JSON Schema.
     ReplaySchema,
-    /// Write every game's Python API module under `games`, as `<game>/_api.py`.
+    /// Write every game's Python API module under `games`, as `<game>/_api.py`, and a
+    /// starter `<game>/__init__.py` for a game without one.
     GenSdk {
         /// The `ucbc/games` directory.
         games: PathBuf,
@@ -69,49 +44,8 @@ fn main() -> ExitCode {
     }
 }
 
-fn registry() -> GameRegistry {
-    let mut registry = GameRegistry::new();
-    registry.register::<TicTacToe>();
-    registry
-}
-
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
-        Command::Run {
-            a,
-            b,
-            sets,
-            seed,
-            step_ms,
-            memory_mb,
-            replay,
-            summary,
-        } => {
-            let teams = vec![
-                bots::team(&a, &a).expect("validated by clap"),
-                bots::team(&b, &b).expect("validated by clap"),
-            ];
-            let mut spec = MatchSpec::new(
-                "dev",
-                MatchConfig::new(
-                    TicTacToe::NAME,
-                    sets,
-                    seed,
-                    2,
-                    BotResourceLimit::new(step_ms, memory_mb << 20),
-                ),
-                teams,
-            );
-            if let Some(path) = replay {
-                spec = spec.replay_path(path);
-            }
-            if let Some(path) = summary {
-                spec = spec.summary_path(path);
-            }
-            let report = MatchRunner::new(&registry(), spec)?.run()?;
-            print_replay(&report.replay);
-            Ok(())
-        }
         Command::Inspect { replay } => {
             let replay = read_replay(&replay)?;
             println!(
@@ -135,10 +69,17 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::GenSdk { games } => {
             let registry = registry();
             for name in registry.names() {
-                let module = sdk::generate(&registry.api(name)?)?;
-                let path = games.join(name).join("_api.py");
-                std::fs::write(&path, module)?;
+                let api = registry.api(name)?;
+                let dir = games.join(name);
+                std::fs::create_dir_all(&dir)?;
+                let path = dir.join("_api.py");
+                std::fs::write(&path, sdk::generate(&api)?)?;
                 println!("wrote {}", path.display());
+                let init = dir.join("__init__.py");
+                if !init.exists() {
+                    std::fs::write(&init, sdk::starter(&api))?;
+                    println!("wrote {}", init.display());
+                }
             }
             Ok(())
         }
@@ -179,11 +120,4 @@ fn print_set(set: &SetReplay, teams: &[TeamInfo]) {
         set.index + 1,
         r.ticks
     );
-    if let Some(last) = set.ticks.last()
-        && let Ok(board) = serde_json::from_value::<Board>(last.state_after.clone())
-    {
-        for line in board.render().lines() {
-            println!("  {line}");
-        }
-    }
 }

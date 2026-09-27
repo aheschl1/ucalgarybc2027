@@ -10,17 +10,7 @@ use pyo3::prelude::*;
 use serde_json::json;
 
 use process::PyTeam;
-use ucbc_engine::{BotResourceLimit, GameRegistry, MatchConfig, MatchRunner, MatchSpec, TeamSpec};
-
-/// Every game compiled into this wheel.
-fn registry() -> GameRegistry {
-    // `mut` is unused in a build with no game features.
-    #[allow(unused_mut)]
-    let mut registry = GameRegistry::new();
-    #[cfg(feature = "tictactoe")]
-    registry.register::<ucbc_tictactoe::TicTacToe>();
-    registry
-}
+use ucbc_engine::{BotResourceLimit, MatchConfig, MatchRunner, MatchSpec, TeamSpec};
 
 fn to_pyerr(e: impl std::fmt::Display) -> PyErr {
     PyRuntimeError::new_err(e.to_string())
@@ -66,7 +56,7 @@ fn run_match(
             Err(failure) => TeamSpec::unavailable(name, failure),
         })
         .collect();
-    let registry = registry();
+    let registry = ucbc_games::registry();
     let limits = BotResourceLimit::new(step_ms, memory_bytes);
     let config = MatchConfig::new(game, sets, seed, 0, limits);
     let mut spec = MatchSpec::new(match_id, config, teams).echo_bot_output(echo_bot_output);
@@ -158,7 +148,7 @@ fn lockdown() -> PyResult<()> {
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_match, m)?)?;
     m.add_function(wrap_pyfunction!(lockdown, m)?)?;
-    m.add("GAMES", registry().names())?;
+    m.add("GAMES", ucbc_games::registry().names())?;
     m.add("__version__", ucbc_engine::ENGINE_VERSION)?;
     Ok(())
 }

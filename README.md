@@ -14,10 +14,6 @@ make lint
 make up         # the platform in compose
 ```
 
-`make` alone lists these. Every target regenerates what it depends on, so the generated
-files (`ucbc-sdk/ucbc/games/*/_api.py`, `*.gen.ts`) only ever show up in `git status`,
-never as a failure.
-
 `default` in `ucbc-games/Cargo.toml` picks the games a build includes; `make test` builds
 every game.
 

@@ -22,5 +22,4 @@ jobs:
         with:
           python-version-file: .python-version
       - uses: astral-sh/setup-uv@v10.2.0
-      - run: uv sync --all-packages --group dev
       - run: make test

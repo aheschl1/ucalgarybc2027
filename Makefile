@@ -14,18 +14,18 @@ PY := ucbc-cli/python ucbc-api ucbc-worker alembic tests bots
 help:
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##\s*/\t/' | column -ts '	' | sed 's/^/  /'
 
-setup: .env .env.local gen viewer  ## first setup: env files, generated code, viewer, .venv with the engine
-	uv sync
+setup: .env .env.local dev  ## once: env files, then everything `make dev` does
 
-dev: gen  ## after Rust changes: regenerate the SDK and viewer types, rebuild the extension
-	cd ucbc-cli && uv run maturin develop --uv $(FEATURES)
+# uv builds the engine, here and only here: a `uv run` afterwards leaves the build alone.
+dev: gen viewer  ## after any change: generated code, the viewer page, dependencies and the engine in .venv
+	MATURIN_PEP517_ARGS="$(FEATURES)" uv sync --all-packages --reinstall-package ucbc
 
 test: dev .env .env.local  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
 	uv run pytest
 	npm test --workspaces --if-present
 
-test-api: dev .env .env.local  ## API and worker tests alone
+test-api: dev .env .env.local
 	uv run pytest tests/api
 
 lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale checkout shows in git status
@@ -36,7 +36,7 @@ lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale c
 	uv run mypy
 	npm run typecheck --workspaces
 
-up: .env .env.$(ENV)
+up: .env .env.$(ENV)  ## the platform in Docker
 	$(COMPOSE) up --build
 
 down:  ## stop compose

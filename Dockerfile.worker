@@ -1,22 +1,35 @@
-# The worker plays matches with `ucbc run`, so its environment holds the engine wheel,
-# built here from source with the Rust toolchain, with ucbc-games' default games.
-FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+# The engine wheel, `ucbc` with ucbc-games' default games, built from the Rust crates and
+# ucbc-cli alone, so a change to the API or the worker reuses it.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS engine
 
-ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/root/.cargo/bin:/app/.venv/bin:$PATH"
+ENV PATH="/root/.cargo/bin:$PATH"
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates \
     && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
     && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
+WORKDIR /src
 
-COPY pyproject.toml uv.lock Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock ./
 COPY ucbc-engine/ ucbc-engine/
 COPY ucbc-games/ ucbc-games/
 COPY games/ games/
 COPY ucbc-dev/ ucbc-dev/
 COPY ucbc-cli/ ucbc-cli/
+RUN uv build --wheel ucbc-cli --out-dir /wheels
+
+# The worker plays matches with `ucbc run`: the API and worker packages plus that wheel,
+# with no toolchain beside the bots it runs.
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+COPY ucbc-cli/pyproject.toml ucbc-cli/
 COPY ucbc-api/ ucbc-api/
 COPY ucbc-worker/ ucbc-worker/
-RUN uv sync --frozen --no-dev --package ucbc-worker
+RUN uv sync --frozen --no-dev --package ucbc-worker --no-install-package ucbc
+COPY --from=engine /wheels /wheels
+RUN uv pip install --no-deps /wheels/*.whl && rm -rf /wheels
 
 RUN useradd --create-home worker && chown -R worker:worker /app
 USER worker

@@ -16,6 +16,6 @@ dist/
 !package-lock.json
 !tsconfig*.json
 node_modules/
-ucbc-py/python/ucbc_engine/viewer/static/
+ucbc-cli/python/ucbc/viewer/static/
 ucbc-api/api/static/
 compose.override.yaml

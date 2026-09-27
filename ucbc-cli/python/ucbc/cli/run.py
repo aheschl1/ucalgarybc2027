@@ -2,7 +2,7 @@ from pathlib import Path
 
 import click
 
-from ucbc_engine.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
+from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 
 
 @click.command()
@@ -44,8 +44,8 @@ def run(
     import signal
     import tempfile
 
-    from ucbc_engine import viewer
-    from ucbc_engine.runner import run_match
+    from ucbc import viewer
+    from ucbc.runner import run_match
 
     # The match runs in Rust; let Ctrl-C end the process instead of waiting for it.
     signal.signal(signal.SIGINT, signal.SIG_DFL)

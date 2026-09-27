@@ -1,4 +1,4 @@
-//! Python teams as child processes, one per bot: `python -m ucbc_engine._bot`, spoken to
+//! Python teams as child processes, one per bot: `python -m ucbc._bot`, spoken to
 //! over its stdin and stdout in line-delimited JSON. The process is the unit of
 //! isolation and of enforcement. A bot past its step budget is stopped with
 //! `SIGSTOP` and resumed at its next turn with `SIGCONT`; at despawn it is killed.
@@ -129,7 +129,7 @@ impl PyBot {
             }
         }
         let mut child = command
-            .args(["-m", "ucbc_engine._bot"])
+            .args(["-m", "ucbc._bot"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()

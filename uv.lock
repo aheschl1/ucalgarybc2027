@@ -11,7 +11,6 @@ resolution-markers = [
 members = [
     "ucbc",
     "ucbc-api",
-    "ucbc-sdk",
     "ucbc-worker",
 ]
 
@@ -1577,17 +1576,13 @@ wheels = [
 [[package]]
 name = "ucbc"
 version = "0.1.1"
-source = { editable = "ucbc-py" }
+source = { editable = "ucbc-cli" }
 dependencies = [
     { name = "click" },
-    { name = "ucbc-sdk" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "click", specifier = ">=8.1" },
-    { name = "ucbc-sdk", editable = "ucbc-sdk" },
-]
+requires-dist = [{ name = "click", specifier = ">=8.1" }]
 
 [[package]]
 name = "ucbc-api"
@@ -1625,11 +1620,6 @@ requires-dist = [
 ]
 
 [[package]]
-name = "ucbc-sdk"
-version = "0.1.1"
-source = { editable = "ucbc-sdk" }
-
-[[package]]
 name = "ucbc-worker"
 version = "0.1.0"
 source = { editable = "ucbc-worker" }
@@ -1642,7 +1632,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
-    { name = "ucbc", editable = "ucbc-py" },
+    { name = "ucbc", editable = "ucbc-cli" },
     { name = "ucbc-api", editable = "ucbc-api" },
 ]
 

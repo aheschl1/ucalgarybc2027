@@ -1,4 +1,4 @@
-//! `ucbc_engine._engine`: the match engine as a Python extension module, plus the Python
+//! `ucbc._engine`: the match engine as a Python extension module, plus the Python
 //! bot runtime.
 
 mod process;
@@ -127,7 +127,7 @@ const REFUSED: &[&str] = &[
 ];
 
 /// Locks the calling process down for the rest of its life: it dies with its
-/// parent, and the calls in `REFUSED` fail with `EPERM`. `ucbc_engine._bot` calls this
+/// parent, and the calls in `REFUSED` fail with `EPERM`. `ucbc._bot` calls this
 /// after its imports and before running the team's code.
 #[pyfunction]
 fn lockdown() -> PyResult<()> {

@@ -1,7 +1,7 @@
 import click
 
-from ucbc_engine.cli.run import run
-from ucbc_engine.cli.view import view
+from ucbc.cli.run import run
+from ucbc.cli.view import view
 
 
 @click.group()

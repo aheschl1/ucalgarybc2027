@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ucbc_engine.runner import run_match
+from ucbc.runner import run_match
 
 BotPath = Callable[[str], Path]
 STEP_MS = 500
@@ -88,7 +88,7 @@ def test_the_process_is_locked_down(bot: BotPath, tmp_path: Path) -> None:
 
 
 def test_sockets_are_refused() -> None:
-    probe = "import socket; from ucbc_engine import _engine; _engine.lockdown(); socket.socket()"
+    probe = "import socket; from ucbc import _engine; _engine.lockdown(); socket.socket()"
     done = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=False
     )
@@ -163,7 +163,7 @@ def test_a_bot_that_swallows_everything_is_killed_at_set_end(bot: BotPath, tmp_p
     """Runs the CLI in a subprocess: a surviving bot process would hold its stderr
     open and the run would not return."""
     replay = tmp_path / "replay.json"
-    cmd = [sys.executable, "-c", "from ucbc_engine.cli import main; main()", "run"]
+    cmd = [sys.executable, "-c", "from ucbc.cli import main; main()", "run"]
     args = [str(bot("first_empty")), str(bot("testing/swallows")), "--sets", "1"]
     args += ["--game", "tictactoe"]
     done = subprocess.run(

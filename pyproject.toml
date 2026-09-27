@@ -1,8 +1,8 @@
-# Workspace root. `pip install ucbc` is the `ucbc-py` distribution: the extension,
-# runtime, and CLI, which depends on `ucbc-sdk`, the pure `ucbc` package bots import.
+# Workspace root. `pip install ucbc` is `ucbc-cli`: the package bots import, the engine
+# extension, the bot runtime, and the CLI.
 
 [tool.uv.workspace]
-members = ["ucbc-sdk", "ucbc-py", "ucbc-api", "ucbc-worker"]
+members = ["ucbc-cli", "ucbc-api", "ucbc-worker"]
 
 [dependency-groups]
 dev = [
@@ -37,7 +37,7 @@ exclude = ["**/_api.py"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["ucbc-sdk", "ucbc-py/python", "ucbc-api", "ucbc-worker", "alembic", "tests", "bots"]
+files = ["ucbc-cli/python", "ucbc-api", "ucbc-worker", "alembic", "tests", "bots"]
 exclude = ["bots/tictactoe/testing/syntax_error"]
-mypy_path = "ucbc-sdk:ucbc-py/python:ucbc-api:ucbc-worker"
+mypy_path = "ucbc-cli/python:ucbc-api:ucbc-worker"
 explicit_package_bases = true

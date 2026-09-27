@@ -9,6 +9,6 @@ import click
 @click.option("--no-browser", is_flag=True, help="Print the URL without opening a browser.")
 def view(replay: Path, port: int, no_browser: bool) -> None:
     """Open REPLAY in the viewer, served on localhost until Ctrl-C."""
-    from ucbc_engine import viewer
+    from ucbc import viewer
 
     viewer.open_viewer(replay, port, browser=not no_browser)

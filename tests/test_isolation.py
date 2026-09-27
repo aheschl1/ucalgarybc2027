@@ -4,8 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-
-from ucbc_engine.runner import run_match
+from ucbc.runner import run_match
 
 BotPath = Callable[[str], Path]
 

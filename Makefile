@@ -9,7 +9,7 @@ test test-api: FEATURES = -F ucbc-games/all
 ENV ?= local
 COMPOSE := docker compose --env-file .env --env-file .env.$(ENV)
 
-PY := ucbc-sdk ucbc-py/python ucbc-api ucbc-worker alembic tests bots
+PY := ucbc-cli/python ucbc-api ucbc-worker alembic tests bots
 
 help:
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##\s*/\t/' | column -ts '	' | sed 's/^/  /'
@@ -18,7 +18,7 @@ setup: .env .env.local gen viewer  ## first setup: env files, generated code, vi
 	uv sync
 
 dev: gen  ## after Rust changes: regenerate the SDK and viewer types, rebuild the extension
-	cd ucbc-py && uv run maturin develop --uv $(FEATURES)
+	cd ucbc-cli && uv run maturin develop --uv $(FEATURES)
 
 test: dev .env .env.local  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
@@ -60,14 +60,14 @@ node_modules: package-lock.json
 gen: sdk viewer-types
 
 sdk:
-	cargo run -q -p ucbc-dev -- gen-sdk ucbc-sdk/ucbc/games
+	cargo run -q -p ucbc-dev -- gen-sdk ucbc-cli/python/ucbc/games
 
 viewer-types: node_modules
 	node ucbc-viewer/scripts/gen-types.mjs
 
-# The viewer page, built into the ucbc_engine package for `ucbc view`.
+# The viewer page, built into the ucbc package for `ucbc view`.
 viewer: viewer-types
-	npm run build -w @ucbc/viewer -- --outDir ../ucbc-py/python/ucbc_engine/viewer/static --emptyOutDir
+	npm run build -w @ucbc/viewer -- --outDir ../ucbc-cli/python/ucbc/viewer/static --emptyOutDir
 
 # The platform frontend, built into the API package so `ucbc-api` serves it at /.
 web: viewer-types
@@ -79,28 +79,25 @@ db: .env .env.$(ENV)
 
 # Release
 
-# Release files into dist/: ucbc (engine, runtime, CLI) as one abi3 manylinux wheel per
-# TARGETS entry, cross-compiled with zig (`rustup target add` each once), and ucbc-sdk.
-# ucbc gets no sdist: a platform without a wheel should fail to find one, not try to build.
+# Release files into dist/: ucbc as one abi3 manylinux wheel per TARGETS entry,
+# cross-compiled with zig (`rustup target add` each once). No sdist: a platform without a
+# wheel should fail to find one, not try to build.
 TARGETS := x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 wheels: sdk viewer
 	rm -rf dist && mkdir -p dist
 	for t in $(TARGETS); do \
 	  uv run maturin build --release --zig --compatibility manylinux2014 --target $$t \
-	    -m ucbc-py/Cargo.toml -o dist || exit 1; done
-	uv build --package ucbc-sdk -o dist
+	    -m ucbc-cli/Cargo.toml -o dist || exit 1; done
 
 # Publishing: `ENV=prod make release` uploads dist/ to PyPI and tags the commit; any other
 # ENV is refused. PYPI_API_TOKEN comes from the environment, else .env.$(ENV) over .env,
 # like every other setting. A version can be uploaded once, ever. release-check refuses
 # versions that disagree or a dirty tree, then installs the x86_64 wheel in clean containers
 # and plays a match.
-VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-py/pyproject.toml)
+VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-cli/pyproject.toml)
 release-check: wheels
-	@grep -q '^version = "$(VERSION)"' ucbc-sdk/pyproject.toml \
-	  && grep -q '^version = "$(VERSION)"' Cargo.toml \
-	  && grep -q '"ucbc-sdk==$(VERSION)"' ucbc-py/pyproject.toml \
-	  || { echo "versions disagree with ucbc-py $(VERSION)"; exit 1; }
+	@grep -q '^version = "$(VERSION)"' Cargo.toml \
+	  || { echo "versions disagree with ucbc-cli $(VERSION)"; exit 1; }
 	@test -z "$$(git status --porcelain)" || { echo "commit or stash first"; exit 1; }
 	uvx twine check dist/*
 	for py in 3.12 3.14; do \

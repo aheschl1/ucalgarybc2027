@@ -18,8 +18,7 @@ WORKDIR /app
 
 # uv reads every workspace member's manifest; only ucbc-api is installed.
 COPY pyproject.toml uv.lock ./
-COPY ucbc-sdk/pyproject.toml ucbc-sdk/
-COPY ucbc-py/pyproject.toml ucbc-py/
+COPY ucbc-cli/pyproject.toml ucbc-cli/
 COPY ucbc-worker/pyproject.toml ucbc-worker/
 COPY ucbc-api/ ucbc-api/
 COPY alembic.ini ./

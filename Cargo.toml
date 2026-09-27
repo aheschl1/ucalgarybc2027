@@ -3,7 +3,7 @@ resolver = "3"
 members = [
     "ucbc-engine",
     "ucbc-games",
-    "ucbc-py",
+    "ucbc-cli",
     "ucbc-dev",
 ]
 

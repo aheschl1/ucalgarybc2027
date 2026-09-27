@@ -10,6 +10,8 @@ pub fn registry() -> GameRegistry {
     let mut registry = GameRegistry::new();
     #[cfg(feature = "tictactoe")]
     registry.register::<ucbc_tictactoe::TicTacToe>();
+    #[cfg(feature = "ucbc2027")]
+    registry.register::<ucbc_2027::Ucbc2027>();
     registry
 }
 

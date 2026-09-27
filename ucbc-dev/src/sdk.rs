@@ -399,9 +399,10 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
     } else {
         "from dataclasses import dataclass\n"
     });
-    out.push_str(
-        "from enum import Enum\nfrom typing import Any, Self\n\nfrom ucbc.handle import Handle\n",
-    );
+    if types.0.values().any(|t| matches!(t.def, Def::Enum(_))) {
+        out.push_str("from enum import Enum\n");
+    }
+    out.push_str("from typing import Any, Self\n\nfrom ucbc.handle import Handle\n");
 
     for (name, named) in &types.0 {
         out.push_str("\n\n");

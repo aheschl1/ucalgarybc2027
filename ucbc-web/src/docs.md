@@ -62,16 +62,15 @@ class to extend and nothing to register.
 
 ```python
 # mybot/main.py
-from ucbc.games.tictactoe import TicTacToeHandle
+from ucbc.games.ucbc2027 import Ucbc2027Handle
 
 
-def step(handle: TicTacToeHandle) -> None:
-    handle.place(*handle.empty_cells()[0])
+def step(handle: Ucbc2027Handle) -> None:
+    handle.noop()
 ```
 
 The engine calls `step` each time it is your bot's turn to act. The handle is how the
 bot sees the game and acts on it; your editor will list what the game's handle offers.
-Take exactly one action per step: a step that ends without one forfeits the set.
 
 A match is a few sets. Module globals and the `handle.memory` dict persist from step to
 step within a set, and each set starts fresh. `handle.seed` differs per bot and per set
@@ -106,7 +105,7 @@ step that printed it, for local matches and for matches run here, and
 `ucbc run ... --show-bot-output` prints it in the terminal:
 
 ```
-[set 1 tick 1 team mybot bot 0] empty: 6
+[set 1 tick 1 team mybot bot 0] tick 1
 ```
 
 This is the only way to see inside your bot during a match on the site, so print
@@ -144,7 +143,7 @@ An upload may be at most 1 MiB zipped and 8 MiB unpacked.
 
    Without `zip` installed, `python3 -m zipfile -c ../mybot.zip main.py` does the same.
 3. On the [home page](/), under **submissions**, choose the zip, optionally give it a
-   name, leave the game as `tictactoe`, and press **upload zip**.
+   name, leave the game as `ucbc2027`, and press **upload zip**.
 4. Under **matches**, pick one of your team's submissions, pick an opponent (any
    submission, including your own), set a seed if you like, and press **queue match**.
 

@@ -6,12 +6,15 @@
 graph LR
     engine[ucbc-engine<br/>game-agnostic core]
     ttt[games/tictactoe<br/>impl Game]
+    g27[games/ucbc2027<br/>impl Game]
     games[ucbc-games<br/>every game, feature per game]
     py[ucbc-py<br/>ucbc_engine._engine + bot process]
     cli[ucbc-dev]
     sdk[ucbc-sdk<br/>python: handle, games/]
     ttt --> engine
     games -. feature per game .-> ttt
+    games -. feature per game .-> g27
+    g27 --> engine
     py --> engine
     py -- default features --> games
     cli --> engine
@@ -187,6 +190,15 @@ Replay { match_id, engine_version, config { game, sets, seed, teams, max_ticks, 
 
 Deterministic for a fixed seed except `usage`: no timestamps, sorted JSON keys, ChaCha8
 seeds (`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
+
+## Games
+
+```text
+ucbc2027    the competition game and the default build. Its rules are not written yet: one
+            query (state: ticks so far) and one action (noop), so every set draws at the
+            tick limit.
+tictactoe   the example game, and what the bot-runtime tests play.
+```
 
 ## Adding a game
 

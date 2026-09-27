@@ -1,0 +1,17 @@
+[package]
+name = "ucbc-2027"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "The UCBC 2027 competition game on the ucbc-engine Game trait"
+
+[dependencies]
+ucbc-engine = { workspace = true }
+serde = { workspace = true }
+schemars = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

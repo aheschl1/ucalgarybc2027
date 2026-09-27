@@ -1,0 +1,9 @@
+.u27-state {
+  font: 600 2.5rem/1 system-ui, sans-serif;
+}
+
+.u27-legend {
+  align-self: center;
+  margin-left: 1.5rem;
+  color: var(--ucbc-muted, #78716c);
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@ucbc/viewer-ucbc2027",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ucbc/viewer": "*"
+  }
+}

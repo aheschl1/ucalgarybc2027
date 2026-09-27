@@ -162,7 +162,7 @@ function SubmissionsBranch({
 function UploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [game, setGame] = useState("tictactoe");
+  const [game, setGame] = useState("ucbc2027");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 

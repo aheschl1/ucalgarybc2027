@@ -105,7 +105,7 @@ release-check: wheels
 	uvx twine check dist/*
 	for py in 3.12 3.14; do \
 	  docker run --rm -v $(CURDIR)/dist:/dist:ro -v $(CURDIR)/bots:/bots:ro python:$$py-slim sh -c \
-	    "pip install -q --find-links /dist ucbc==$(VERSION) && ucbc run /bots/tictactoe/random /bots/tictactoe/first_empty" \
+	    "pip install -q --find-links /dist ucbc==$(VERSION) && ucbc run /bots/ucbc2027/noop /bots/ucbc2027/noop" \
 	    || exit 1; done
 
 release:  ## ENV=prod make release: wheels to PyPI, tag the commit

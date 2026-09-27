@@ -2,8 +2,7 @@
 # COMPOSE_PROFILES=db starts `db`; without it, POSTGRES_HOST names an existing Postgres.
 # UCBC_BIND is the host address the ports are published on (default: every interface);
 # MINIO_PORT and MINIO_CONSOLE_PORT move MinIO's host ports off one already running there.
-# UCBC_RESTART is the restart policy (default: no; prod uses unless-stopped). The api and
-# worker images are tagged so `make deploy` can ship them to a host that does not build.
+# UCBC_RESTART is the restart policy (default: no; prod uses unless-stopped).
 x-database-url: &database_url postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-db}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-${POSTGRES_USER}}
 
 services:

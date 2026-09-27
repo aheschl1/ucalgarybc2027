@@ -15,6 +15,8 @@ def test_run_prints_sets_and_writes_files(bot: BotPath, tmp_path: Path) -> None:
             "run",
             str(bot("first_empty")),
             str(bot("random")),
+            "--game",
+            "tictactoe",
             "--seed",
             "3",
             "--replay",

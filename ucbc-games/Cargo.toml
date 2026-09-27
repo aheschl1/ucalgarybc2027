@@ -1,0 +1,20 @@
+[package]
+name = "ucbc-games"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Every game the engine can be built with, and which ones a build includes"
+
+# One feature per game, named as the game. `default` is what a build includes; `all` is for
+# the tests and for tooling that covers every game, like SDK and viewer-type generation.
+[features]
+default = ["tictactoe"]
+all = ["tictactoe"]
+tictactoe = ["dep:ucbc-tictactoe"]
+
+[dependencies]
+ucbc-engine = { workspace = true }
+ucbc-tictactoe = { path = "../games/tictactoe", optional = true }
+
+[lints]
+workspace = true

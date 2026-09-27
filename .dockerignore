@@ -5,3 +5,7 @@ bots/
 tests/
 .git/
 **/__pycache__/
+**/node_modules/
+# Build outputs; images build their own.
+ucbc-api/api/static/
+ucbc-py/python/ucbc_engine/viewer/static/

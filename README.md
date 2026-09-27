@@ -16,7 +16,10 @@ make up         # the platform in compose
 
 `make` alone lists these. Every target regenerates what it depends on, so the generated
 files (`ucbc-sdk/ucbc/games/*/_api.py`, `*.gen.ts`) only ever show up in `git status`,
-never as a failure. `GAME=tictactoe` on any target builds that game alone.
+never as a failure.
+
+`default` in `ucbc-games/Cargo.toml` picks the games a build includes; `make test` builds
+every game.
 
 ## Run a match
 
@@ -74,10 +77,8 @@ uv run ucbc-worker                      # plays queued matches, UCBC_WORKER_SLOT
 npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
 ```
 
-`ENV=prod` reads `.env.prod` over `.env.local`. `make deploy DEPLOY_SSH="ssh <host>"` builds
-the images here and runs them as prod on that host, which needs Docker and its own
-`~/ucbc/.env` and `.env.prod` (see `.env.prod.example`); serve it over HTTPS, the session
-cookie is `Secure`. Migrations: `uv run alembic revision -m "..."`,
+`ENV=prod` reads `.env.prod` over `.env.local` (see `.env.prod.example`); serve it over
+HTTPS, the session cookie is `Secure`. Migrations: `uv run alembic revision -m "..."`,
 raw SQL in `op.execute`.
 
 ## Layout
@@ -85,10 +86,11 @@ raw SQL in `op.execute`.
 | Path | Builds | Reached as |
 | --- | --- | --- |
 | `ucbc-engine/` | crate: game-agnostic engine | `use ucbc_engine` |
-| `ucbc-tictactoe/` | crate: example game + its viewer renderer | registered in `ucbc-py` and `ucbc-dev` |
+| `ucbc-games/` | crate: every game, and which a build includes | `ucbc-py`, `ucbc-dev` |
+| `games/<game>/` | crate: one game + its viewer renderer in `viewer/` | listed in `ucbc-games` |
 | `ucbc-py/` | pip dist `ucbc`: extension, bot process, CLI | `uv run ucbc`, `import ucbc_engine` |
 | `ucbc-sdk/` | pip dist `ucbc-sdk` | `import ucbc` inside a bot |
-| `ucbc-dev/` | cargo bin `ucbc-dev`, Rust only | `cargo run -p ucbc-dev`, `make sdk` |
+| `ucbc-dev/` | cargo bin `ucbc-dev`: replays, schemas, SDK generation | `cargo run -p ucbc-dev`, `make sdk` |
 | `ucbc-viewer/` | replay viewer (TS, Vite) | `ucbc view`, `make viewer` |
 | `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
 | `ucbc-worker/` | pip dist `ucbc-worker` | `uv run ucbc-worker` |
@@ -106,7 +108,7 @@ pip install ucbc-sdk    # any platform: the SDK alone, for types and completion
 Bots import `ucbc`; the runner imports `ucbc_engine`. To release, set the same version in
 `Cargo.toml`, `ucbc-py/pyproject.toml` (and its `ucbc-sdk==` pin) and
 `ucbc-sdk/pyproject.toml`, commit, then `ENV=prod make release` (PyPI, with `PYPI_API_TOKEN` from
-`.env.prod`) and `make deploy`, so the platform plays the engine people can install.
+`.env.prod`).
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and
 worker: [docs/platform.md](docs/platform.md).

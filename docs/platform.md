@@ -17,7 +17,8 @@ graph LR
 ```
 
 Two images from root Dockerfiles: `Dockerfile.api` (API plus the built web app) and
-`Dockerfile.worker` (API package plus the engine wheel). `compose.yaml` runs `minio`, `api`,
+`Dockerfile.worker` (API package plus the engine wheel, with `ucbc-games`' default games).
+`compose.yaml` runs `minio`, `api`,
 `worker`, and `db` when `COMPOSE_PROFILES=db` in `.env.<ENV>`; with it empty, `POSTGRES_HOST`
 (and `POSTGRES_PORT`, `POSTGRES_DB`) name an existing Postgres instead. To reach one on
 another Docker network, a git-ignored `compose.override.yaml` can attach `api` and `worker`
@@ -99,8 +100,8 @@ any submissions at any priority; a member needs one of their team's, at normal p
 
 `/viewer/<match id>` in the web app plays a done match: it reads the match and each of its
 sets through these endpoints and hands the assembled replay to the viewer (`ucbc-viewer`), so
-it shows exactly the matches the API shows the caller. `make web GAME=...` picks the game
-renderer it bundles (`ucbc-viewer/vite/games.ts`).
+it shows exactly the matches the API shows the caller. It bundles every game's renderer
+(`ucbc-viewer/vite/games.ts`).
 
 ## Settings
 

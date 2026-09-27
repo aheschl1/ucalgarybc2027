@@ -3,14 +3,13 @@ name = "ucbc-dev"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
-description = "Developer CLI: run Rust-vs-Rust matches and inspect replays (no Python)"
+description = "Developer CLI: inspect replays, print schemas, generate the SDK (no Python)"
 
 [dependencies]
 ucbc-engine = { workspace = true }
-ucbc-tictactoe = { workspace = true }
+ucbc-games = { workspace = true, features = ["all"] }
 serde_json = { workspace = true }
 clap = { workspace = true }
-rand = { workspace = true }
 schemars = { workspace = true }
 
 [lints]

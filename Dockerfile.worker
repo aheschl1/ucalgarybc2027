@@ -1,5 +1,5 @@
 # The worker plays matches with `ucbc run`, so its environment holds the engine wheel,
-# built here from source with the Rust toolchain.
+# built here from source with the Rust toolchain, with ucbc-games' default games.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/root/.cargo/bin:/app/.venv/bin:$PATH"
@@ -10,7 +10,8 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock Cargo.toml Cargo.lock ./
 COPY ucbc-engine/ ucbc-engine/
-COPY ucbc-tictactoe/ ucbc-tictactoe/
+COPY ucbc-games/ ucbc-games/
+COPY games/ games/
 COPY ucbc-dev/ ucbc-dev/
 COPY ucbc-py/ ucbc-py/
 COPY ucbc-sdk/ ucbc-sdk/

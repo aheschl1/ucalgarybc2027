@@ -1,12 +1,9 @@
-.PHONY: help setup dev gen sdk viewer-types viewer web wheels test test-api lint clean up down db deploy release-check release
+.PHONY: help setup dev gen sdk viewer-types viewer web wheels test test-api lint clean up down db release-check release
 .DEFAULT_GOAL := help
 
-# `make <target> GAME=tictactoe` builds one game everywhere: the engine with that cargo
-# feature, the SDK with that game's handle, the viewer and web app with its renderer, the
-# API image likewise. Unset: every game. Exported so npm and compose see the same choice.
-GAME ?=
-FEATURES := $(if $(GAME),--no-default-features -F $(GAME),)
-export UCBC_GAME := $(GAME)
+# Builds include ucbc-games' default games. The tests build every game: they play
+# tic-tac-toe, the bot runtime's fixture.
+test test-api: FEATURES = -F ucbc-games/all
 
 # `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.
 ENV ?= local
@@ -90,14 +87,8 @@ wheels: sdk viewer
 	rm -rf dist && mkdir -p dist
 	for t in $(TARGETS); do \
 	  uv run maturin build --release --zig --compatibility manylinux2014 --target $$t \
-	    -m ucbc-py/Cargo.toml -o dist $(FEATURES) || exit 1; done
-ifeq ($(GAME),)
+	    -m ucbc-py/Cargo.toml -o dist || exit 1; done
 	uv build --package ucbc-sdk -o dist
-else
-	tmp=$$(mktemp -d) && cp -r ucbc-sdk $$tmp/sdk \
-	  && find $$tmp/sdk/ucbc/games -mindepth 1 -maxdepth 1 -type d ! -name $(GAME) -exec rm -rf {} + \
-	  && uv build -o dist $$tmp/sdk && rm -rf $$tmp
-endif
 
 # Publishing: `ENV=prod make release` uploads dist/ to PyPI and tags the commit; any other
 # ENV is refused. PYPI_API_TOKEN comes from the environment, else .env.$(ENV) over .env,
@@ -123,15 +114,3 @@ release:  ## ENV=prod make release: wheels to PyPI, tag the commit
 	@UV_PUBLISH_TOKEN=$${PYPI_API_TOKEN:-$$(cat .env .env.$(ENV) | sed -n 's/^PYPI_API_TOKEN=//p' | tail -1)} \
 	  uv publish dist/*
 	git tag v$(VERSION)
-
-# Production on another host, which builds nothing: images built here are loaded there and
-# started as ENV=prod. DEPLOY_SSH is the ssh command that reaches it. That host needs
-# Docker, and ~/ucbc/.env and .env.prod (from .env.prod.example) written by hand, since
-# neither is in git. `make deploy SERVICES="db minio"` starts only those.
-DEPLOY_SSH ?= ssh ucbc-vm
-SERVICES ?=
-deploy:  ## build the images here, load and start them on DEPLOY_SSH as prod
-	docker compose build api worker
-	docker save ucbc-api:latest ucbc-worker:latest | gzip | $(DEPLOY_SSH) 'gunzip | docker load'
-	tar -c --exclude=__pycache__ compose.yaml bots | $(DEPLOY_SSH) 'mkdir -p ucbc && tar -x -C ucbc'
-	$(DEPLOY_SSH) 'cd ucbc && ENV=prod docker compose --env-file .env --env-file .env.prod up -d --no-build $(SERVICES)'

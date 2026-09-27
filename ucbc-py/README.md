@@ -14,11 +14,11 @@ completion.
 A bot is a directory with a `main.py` defining `step`:
 
 ```python
-from ucbc.games.tictactoe import TicTacToeHandle
+from ucbc.games.ucbc2027 import Ucbc2027Handle
 
 
-def step(handle: TicTacToeHandle) -> None:
-    handle.place(*handle.empty_cells()[0])
+def step(handle: Ucbc2027Handle) -> None:
+    handle.noop()
 ```
 
 ```bash

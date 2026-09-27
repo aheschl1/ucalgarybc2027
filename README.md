@@ -14,17 +14,13 @@ make lint
 make up         # the platform in compose
 ```
 
-`make` alone lists these. Every target regenerates what it depends on, so the generated
-files (`ucbc-sdk/ucbc/games/*/_api.py`, `*.gen.ts`) only ever show up in `git status`,
-never as a failure.
-
 `default` in `ucbc-games/Cargo.toml` picks the games a build includes; `make test` builds
 every game.
 
 ## Run a match
 
 ```bash
-uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --view
+uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 ```
 
 | Flag | |
@@ -42,16 +38,16 @@ uv run ucbc run bots/tictactoe/random bots/tictactoe/first_empty --view
 A directory with a `main.py` defining `step`.
 
 ```python
-# bots/tictactoe/mine/main.py
-from ucbc.games.tictactoe import TicTacToeHandle
+# bots/ucbc2027/mine/main.py
+from ucbc.games.ucbc2027 import Ucbc2027Handle
 
 
-def step(handle: TicTacToeHandle) -> None:
-    handle.place(*handle.empty_cells()[0])
+def step(handle: Ucbc2027Handle) -> None:
+    handle.noop()
 ```
 
 ```bash
-uv run ucbc run bots/tictactoe/mine bots/tictactoe/random
+uv run ucbc run bots/ucbc2027/mine bots/ucbc2027/noop
 ```
 
 ## Platform API

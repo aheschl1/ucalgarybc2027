@@ -496,6 +496,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ucbc-2027"
+version = "0.1.1"
+dependencies = [
+ "schemars",
+ "serde",
+ "serde_json",
+ "ucbc-engine",
+]
+
+[[package]]
 name = "ucbc-dev"
 version = "0.1.1"
 dependencies = [
@@ -522,6 +532,7 @@ dependencies = [
 name = "ucbc-games"
 version = "0.1.1"
 dependencies = [
+ "ucbc-2027",
  "ucbc-engine",
  "ucbc-tictactoe",
 ]

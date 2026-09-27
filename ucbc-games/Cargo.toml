@@ -8,13 +8,15 @@ description = "Every game the engine can be built with, and which ones a build i
 # One feature per game, named as the game. `default` is what a build includes; `all` is for
 # the tests and for tooling that covers every game, like SDK and viewer-type generation.
 [features]
-default = ["tictactoe"]
-all = ["tictactoe"]
+default = ["ucbc2027"]
+all = ["tictactoe", "ucbc2027"]
 tictactoe = ["dep:ucbc-tictactoe"]
+ucbc2027 = ["dep:ucbc-2027"]
 
 [dependencies]
 ucbc-engine = { workspace = true }
 ucbc-tictactoe = { path = "../games/tictactoe", optional = true }
+ucbc-2027 = { path = "../games/ucbc2027", optional = true }
 
 [lints]
 workspace = true

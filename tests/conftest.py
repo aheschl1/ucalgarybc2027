@@ -2,7 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from ucbc_engine import _engine
+from ucbc import _engine
 
 BOTS = Path(__file__).resolve().parents[1] / "bots" / "tictactoe"
 

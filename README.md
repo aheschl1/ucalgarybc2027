@@ -82,10 +82,9 @@ raw SQL in `op.execute`.
 | Path | Builds | Reached as |
 | --- | --- | --- |
 | `ucbc-engine/` | crate: game-agnostic engine | `use ucbc_engine` |
-| `ucbc-games/` | crate: every game, and which a build includes | `ucbc-py`, `ucbc-dev` |
+| `ucbc-games/` | crate: every game, and which a build includes | `ucbc-cli`, `ucbc-dev` |
 | `games/<game>/` | crate: one game + its viewer renderer in `viewer/` | listed in `ucbc-games` |
-| `ucbc-py/` | pip dist `ucbc`: extension, bot process, CLI | `uv run ucbc`, `import ucbc_engine` |
-| `ucbc-sdk/` | pip dist `ucbc-sdk` | `import ucbc` inside a bot |
+| `ucbc-cli/` | pip dist `ucbc`: what bots import, the engine extension, bot process, CLI | `uv run ucbc`, `import ucbc` |
 | `ucbc-dev/` | cargo bin `ucbc-dev`: replays, schemas, SDK generation | `cargo run -p ucbc-dev`, `make sdk` |
 | `ucbc-viewer/` | replay viewer (TS, Vite) | `ucbc view`, `make viewer` |
 | `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
@@ -97,13 +96,10 @@ raw SQL in `op.execute`.
 ## Install and release
 
 ```bash
-pip install ucbc        # Linux x86_64/aarch64 (WSL2 or a container elsewhere): engine, `ucbc`, SDK
-pip install ucbc-sdk    # any platform: the SDK alone, for types and completion
+pip install ucbc        # Linux x86_64/aarch64 (WSL2 or a container elsewhere)
 ```
 
-Bots import `ucbc`; the runner imports `ucbc_engine`. To release, set the same version in
-`Cargo.toml`, `ucbc-py/pyproject.toml` (and its `ucbc-sdk==` pin) and
-`ucbc-sdk/pyproject.toml`, commit, then `ENV=prod make release` (PyPI, with `PYPI_API_TOKEN` from
+To release, set the same version in `Cargo.toml` and `ucbc-cli/pyproject.toml`, commit, then `ENV=prod make release` (PyPI, with `PYPI_API_TOKEN` from
 `.env.prod`).
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and

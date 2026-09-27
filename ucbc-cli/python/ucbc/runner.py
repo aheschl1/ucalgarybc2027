@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ucbc_engine import _engine
+from ucbc import _engine
 
 __all__ = ["DEFAULT_MEMORY_BYTES", "DEFAULT_STEP_MS", "default_game", "run_match"]
 

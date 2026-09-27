@@ -13,8 +13,7 @@ COPY ucbc-engine/ ucbc-engine/
 COPY ucbc-games/ ucbc-games/
 COPY games/ games/
 COPY ucbc-dev/ ucbc-dev/
-COPY ucbc-py/ ucbc-py/
-COPY ucbc-sdk/ ucbc-sdk/
+COPY ucbc-cli/ ucbc-cli/
 COPY ucbc-api/ ucbc-api/
 COPY ucbc-worker/ ucbc-worker/
 RUN uv sync --frozen --no-dev --package ucbc-worker

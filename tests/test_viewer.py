@@ -6,8 +6,8 @@ from pathlib import Path
 import click
 import pytest
 from click.testing import CliRunner
-from ucbc_engine import viewer
-from ucbc_engine.cli import main
+from ucbc import viewer
+from ucbc.cli import main
 
 BotPath = Callable[[str], Path]
 

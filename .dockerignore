@@ -8,4 +8,4 @@ tests/
 **/node_modules/
 # Build outputs; images build their own.
 ucbc-api/api/static/
-ucbc-py/python/ucbc_engine/viewer/static/
+ucbc-cli/python/ucbc/viewer/static/

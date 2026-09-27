@@ -23,9 +23,6 @@ The engine sandboxes bots with Linux facilities, so `ucbc` has no macOS or Windo
 builds. On Windows use [WSL2](https://learn.microsoft.com/windows/wsl/install); on macOS
 use a Linux container or VM. Everything below is then run inside it.
 
-`pip install ucbc-sdk` works on any platform. It has only the types bots are written
-against, which is enough for editor completion, but it cannot run a match.
-
 ## setup
 
 Make a directory for your bots and install `ucbc` into an environment there. Use

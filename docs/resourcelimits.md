@@ -18,7 +18,7 @@ uv run ucbc run a/ b/ --step-ms 50 --memory-mb 256          # defaults: 500 ms, 
 ```
 
 ```python
-run_match("a", "b", step_ms=50, memory_bytes=256 * 2**20)   # defaults in ucbc_engine.runner
+run_match("a", "b", step_ms=50, memory_bytes=256 * 2**20)   # defaults in ucbc.runner
 ```
 
 The engine enforces nothing itself; the Python bot process does. Rust test bots are unlimited.

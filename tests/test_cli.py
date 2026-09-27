@@ -2,7 +2,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from click.testing import CliRunner
-from ucbc_engine.cli import main
+from ucbc.cli import main
 
 BotPath = Callable[[str], Path]
 

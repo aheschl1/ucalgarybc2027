@@ -404,7 +404,12 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
     }
     out.push_str("from typing import Any, Self\n\nfrom ucbc.handle import Handle\n");
 
-    for (name, named) in &types.0 {
+    // Unions last: their aliases name the variant classes when the module loads.
+    let (unions, others): (Vec<_>, Vec<_>) = types
+        .0
+        .iter()
+        .partition(|(_, t)| matches!(t.def, Def::Union(_)));
+    for (name, named) in others.into_iter().chain(unions) {
         out.push_str("\n\n");
         match &named.def {
             Def::Enum(values) => {
@@ -459,11 +464,17 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
                     docstring(&mut out, "", doc);
                 }
                 let _ = writeln!(out, "\n\ndef _from_{name}(d: dict[str, Any]) -> {name}:");
-                out.push_str("    return {\n");
+                out.push_str("    match d[\"type\"]:\n");
                 for (tag, class) in tags {
-                    let _ = writeln!(out, "        \"{tag}\": {class},");
+                    let _ = writeln!(
+                        out,
+                        "        case \"{tag}\":\n            return {class}._from(d)"
+                    );
                 }
-                out.push_str("    }[d[\"type\"]]._from(d)\n");
+                let _ = writeln!(
+                    out,
+                    "    raise ValueError(f\"unknown {name} type {{d['type']!r}}\")"
+                );
             }
         }
     }
@@ -562,6 +573,8 @@ mod tests {
             "            spots=None if d.get(\"spots\") is None else [Spot._from(v) for v in d.get(\"spots\")],",
             "Went = WentOk | WentBlocked",
             "def _from_Went(d: dict[str, Any]) -> Went:",
+            "        case \"blocked\":\n            return WentBlocked._from(d)",
+            "    raise ValueError(f\"unknown Went type {d['type']!r}\")",
             "class DemoApi(Handle):",
             "    def look(self) -> Seen:",
             "        \"\"\"Look around.\"\"\"",
@@ -574,6 +587,11 @@ mod tests {
         ] {
             assert!(py.contains(line), "missing {line:?} in:\n{py}");
         }
+        let at = |s: &str| py.find(s).unwrap();
+        assert!(
+            at("Went = ") > at("class WentOk:"),
+            "union before its classes:\n{py}"
+        );
     }
 
     #[test]

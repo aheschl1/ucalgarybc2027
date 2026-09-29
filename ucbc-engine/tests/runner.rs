@@ -394,23 +394,6 @@ fn bots_spawn_with_the_matchs_limits_and_steps_record_usage() {
 }
 
 #[test]
-fn engine_time_answering_a_bot_is_not_the_bots() {
-    let reg = registry();
-    let waits = scripted("waits", |ctx| {
-        ctx.query(&json!({"type": "slow", "ms": 20})).unwrap();
-        assert!(ctx.engine_time() >= std::time::Duration::from_millis(20));
-        ctx.act(&json!({"type": "increment", "by": 1})).unwrap();
-        StepResult::ok()
-    });
-    let report = MatchRunner::new(&reg, spec(vec![waits, plus_one("b")], 1, 0))
-        .unwrap()
-        .run()
-        .unwrap();
-    let step = &report.replay.sets[0].ticks[0].steps[0];
-    assert!(step.usage.time_us < 20_000, "{}", step.usage.time_us);
-}
-
-#[test]
 fn config_validation() {
     let reg = registry();
     let pair = || vec![plus_one("a"), plus_one("b")];

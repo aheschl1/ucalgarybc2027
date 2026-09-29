@@ -1,5 +1,5 @@
-//! Developer CLI: replay inspection, schemas, and SDK generation, no Python. Sees every
-//! game in the repo, whatever a build includes.
+//! Developer CLI: replay inspection, schemas, SDK generation, and the bot runtime's
+//! snapshot, no Python. Sees every game in the repo, whatever a build includes.
 
 mod sdk;
 
@@ -30,6 +30,18 @@ enum Command {
     GenSdk {
         /// The `ucbc/games` directory.
         games: PathBuf,
+    },
+    /// Start the guest interpreter and write the result, precompiled, as the module bots run.
+    Snapshot {
+        /// The guest interpreter, `guest.wasm`.
+        guest: PathBuf,
+        /// The `ucbc` package directory, with the stdlib zip staged in `runtime/lib`.
+        package: PathBuf,
+        /// Where to write the snapshot.
+        out: PathBuf,
+        /// Compile for this target triple instead of this machine.
+        #[arg(long)]
+        target: Option<String>,
     },
 }
 
@@ -75,6 +87,16 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 std::fs::write(&path, module)?;
                 println!("wrote {}", path.display());
             }
+            Ok(())
+        }
+        Command::Snapshot {
+            guest,
+            package,
+            out,
+            target,
+        } => {
+            ucbc_wasm::snapshot(&guest, &package, target.as_deref(), &out)?;
+            println!("wrote {}", out.display());
             Ok(())
         }
     }

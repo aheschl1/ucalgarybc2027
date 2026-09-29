@@ -4,11 +4,11 @@ UCalgary Battlecode: Python bots, Rust engine. Work tracked in [Linear](https://
 
 ## Setup
 
-Rust 1.85+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
+Rust 1.96+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
 ```bash
 make setup      # once: env files, dependencies, then `make dev`
-make dev        # after any change: generated code, the viewer page, the engine in .venv
+make dev        # after any change: generated code, the viewer page, the bot runtime, the engine in .venv
 make test       # rust, python, api (needs Docker), viewer; `make test-api` for the API alone
 make lint
 make up         # the platform in compose
@@ -85,7 +85,8 @@ raw SQL in `op.execute`.
 | `ucbc-games/` | crate: every game, and which a build includes | `ucbc-cli`, `ucbc-dev` |
 | `games/<game>/` | crate: one game + its viewer renderer in `viewer/` | listed in `ucbc-games` |
 | `ucbc-cli/` | pip dist `ucbc`: what bots import, the engine extension, bot process, CLI | `uv run ucbc`, `import ucbc` |
-| `ucbc-dev/` | cargo bin `ucbc-dev`: replays, schemas, SDK generation | `cargo run -p ucbc-dev`, `make sdk` |
+| `ucbc-dev/` | cargo bin `ucbc-dev`: replays, schemas, SDK generation, the runtime snapshot | `cargo run -p ucbc-dev`, `make sdk` |
+| `ucbc-wasm/` | crate: Python bots in wasm; `guest/` is the interpreter they run | `ucbc-cli`, `make runtime`, `make guest` |
 | `ucbc-viewer/` | replay viewer (TS, Vite) | `ucbc view`, `make viewer` |
 | `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
 | `ucbc-worker/` | pip dist `ucbc-worker` | `uv run ucbc-worker` |
@@ -102,5 +103,5 @@ pip install ucbc        # Linux x86_64/aarch64 (WSL2 or a container elsewhere)
 To release, set the same version in `Cargo.toml` and `ucbc-cli/pyproject.toml`, commit, then `ENV=prod make release` (PyPI, with `PYPI_API_TOKEN` from
 `.env.prod`).
 
-Engine internals and adding a game: [docs/engine.md](docs/engine.md). The API, queue, and
-worker: [docs/platform.md](docs/platform.md).
+Engine internals and adding a game: [docs/engine.md](docs/engine.md). The bot runtime:
+[docs/wasm.md](docs/wasm.md). The API, queue, and worker: [docs/platform.md](docs/platform.md).

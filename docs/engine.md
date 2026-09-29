@@ -152,32 +152,30 @@ BotFailure::Exception / Crash                    -> engine drops the bot, game.b
 
 ## Python bots
 
-One process per bot: `python -m ucbc._bot` (`ucbc-cli/src/process.rs`,
-`ucbc-cli/python/ucbc/_bot.py`), line-delimited JSON over its stdin and stdout. The process
-is the unit of isolation: `RLIMIT_AS` for memory, `SIGSTOP` at the step deadline,
-`SIGKILL` on despawn. See [resourcelimits.md](resourcelimits.md).
+One wasm instance per bot (`ucbc-cli/src/bot.rs` over `ucbc-wasm`): CPython for WASI,
+started from a snapshot, run on fuel, messages as JSON through one host call. See
+[wasm.md](wasm.md) and [resourcelimits.md](resourcelimits.md).
 
 ```mermaid
 sequenceDiagram
     participant R as runner
-    participant B as bot process
-    R->>B: init {identity, source, path, memory_bytes}
-    B->>B: import ucbc + PRELOAD, setrlimit, _engine.lockdown()
-    B-->>R: ready
-    B-->>R: loaded (failure | null)
+    participant B as bot (wasm)
+    R->>B: load
+    B->>R: ready
+    R-->>B: {identity}
+    B->>R: loaded (failure | null)
     loop each turn
-        R->>B: step {set_index, tick}
+        R->>B: step(set_index, tick)
         B->>R: query | act
         R-->>B: reply {ok} | {err}
-        B-->>R: done {stdout, error, memory}
+        B->>R: done {stdout, error}
     end
 ```
 
-Inside the process: `_bot.py` takes the real stdin/stdout for the link before
-`main.py` runs, buffers the bot's prints, and after `lockdown()` the process can open
-no files, so a bot may import only `ucbc` and the stdlib modules in `PRELOAD`.
-`ucbc.handle.Handle` wraps the link as `_query(dict)` and `_act(dict)`;
-`ucbc.games.<g>.HANDLE` is the typed subclass a bot's `step` receives.
+Inside the instance: `ucbc._guest`, already imported in the snapshot, imports `main.py`
+from `/bot` and buffers the bot's prints. `ucbc.handle.Handle` wraps the host call as
+`_query(dict)` and `_act(dict)`; `ucbc.games.<g>.HANDLE` is the typed subclass a bot's
+`step` receives.
 
 Reply format:
 
@@ -197,7 +195,7 @@ Replay { match_id, engine_version, config { game, sets, seed, teams, max_ticks, 
   MatchResult { sets[], set_wins[], winner_team? }
 ```
 
-Deterministic for a fixed seed except `usage`: no timestamps, sorted JSON keys, ChaCha8
+Deterministic for a fixed seed, `usage` included: no timestamps, sorted JSON keys, ChaCha8
 seeds (`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
 
 ## Games

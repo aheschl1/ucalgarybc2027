@@ -112,19 +112,17 @@ freely.
 
 Matches on the site run under the same limits as `ucbc run`:
 
-- **500 ms per step.** A bot still running at the deadline is paused where it is, and
-  the step ends without an action. Loading `main.py` gets the same budget.
-- **1 GiB of memory.** Past it, allocations raise `MemoryError`.
-- **No files, no network.** Once loaded, a bot cannot open anything.
-- **`main.py` only.** It cannot import other files from your bot's directory, or
-  third-party packages.
-
-Because nothing can be opened, only these standard-library modules can be imported:
-
-`abc` `array` `bisect` `cmath` `collections` `collections.abc` `contextlib` `copy`
-`dataclasses` `decimal` `enum` `fractions` `functools` `heapq` `itertools` `math`
-`numbers` `operator` `pprint` `random` `re` `statistics` `string` `textwrap`
-`threading` `time` `types` `typing` `weakref`
+- **500 ms per step,** counted in instructions your bot executes at a nanosecond each,
+  so it is the same on every machine and the engine's own time is never charged. A bot
+  still running at the budget is paused where it is, the step ends without an action,
+  and it resumes on your next turn. Loading `main.py` gets the same budget.
+- **1 GiB of memory,** the interpreter's own 40 MiB included. Past it, allocations raise
+  `MemoryError`.
+- **Your directory, read-only.** `main.py` may import its sibling files and any
+  standard-library module; nothing can be written, no other file can be opened, and
+  there are no third-party packages.
+- **No network, no clock.** `time` measures your own instructions, `time.sleep` raises,
+  and `random` is seeded per bot so a match replays exactly.
 
 An upload may be at most 1 MiB zipped and 8 MiB unpacked.
 

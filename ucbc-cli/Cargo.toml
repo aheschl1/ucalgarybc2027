@@ -21,10 +21,9 @@ default = ["ucbc-games/default"]
 pyo3 = { workspace = true, features = ["extension-module", "abi3-py312"] }
 ucbc-engine = { workspace = true }
 ucbc-games = { workspace = true }
+ucbc-wasm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-nix = { workspace = true }
-seccompiler = { workspace = true }
 
 [lints]
 workspace = true

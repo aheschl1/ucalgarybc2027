@@ -54,7 +54,9 @@ export interface BotResourceLimit {
    */
   memory_bytes: number;
   /**
-   * Wall-clock budget, in milliseconds, for loading the team's code and for each step.
+   * Budget for loading the team's code and for each step, in milliseconds of the
+   * bot's own clock. For Python bots that clock counts instructions, one a
+   * nanosecond, so it reads the same on every machine.
    */
   step_ms: number;
 }
@@ -129,8 +131,8 @@ export interface Usage {
    */
   memory?: number | null;
   /**
-   * Wall-clock time the bot had control during the step: the engine's own time
-   * answering its calls is excluded.
+   * What the bot's runtime charged the step. For Python bots that is instructions
+   * at a nanosecond each, the same count on every machine.
    */
   time_us: number;
 }

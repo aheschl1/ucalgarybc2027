@@ -21,7 +21,10 @@ from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 @click.option("--view", is_flag=True, help="Open the replay in the viewer after the match.")
 @click.option("--show-bot-output", is_flag=True, help="Echo bot output as the match runs.")
 @click.option(
-    "--step-ms", default=DEFAULT_STEP_MS, show_default=True, help="Time budget per bot step."
+    "--step-ms",
+    default=DEFAULT_STEP_MS,
+    show_default=True,
+    help="Budget per bot step, in ms of bot time: instructions, not wall clock.",
 )
 @click.option(
     "--memory-mb", default=DEFAULT_MEMORY_BYTES >> 20, show_default=True, help="Memory per bot."

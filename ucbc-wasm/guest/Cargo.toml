@@ -1,0 +1,18 @@
+[package]
+name = "ucbc-guest"
+version = "0.1.0"
+edition = "2024"
+description = "One bot's interpreter: CPython for WASI, linked statically, with the exports ucbc-wasm calls"
+publish = false
+
+# Its own workspace: built for wasm32-wasip1, apart from the engine crates.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3-ffi = "0.29"
+
+[profile.release]
+lto = true

@@ -5,19 +5,20 @@ members = [
     "ucbc-games",
     "ucbc-cli",
     "ucbc-dev",
+    "ucbc-wasm",
 ]
 
 [workspace.package]
 version = "0.1.2"
 edition = "2024"
+rust-version = "1.96"
 repository = "https://github.com/aheschl1/ucalgarybc2027"
 
 [workspace.dependencies]
-nix = { version = "0.31", features = ["signal", "process"] }
-seccompiler = { version = "0.5", features = ["json"] }
 # Shared dependency versions. Crates opt in with `dep = { workspace = true }`.
 ucbc-engine = { path = "ucbc-engine" }
 ucbc-games = { path = "ucbc-games", default-features = false }
+ucbc-wasm = { path = "ucbc-wasm" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -26,6 +27,10 @@ rand_chacha = "0.10"
 clap = { version = "4.5", features = ["derive"] }
 pyo3 = "0.29"
 schemars = { version = "1.2", features = ["derive"] }
+wasmtime = { version = "49", default-features = false, features = ["runtime", "cranelift", "async", "parallel-compilation", "std"] }
+wasmtime-wasi = "49"
+wasmtime-wizer = "49"
+pollster = "0.4"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

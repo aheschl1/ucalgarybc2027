@@ -1,13 +1,13 @@
 # Resource limits
 
 Every match says what one bot may use; games have no say. The engine carries it to
-the bot's runtime, which enforces it, and records it in the replay.
+the bot's runtime (`ucbc-wasm`), which enforces it, and records it in the replay.
 
 ```rust
 // ucbc-engine: bot/mod.rs
 pub struct BotResourceLimit {
-    pub step_ms: u64,          // wall clock, per step and for loading main.py
-    pub memory_bytes: u64,     // the bot process's address space
+    pub step_ms: u64,          // bot time, per step and for loading main.py
+    pub memory_bytes: u64,     // the bot's linear memory, interpreter included
 }
 
 MatchConfig::new("tictactoe", 3, seed, 2, BotResourceLimit::new(50, 256 << 20))
@@ -21,34 +21,34 @@ uv run ucbc run a/ b/ --step-ms 50 --memory-mb 256          # defaults: 500 ms, 
 run_match("a", "b", step_ms=50, memory_bytes=256 * 2**20)   # defaults in ucbc.runner
 ```
 
-The engine enforces nothing itself; the Python bot process does. Rust test bots are unlimited.
+The engine enforces nothing itself; the runtime does. Rust test bots are unlimited.
 
 ## Time
 
-The clock is wall-clock time while the bot has control: from sending `step` until
-`done` comes back, minus the time the engine spends answering the bot's queries and
-actions (`StepCtx::engine_time`). Loading `main.py` gets its own budget of the same
-size; Python start-up before `ready` is engine time (up to `STARTUP`, 10 s).
+Bot time is wasm fuel: one unit per instruction the bot executes, and one nanosecond on
+its clock (`time.perf_counter`). `step_ms` is therefore a million instructions per
+millisecond, and a match uses the same fuel on every machine. Time the engine spends
+answering queries and actions is not metered. Loading `main.py` gets a budget of the
+same size.
 
-A bot past its deadline is stopped, not interrupted: the runner sends `SIGSTOP`. The
-step ends there: whatever the bot already did stands, and the replay records an
-ordinary step with no failure and `time_us` at the budget. What the game makes of an
-empty step is the game's business; tic-tac-toe forfeits "did not place a mark".
+A bot past its budget is suspended, not interrupted. The step ends there: whatever the
+bot already did stands, and the replay records an ordinary step with no failure and
+`time_us` at the budget. What the game makes of an empty step is the game's business;
+tic-tac-toe forfeits "did not place a mark".
 
-On the bot's next turn the runner sends `SIGCONT` and the bot carries on where it
-stopped; that turn ends when the earlier work returns, so `step` is not called again
-until the turn after. An overrun of any length therefore costs two turns. A message
-sent just as the bot was stopped is answered on that next turn, so a late action
-lands there. A load that overruns is a load failure (`TimeoutError`), not resumed.
+On the bot's next turn the suspended step resumes and that turn ends when it returns,
+so `step` is not called again until the turn after. An overrun of any length therefore
+costs two turns. A message sent just as the bot was suspended is answered on that next
+turn, so a late action lands there. A load that overruns is a load failure
+(`TimeoutError`).
 
 ## Memory
 
-`_bot.py` sets `RLIMIT_AS` to `memory_bytes` on itself before loading `main.py`, so
-the whole address space counts, C extensions included. The allocation that would
-cross the limit fails and the bot sees `MemoryError` where it happened; if reporting
-it also runs out, the step fails as a crash. Both lose the same way. `memory` in the
-replay is the process's resident size, read from `/proc/self/statm` at the end of
-each step.
+`memory_bytes` caps the bot's linear memory, the interpreter's own 40 MiB included.
+The allocation that would cross it fails and the bot sees `MemoryError` where it
+happened; if reporting it also runs out, the step fails as a crash. Both lose the same
+way. `memory` in the replay is the linear memory size when the step returned; it grows
+and never shrinks, so it is a high-water mark.
 
 ## What is recorded
 
@@ -65,15 +65,16 @@ Every step:
 {
   "bot": 1, "team": 1,
   "actions": [...],
-  "usage": { "time_us": 531778, "memory": 6583656 },
+  "usage": { "time_us": 531, "memory": 41943040 },
   "failure": { "kind": "MemoryError", "message": "", "traceback": "..." }
 }
 ```
 
-- `time_us`: wall clock while the bot had control during the step, engine time
-  excluded; at the budget for a step that was stopped. Loading is not recorded.
-- `memory`: resident bytes when the step returned. Absent when it did not (stopped,
-  or the process died) and for Rust bots.
-- `failure`: absent for a stopped step; `MemoryError`, or `Crash` when the process died.
+- `time_us`: fuel the step used, as microseconds of bot time; at the budget for a
+  suspended step. Loading is not recorded.
+- `memory`: linear memory bytes when the step returned. Absent when it did not
+  (suspended) and for Rust bots.
+- `failure`: absent for a suspended step; `MemoryError`, or `Crash` when the
+  interpreter trapped.
 
-Replays are deterministic for a seed except `usage`.
+Replays are deterministic for a seed, `usage` included.

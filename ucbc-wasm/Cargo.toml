@@ -1,0 +1,23 @@
+[package]
+name = "ucbc-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "Python bots as WebAssembly: CPython for WASI, one wasmtime instance per bot, run on fuel"
+
+[features]
+# `snapshot`: the build step ucbc-dev runs, not something the engine needs.
+snapshot = ["dep:wasmtime-wizer"]
+
+[dependencies]
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+wasmtime-wizer = { workspace = true, optional = true }
+pollster = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+
+[lints]
+workspace = true

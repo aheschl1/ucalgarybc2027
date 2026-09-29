@@ -9,3 +9,4 @@ tests/
 # Build outputs; images build their own.
 ucbc-api/api/static/
 ucbc-cli/python/ucbc/viewer/static/
+.cache/

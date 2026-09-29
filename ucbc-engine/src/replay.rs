@@ -114,8 +114,8 @@ impl FailureRecord {
 /// What a step used.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Usage {
-    /// Wall-clock time the bot had control during the step: the engine's own time
-    /// answering its calls is excluded.
+    /// What the bot's runtime charged the step. For Python bots that is instructions
+    /// at a nanosecond each, the same count on every machine.
     pub time_us: u64,
     /// Bytes the bot's runtime held after the step; absent when the runtime cannot tell.
     #[serde(default, skip_serializing_if = "Option::is_none")]

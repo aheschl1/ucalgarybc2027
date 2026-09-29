@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use serde_json::Value;
 
@@ -16,7 +16,6 @@ pub struct StepCtx<'a> {
     pub seed: u64,
     game: &'a mut dyn DynGame,
     accepted: &'a mut Vec<Value>,
-    engine_time: Duration,
 }
 
 impl<'a> StepCtx<'a> {
@@ -37,21 +36,7 @@ impl<'a> StepCtx<'a> {
             seed,
             game,
             accepted,
-            engine_time: Duration::ZERO,
         }
-    }
-
-    /// Time the engine has spent answering this step's queries and actions. Not the
-    /// bot's, so its budget and its recorded time exclude it.
-    pub fn engine_time(&self) -> Duration {
-        self.engine_time
-    }
-
-    fn timed<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
-        let started = Instant::now();
-        let out = f(self);
-        self.engine_time += started.elapsed();
-        out
     }
 
     pub fn status(&self) -> GameStatus {
@@ -59,20 +44,18 @@ impl<'a> StepCtx<'a> {
     }
 
     pub fn query(&mut self, query: &Value) -> Result<Value, QueryError> {
-        self.timed(|ctx| ctx.game.handle_query(ctx.bot, query))
+        self.game.handle_query(self.bot, query)
     }
 
     /// A rejection is an error the bot can handle; the state is unchanged. Once the
     /// set is complete every action is `SetOver`.
     pub fn act(&mut self, action: &Value) -> Result<Value, ActionError> {
-        self.timed(|ctx| {
-            if matches!(ctx.game.status(), GameStatus::Complete(_)) {
-                return Err(ActionError::SetOver);
-            }
-            let response = ctx.game.apply_action(ctx.bot, action)?;
-            ctx.accepted.push(action.clone());
-            Ok(response)
-        })
+        if matches!(self.game.status(), GameStatus::Complete(_)) {
+            return Err(ActionError::SetOver);
+        }
+        let response = self.game.apply_action(self.bot, action)?;
+        self.accepted.push(action.clone());
+        Ok(response)
     }
 }
 
@@ -81,6 +64,8 @@ pub struct StepResult {
     pub outcome: Result<(), BotFailure>,
     /// Captured output of the step.
     pub stdout: String,
+    /// What the bot's runtime charged the step; zero if it keeps no clock.
+    pub time: Duration,
     /// Bytes the bot's runtime holds after the step, if it can tell.
     pub memory: Option<u64>,
 }
@@ -90,6 +75,7 @@ impl StepResult {
         Self {
             outcome: Ok(()),
             stdout: String::new(),
+            time: Duration::ZERO,
             memory: None,
         }
     }
@@ -97,13 +83,17 @@ impl StepResult {
     pub fn failed(failure: BotFailure) -> Self {
         Self {
             outcome: Err(failure),
-            stdout: String::new(),
-            memory: None,
+            ..Self::ok()
         }
     }
 
     pub fn with_stdout(mut self, stdout: impl Into<String>) -> Self {
         self.stdout = stdout.into();
+        self
+    }
+
+    pub fn with_time(mut self, time: Duration) -> Self {
+        self.time = time;
         self
     }
 

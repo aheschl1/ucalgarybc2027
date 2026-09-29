@@ -1,17 +1,17 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
-    ActionError, BotFailure, BotRef, EngineError, Game, GameStatus, Outcome, QueryError, SetSetup,
-    TeamId,
+    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, Outcome, Query,
+    QueryError, SetSetup, TeamId,
 };
 
 use crate::rules::{Board, Cell};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Query {
+pub enum Queries {
     /// The board and whose turn it is.
-    Board,
+    Board(Query<(), BoardView>),
 }
 
 /// What a bot sees when it asks for the board.
@@ -87,8 +87,7 @@ impl TicTacToe {
 
 impl Game for TicTacToe {
     const NAME: &'static str = "tictactoe";
-    type Query = Query;
-    type QueryResponse = BoardView;
+    type Query = Queries;
     type Action = Action;
     type ActionResponse = Placed;
     type Snapshot = Board;
@@ -113,14 +112,14 @@ impl Game for TicTacToe {
         self.order.iter().map(|&t| Self::bot_of(t)).collect()
     }
 
-    fn handle_query(&self, bot: BotRef, query: Query) -> Result<BoardView, QueryError> {
+    fn handle_query(&self, bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
         match query {
-            Query::Board => Ok(BoardView {
+            Queries::Board(q) => Ok(q.reply(BoardView {
                 board: self.board,
                 you: self.mark(bot.team),
                 to_move: self.marks[(self.turn() % 2) as usize],
                 turn: self.turn(),
-            }),
+            })),
         }
     }
 

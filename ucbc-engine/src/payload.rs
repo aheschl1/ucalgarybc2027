@@ -1,5 +1,6 @@
 //! Queries, actions, and snapshots are JSON objects with a `"type"` discriminator.
 
+use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -21,6 +22,11 @@ pub fn decode<T: DeserializeOwned>(payload: &Value) -> Result<T, DecodeError> {
             DecodeError::Malformed(e.to_string())
         }
     })
+}
+
+/// Plain data types always serialize; a failure here is a bug in the game's types.
+pub(crate) fn encode<T: Serialize>(value: T) -> Value {
+    serde_json::to_value(value).expect("game response serializes")
 }
 
 #[cfg(test)]

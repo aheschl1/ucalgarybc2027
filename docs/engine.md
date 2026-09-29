@@ -58,15 +58,14 @@ flowchart TD
 ```rust
 pub trait Game: Send + 'static {
     const NAME: &'static str;
-    type Query: DeserializeOwned + JsonSchema;       // #[serde(tag = "type")] enum
-    type QueryResponse: Serialize + JsonSchema;
+    type Query: DeserializeOwned + JsonSchema;       // #[serde(tag = "type")] enum of Query<Q, R>
     type Action: DeserializeOwned + JsonSchema;      // #[serde(tag = "type")] enum
     type ActionResponse: Serialize + JsonSchema;
     type Snapshot: Serialize + JsonSchema;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError>;
     fn schedule(&mut self) -> Vec<BotRef>;
-    fn handle_query(&self, bot: BotRef, query: Self::Query) -> Result<Self::QueryResponse, QueryError>;
+    fn handle_query(&self, bot: BotRef, query: Self::Query) -> Result<Answer, QueryError>;
     fn apply_action(&mut self, bot: BotRef, action: Self::Action) -> Result<Self::ActionResponse, ActionError>;
     fn end_step(&mut self, bot: BotRef);
     fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure);
@@ -79,6 +78,18 @@ pub trait Game: Send + 'static {
 ```
 
 Games never see JSON. `DynGame` (blanket impl) decodes and encodes at the boundary.
+
+Each query variant holds a `Query<Q, R>`: parameters `Q` (derefs to them), reply `R`.
+`q.reply(r)` is the only way to build an `Answer`, so a query can only be answered with
+its own type, and `R` is the query method's return type in the generated Python.
+
+```rust
+enum Queries {
+    /// What stands on a tile.
+    Item(Query<At, Option<Item>>),
+    Width(Query<(), usize>),
+}
+```
 
 ```mermaid
 classDiagram

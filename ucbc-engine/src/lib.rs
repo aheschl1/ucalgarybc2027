@@ -7,6 +7,7 @@ pub mod error;
 pub mod game;
 pub mod ids;
 pub mod payload;
+pub mod query;
 pub mod replay;
 pub mod rng;
 pub mod runner;
@@ -17,6 +18,7 @@ pub use bot::{Bot, BotFactory, BotResourceLimit, SpawnCtx, TeamSpec, registry::B
 pub use error::{ActionError, BotFailure, DecodeError, EngineError, QueryError};
 pub use game::{DynGame, Game, GameApi, GameFactory, GameRegistry, GameStatus, Outcome, SetSetup};
 pub use ids::{BotId, BotRef, TeamId, TeamInfo};
+pub use query::{Answer, Query};
 pub use replay::{
     MatchConfig, MatchResult, Reason, Replay, SetReplay, SetResult, Step, Tick, Usage,
 };

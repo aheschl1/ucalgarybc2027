@@ -7,7 +7,8 @@ use serde_json::Value;
 
 use crate::error::{ActionError, BotFailure, EngineError, QueryError};
 use crate::ids::{BotId, BotRef, TeamId};
-use crate::payload::decode;
+use crate::payload::{decode, encode};
+use crate::query::Answer;
 use crate::replay::Reason;
 
 #[derive(Clone, Debug)]
@@ -94,9 +95,9 @@ pub enum GameStatus {
 pub trait Game: Send + 'static {
     /// Registry key, e.g. `"tictactoe"`.
     const NAME: &'static str;
-    /// A `#[serde(tag = "type")]` enum of what bots may ask.
+    /// A `#[serde(tag = "type")]` enum of what bots may ask, each variant holding a
+    /// [`Query`](crate::Query) that names its reply type.
     type Query: DeserializeOwned + JsonSchema;
-    type QueryResponse: Serialize + JsonSchema;
     /// A `#[serde(tag = "type")]` enum of what bots may do.
     type Action: DeserializeOwned + JsonSchema;
     type ActionResponse: Serialize + JsonSchema;
@@ -109,11 +110,7 @@ pub trait Game: Send + 'static {
     /// Live bots to step this tick, in order. A dead or duplicated bot is a game bug.
     fn schedule(&mut self) -> Vec<BotRef>;
 
-    fn handle_query(
-        &self,
-        bot: BotRef,
-        query: Self::Query,
-    ) -> Result<Self::QueryResponse, QueryError>;
+    fn handle_query(&self, bot: BotRef, query: Self::Query) -> Result<Answer, QueryError>;
 
     /// Only the stepping bot ever calls this. On `Err` the state is untouched and the
     /// bot may try again. `Ok` carries what the action produced for the bot to see.
@@ -168,8 +165,7 @@ impl<G: Game> DynGame for G {
     }
 
     fn handle_query(&self, bot: BotRef, query: &Value) -> Result<Value, QueryError> {
-        let response = Game::handle_query(self, bot, decode(query)?)?;
-        Ok(encode(response))
+        Ok(Game::handle_query(self, bot, decode(query)?)?.into_value())
     }
 
     fn apply_action(&mut self, bot: BotRef, action: &Value) -> Result<Value, ActionError> {
@@ -206,11 +202,6 @@ impl<G: Game> DynGame for G {
     }
 }
 
-/// Plain data types always serialize; a failure here is a bug in the game's types.
-fn encode<T: Serialize>(value: T) -> Value {
-    serde_json::to_value(value).expect("game response serializes")
-}
-
 /// Creates a set of a registered game.
 pub type GameFactory =
     Box<dyn Fn(&SetSetup) -> Result<Box<dyn DynGame>, EngineError> + Send + Sync>;
@@ -222,7 +213,6 @@ pub struct GameApi {
     /// The game's Rust type name, e.g. `TicTacToe`.
     pub type_name: &'static str,
     pub query: Value,
-    pub query_response: Value,
     pub action: Value,
     pub action_response: Value,
     pub snapshot: Value,
@@ -237,7 +227,6 @@ impl GameApi {
                 .next()
                 .unwrap_or("Game"),
             query: schema_for!(G::Query).to_value(),
-            query_response: schema_for!(G::QueryResponse).to_value(),
             action: schema_for!(G::Action).to_value(),
             action_response: schema_for!(G::ActionResponse).to_value(),
             snapshot: schema_for!(G::Snapshot).to_value(),

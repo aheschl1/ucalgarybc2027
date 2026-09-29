@@ -1,4 +1,4 @@
-"""Spends its step inside one C call; SIGSTOP does not care."""
+"""Spends its step inside one C call; fuel counts it all the same."""
 
 from ucbc.games.tictactoe import TicTacToeHandle
 

@@ -1,5 +1,4 @@
-"""Swallows everything and keeps looping; it is stopped at the deadline and killed at
-set end."""
+"""Swallows everything and keeps looping; suspended at the budget, dropped at set end."""
 
 from ucbc.games.tictactoe import TicTacToeHandle
 

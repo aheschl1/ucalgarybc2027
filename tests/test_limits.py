@@ -1,4 +1,4 @@
-"""Matches run with the SDK defaults: 500 ms per step and 1 GiB per bot."""
+"""Matches run with the SDK defaults: 500 ms of bot time per step and 1 GiB per bot."""
 
 import json
 import subprocess
@@ -55,16 +55,16 @@ def failure_of(replay: dict[str, Any], set_index: int = 0) -> dict[str, Any]:
 
 
 def cut_off(replay: dict[str, Any], set_index: int = 0) -> None:
-    """Team 1's first step was frozen at the deadline: an ordinary empty step that
+    """Team 1's first step was suspended at the budget: an ordinary empty step that
     the game, not the runtime, holds against it."""
     assert "did not place a mark" in forfeited(replay, set_index)
     step = replay["sets"][set_index]["ticks"][0]["steps"][1]
     assert step["actions"] == []
     assert "failure" not in step
-    assert step["usage"]["time_us"] >= STEP_MS * 1000
+    assert step["usage"]["time_us"] == STEP_MS * 1000
 
 
-def test_looping_step_is_frozen_and_the_turn_is_lost(bot: BotPath, tmp_path: Path) -> None:
+def test_looping_step_is_suspended_and_the_turn_is_lost(bot: BotPath, tmp_path: Path) -> None:
     started = time.monotonic()
     replay = set0(bot, "testing/loops", tmp_path)
     elapsed = time.monotonic() - started
@@ -78,32 +78,34 @@ def test_looping_load_fails(bot: BotPath, tmp_path: Path) -> None:
     assert "main.py took longer" in failure["message"]
 
 
-def test_a_bot_inside_a_c_call_is_stopped_too(bot: BotPath, tmp_path: Path) -> None:
+def test_a_bot_inside_a_c_call_is_suspended_too(bot: BotPath, tmp_path: Path) -> None:
     cut_off(set0(bot, "testing/busy_c", tmp_path))
 
 
-def test_the_process_is_locked_down(bot: BotPath, tmp_path: Path) -> None:
-    for name in ("testing/kills", "testing/forks", "testing/reads", "testing/imports"):
-        assert failure_of(set0(bot, name, tmp_path))["kind"] == "PermissionError", name
-
-
-def test_sockets_are_refused() -> None:
-    probe = "import socket; from ucbc import _engine; _engine.lockdown(); socket.socket()"
-    done = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
-    )
-    assert done.returncode != 0
-    assert "PermissionError" in done.stderr
+def test_the_sandbox(bot: BotPath, tmp_path: Path) -> None:
+    refused = {
+        "testing/kills": "AttributeError",
+        "testing/forks": "AttributeError",
+        "testing/reads": "FileNotFoundError",
+        "testing/writes": "PermissionError",
+        "testing/sockets": "OSError",
+    }
+    for name, kind in refused.items():
+        assert failure_of(set0(bot, name, tmp_path))["kind"] == kind, name
+    # The standard library, on the other hand, is all there.
+    replay = set0(bot, "testing/imports", tmp_path)
+    assert replay["sets"][0]["result"]["reason"] in ("win", "draw")
+    assert "(0.0, 1.0, 1.0)" in steps_of(replay, bot=1)[0]["stdout"]
 
 
 def test_an_overrun_resumes_on_the_next_turn(bot: BotPath, tmp_path: Path) -> None:
     replay = set0(bot, "testing/overrun", tmp_path)
     assert replay["sets"][0]["result"]["reason"] != "forfeit"
     first, second = steps_of(replay, bot=1)[:2]
-    # Turn 1: one mark, then frozen at the deadline.
+    # Turn 1: one mark, then suspended at the budget.
     assert len(first["actions"]) == 1
     assert "failure" not in first
-    assert first["usage"]["time_us"] >= STEP_MS * 1000
+    assert first["usage"]["time_us"] == STEP_MS * 1000
     # Turn 2: the same step resumes, its second mark lands, and the turn ends.
     assert len(second["actions"]) == 1
     assert "failure" not in second
@@ -129,8 +131,8 @@ def test_steps_record_time_and_memory(bot: BotPath, tmp_path: Path) -> None:
     replay = set0(bot, "testing/churn", tmp_path, step_ms=ROOMY_STEP_MS)
     churn = [step["usage"] for step in steps_of(replay, bot=1)]
     assert all(0 < usage["time_us"] < ROOMY_STEP_MS * 1000 for usage in churn)
-    # Small objects freed within the step leave their arenas mostly empty.
-    assert all(2**20 < usage["memory"] < 2**26 for usage in churn)
+    # Linear memory: the interpreter's 40 MiB plus the churn's high-water mark.
+    assert all(2**25 < usage["memory"] < 2**30 for usage in churn)
 
 
 def test_limits_are_set_per_match_and_recorded(bot: BotPath, tmp_path: Path) -> None:
@@ -159,9 +161,8 @@ def test_limits_are_set_per_match_and_recorded(bot: BotPath, tmp_path: Path) -> 
     assert failure_of(small)["kind"] == "MemoryError"
 
 
-def test_a_bot_that_swallows_everything_is_killed_at_set_end(bot: BotPath, tmp_path: Path) -> None:
-    """Runs the CLI in a subprocess: a surviving bot process would hold its stderr
-    open and the run would not return."""
+def test_a_bot_that_swallows_everything_is_dropped_at_set_end(bot: BotPath, tmp_path: Path) -> None:
+    """Runs the CLI in a subprocess, as a match on the platform does."""
     replay = tmp_path / "replay.json"
     cmd = [sys.executable, "-c", "from ucbc.cli import main; main()", "run"]
     args = [str(bot("first_empty")), str(bot("testing/swallows")), "--sets", "1"]

@@ -2,7 +2,6 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 use crate::bot::TeamSpec;
 use crate::bot::registry::{BotHandle, BotLookupError, BotRegistry};
@@ -193,7 +192,7 @@ fn run_set(
                 continue;
             }
             let mut actions = Vec::new();
-            let (result, team, time) = match bots.bot_mut(bot_ref) {
+            let (result, team) = match bots.bot_mut(bot_ref) {
                 Ok(BotHandle { bot, team, seed }) => {
                     let mut ctx = StepCtx::new(
                         bot_ref,
@@ -204,19 +203,14 @@ fn run_set(
                         game.as_mut(),
                         &mut actions,
                     );
-                    let started = Instant::now();
-                    let result = bot.step(&mut ctx);
-                    let time = started.elapsed().saturating_sub(ctx.engine_time());
-                    (result, team.clone(), time)
+                    (bot.step(&mut ctx), team.clone())
                 }
                 Err(BotLookupError::Game(error)) => return Err(error),
-                Err(BotLookupError::Bot(failure)) => (
-                    StepResult::failed(failure),
-                    bots.team_info(bot_ref.team),
-                    Duration::ZERO,
-                ),
+                Err(BotLookupError::Bot(failure)) => {
+                    (StepResult::failed(failure), bots.team_info(bot_ref.team))
+                }
             };
-            let usage = Usage::new(time, result.memory);
+            let usage = Usage::new(result.time, result.memory);
 
             if echo && !result.stdout.is_empty() {
                 for line in result.stdout.lines() {

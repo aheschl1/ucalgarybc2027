@@ -1,5 +1,4 @@
-"""Never returns. Frozen every turn; the ``SystemExit`` that ends its set is not an
-``Exception``, so it does unwind."""
+"""Never returns: suspended every turn."""
 
 from ucbc.games.tictactoe import TicTacToeHandle
 

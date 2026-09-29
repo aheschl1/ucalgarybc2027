@@ -8,13 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml Cargo.lock rust-toolchain.toml Makefile ./
 COPY ucbc-engine/ ucbc-engine/
 COPY ucbc-games/ ucbc-games/
 COPY games/ games/
 COPY ucbc-dev/ ucbc-dev/
+COPY ucbc-wasm/ ucbc-wasm/
 COPY ucbc-cli/ ucbc-cli/
-RUN uv build --wheel ucbc-cli --out-dir /wheels
+RUN make runtime && uv build --wheel ucbc-cli --out-dir /wheels
 
 # The worker plays matches with `ucbc run`: the API and worker packages plus that wheel,
 # with no toolchain beside the bots it runs.

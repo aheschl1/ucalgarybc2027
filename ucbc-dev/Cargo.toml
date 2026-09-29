@@ -2,8 +2,9 @@
 name = "ucbc-dev"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
-description = "Developer CLI: inspect replays, print schemas, generate the SDK (no Python)"
+description = "Developer CLI: inspect replays, print schemas, generate the SDK and the bot runtime snapshot (no Python)"
 
 [dependencies]
 ucbc-engine = { workspace = true }
@@ -11,6 +12,7 @@ ucbc-games = { workspace = true, features = ["all"] }
 serde_json = { workspace = true }
 clap = { workspace = true }
 schemars = { workspace = true }
+ucbc-wasm = { workspace = true, features = ["snapshot"] }
 
 [lints]
 workspace = true

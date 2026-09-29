@@ -1,4 +1,4 @@
-"""Tries to fork; the process may not."""
+"""Tries to fork; the interpreter has no such call."""
 
 import os
 

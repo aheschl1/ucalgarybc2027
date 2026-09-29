@@ -1,11 +1,10 @@
-"""Tries to stop the engine; the process may not signal anyone."""
+"""Tries to signal the engine; the interpreter has no such call."""
 
 import os
-import signal
 
 from ucbc.games.tictactoe import TicTacToeHandle
 
 
 def step(handle: TicTacToeHandle) -> None:
-    os.kill(os.getppid(), signal.SIGSTOP)
+    os.kill(1, 9)
     handle.place(*handle.empty_cells()[0])

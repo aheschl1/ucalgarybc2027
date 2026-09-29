@@ -5,7 +5,6 @@
 pub mod registry;
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -25,7 +24,9 @@ pub trait Bot: Send {
 /// spawn; enforcement is the runtime's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct BotResourceLimit {
-    /// Wall-clock budget, in milliseconds, for loading the team's code and for each step.
+    /// Budget for loading the team's code and for each step, in milliseconds of the
+    /// bot's own clock. For Python bots that clock counts instructions, one a
+    /// nanosecond, so it reads the same on every machine.
     pub step_ms: u64,
     /// Bytes the bot's runtime may hold.
     pub memory_bytes: u64,
@@ -39,8 +40,9 @@ impl BotResourceLimit {
         }
     }
 
-    pub fn step_time(&self) -> Duration {
-        Duration::from_millis(self.step_ms)
+    /// The budget in wasm fuel.
+    pub const fn step_fuel(&self) -> u64 {
+        self.step_ms * 1_000_000
     }
 }
 

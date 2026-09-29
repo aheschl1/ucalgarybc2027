@@ -23,7 +23,7 @@ asyncio_mode = "auto"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = ["bots/tictactoe/testing/syntax_error"]
+exclude = ["bots/tictactoe/testing/syntax_error", "ucbc-cli/python/ucbc/runtime"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
@@ -38,6 +38,6 @@ exclude = ["**/_api.py"]
 strict = true
 plugins = ["pydantic.mypy"]
 files = ["ucbc-cli/python", "ucbc-api", "ucbc-worker", "alembic", "tests", "bots"]
-exclude = ["bots/tictactoe/testing/syntax_error"]
+exclude = ["bots/tictactoe/testing/syntax_error", "ucbc-cli/python/ucbc/runtime"]
 mypy_path = "ucbc-cli/python:ucbc-api:ucbc-worker"
 explicit_package_bases = true

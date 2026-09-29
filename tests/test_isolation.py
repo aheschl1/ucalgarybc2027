@@ -1,5 +1,4 @@
 import json
-import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -9,11 +8,10 @@ from ucbc.runner import run_match
 BotPath = Callable[[str], Path]
 
 
-def test_bot_inherits_only_allowlisted_env(
+def test_bot_sees_no_environment(
     bot: BotPath, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pythonpath = str(tmp_path) + os.pathsep + os.environ.get("PYTHONPATH", "")
-    monkeypatch.setenv("PYTHONPATH", pythonpath)
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
     monkeypatch.setenv("UCBC_DATABASE_URL", "secret-db")
     monkeypatch.setenv("UCBC_BLOB_URL", "secret-blob")
     monkeypatch.setenv("BOT_PRIVATE_TOKEN", "secret-token")
@@ -31,7 +29,7 @@ def test_bot_inherits_only_allowlisted_env(
     replay = tmp_path / "replay.json"
     run_match(team, bot("first_empty"), game="tictactoe", sets=1, replay_path=replay)
     output = json.loads(replay.read_text())["sets"][0]["ticks"][0]["steps"][0]["stdout"]
-    assert output.splitlines() == [pythonpath, "None", "None", "None"]
+    assert output.splitlines() == ["None"] * 4
 
 
 def test_output_is_captured_per_step(bot: BotPath, tmp_path: Path) -> None:

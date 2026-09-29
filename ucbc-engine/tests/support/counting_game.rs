@@ -31,13 +31,6 @@ pub struct Incremented {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
     Counts(Query<(), Counts>),
-    /// Counts, answered after `ms` milliseconds; engine time, not the bot's.
-    Slow(Query<Slow, Counts>),
-}
-
-#[derive(Deserialize, JsonSchema)]
-pub struct Slow {
-    pub ms: u64,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -106,13 +99,8 @@ impl Game for CountingGame {
             you: bot.team,
             bot: bot.id,
         };
-        match query {
-            Queries::Counts(q) => Ok(q.reply(counts)),
-            Queries::Slow(q) => {
-                std::thread::sleep(std::time::Duration::from_millis(q.ms));
-                Ok(q.reply(counts))
-            }
-        }
+        let Queries::Counts(q) = query;
+        Ok(q.reply(counts))
     }
 
     fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Incremented, ActionError> {

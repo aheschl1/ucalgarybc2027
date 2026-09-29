@@ -84,8 +84,8 @@ CACHE := .cache
 BUILD := $(CACHE)/build
 SNAPSHOT := cargo run -q --release -p ucbc-dev -- snapshot
 GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-1
-GUEST_SHA256 :=
-STDLIB_SHA256 :=
+GUEST_SHA256 := e391c18aeabaa425f8f63ffecc6d1d6d591e9e897e6fdf0169d593dbbab84c66
+STDLIB_SHA256 := 3587dccbe07538e219e5f3885137d43875d0fd98ea99c5a07822bf3b4b0e8405
 SHA256 := $(shell command -v sha256sum || echo shasum -a 256)
 
 runtime: $(RUNTIME)/bot.cwasm

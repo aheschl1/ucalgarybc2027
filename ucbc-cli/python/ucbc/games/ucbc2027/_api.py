@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Self
 
 from ucbc.handle import Handle
 
@@ -12,18 +14,37 @@ class Environment(str, Enum):
     WALL = "Wall"
 
 
-class Item(str, Enum):
-    PLAYER = "Player"
+@dataclass(frozen=True)
+class ItemPlayer:
+    team: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            team=d["team"],
+        )
+
+
+Item = ItemPlayer
+
+
+def _from_Item(d: dict[str, Any]) -> Item:
+    match d["type"]:
+        case "player":
+            return ItemPlayer._from(d)
+    raise ValueError(f"unknown Item type {d['type']!r}")
 
 
 class Ucbc2027Api(Handle):
     """Queries and actions of the `ucbc2027` game, one method each."""
 
     def item(self, x: int, y: int) -> Item | None:
+        """What stands on a tile."""
         reply = self._query({"type": "item", "x": x, "y": y})
-        return None if reply is None else Item(reply)
+        return None if reply is None else _from_Item(reply)
 
     def environment(self, x: int, y: int) -> Environment:
+        """What a tile is made of."""
         return Environment(self._query({"type": "environment", "x": x, "y": y}))
 
     def width(self) -> int:
@@ -35,4 +56,5 @@ class Ucbc2027Api(Handle):
         return reply
 
     def noop(self) -> None:
+        """Does nothing."""
         self._act({"type": "noop"})

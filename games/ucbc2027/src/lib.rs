@@ -2,4 +2,4 @@
 
 pub mod game;
 
-pub use game::{Action, Queries, State, Ucbc2027};
+pub use game::{Action, Environment, Item, Queries, State, Tile, Ucbc2027};

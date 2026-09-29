@@ -1,5 +1,3 @@
-use std::{println, unimplemented};
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
@@ -7,53 +5,53 @@ use ucbc_engine::{
     SetSetup, TeamId,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+const WIDTH: usize = 16;
+const HEIGHT: usize = 16;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum Environment {
     Empty,
     Wall,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Item {
-    Player,
+    Player { team: u32 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Tile {
-    environment: Environment,
-    item: Option<Item>,
+    pub environment: Environment,
+    pub item: Option<Item>,
 }
 
-/// How many ticks have ended this set.
+/// The board, `board[y][x]`, and how many ticks have ended this set.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct State {
+    pub tick: u32,
     pub board: Vec<Vec<Tile>>,
 }
 
 impl State {
-    pub fn new() -> Self {
-        unimplemented!()
+    /// An empty board, team 0's player top-left and team 1's bottom-right.
+    fn new() -> Self {
+        let empty = Tile {
+            environment: Environment::Empty,
+            item: None,
+        };
+        let mut board = vec![vec![empty; WIDTH]; HEIGHT];
+        board[0][0].item = Some(Item::Player { team: 0 });
+        board[HEIGHT - 1][WIDTH - 1].item = Some(Item::Player { team: 1 });
+        Self { tick: 0, board }
     }
 
-    pub fn blank(width: usize, height: usize) -> Self {
-        let board = vec![
-            vec![
-                Tile {
-                    environment: Environment::Empty,
-                    item: None
-                };
-                width
-            ];
-            height
-        ];
-        Self { board }
+    fn tile(&self, at: &At) -> Result<&Tile, QueryError> {
+        self.board
+            .get(at.y)
+            .and_then(|row| row.get(at.x))
+            .ok_or_else(|| QueryError::Rejected(format!("({}, {}) is off the board", at.x, at.y)))
     }
-}
-
-#[derive(Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Action {
-    Noop,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -71,22 +69,16 @@ pub enum Queries {
     Height(Query<(), usize>),
 }
 
-struct PlayerBase(TeamId);
-
-pub struct Ucbc2027 {
-    state: State,
-    tick: u64,
-    bots: [PlayerBase; 2],
+#[derive(Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Action {
+    Noop,
 }
 
-impl Ucbc2027 {
-    pub fn new() -> Self {
-        Self {
-            state: State::blank(100, 100),
-            tick: 0,
-            bases: [PlayerBase(TeamId(0)), PlayerBase(TeamId(1))],
-        }
-    }
+pub struct Ucbc2027 {
+    /// Step order of the bots still in the set.
+    order: Vec<TeamId>,
+    state: State,
 }
 
 impl Game for Ucbc2027 {
@@ -103,41 +95,26 @@ impl Game for Ucbc2027 {
                 setup.teams
             )));
         }
-        println!("Creating game with setup: {:?}", setup);
-        // let first = setup.first_team;
-        Ok(Self::new())
+        let first = setup.first_team;
+        Ok(Self {
+            order: vec![first, TeamId(1 - first.0)],
+            state: State::new(),
+        })
     }
 
     fn schedule(&mut self) -> Vec<BotRef> {
-        let i = self.tick as usize % 2;
-        let team = self.bases[i].0;
-        vec![BotRef::new(0, 0)]
+        self.order
+            .iter()
+            .map(|t| BotRef::new(u64::from(t.0), t.0))
+            .collect()
     }
 
     fn handle_query(&self, _bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
         match query {
-            Queries::Item(q) => {
-                let At { x, y } = *q;
-                if x >= self.state.board.len() || y >= self.state.board[0].len() {
-                    return Err(QueryError::Rejected(format!(
-                        "Coordinates out of bounds: ({}, {})",
-                        x, y
-                    )));
-                }
-                Ok(q.reply(self.state.board[y][x].item.clone()))
-            }
-            Queries::Environment(q) => {
-                let At { x, y } = *q;
-                if x >= self.state.board.len() || y >= self.state.board[0].len() {
-                    return Err(QueryError::Rejected(format!(
-                        "Coordinates out of bounds: ({}, {})",
-                        x, y
-                    )));
-                }
-                Ok(q.reply(self.state.board[y][x].environment.clone()))
-            }
-            Queries::Width(q) => Ok(q.reply(self.state.board[0].len())),
-            Queries::Height(q) => Ok(q.reply(self.state.board.len())),
+            Queries::Item(q) => Ok(q.reply(self.state.tile(&q)?.item)),
+            Queries::Environment(q) => Ok(q.reply(self.state.tile(&q)?.environment)),
+            Queries::Width(q) => Ok(q.reply(WIDTH)),
+            Queries::Height(q) => Ok(q.reply(HEIGHT)),
         }
     }
 
@@ -149,9 +126,13 @@ impl Game for Ucbc2027 {
 
     fn end_step(&mut self, _bot: BotRef) {}
 
-    fn bot_failed(&mut self, bot: BotRef, _failure: &BotFailure) {}
+    fn bot_failed(&mut self, bot: BotRef, _failure: &BotFailure) {
+        self.order.retain(|t| *t != bot.team);
+    }
 
-    fn end_tick(&mut self) {}
+    fn end_tick(&mut self) {
+        self.state.tick += 1;
+    }
 
     fn status(&self) -> GameStatus {
         GameStatus::InProgress

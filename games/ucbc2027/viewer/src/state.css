@@ -2,6 +2,32 @@
   font: 600 2.5rem/1 system-ui, sans-serif;
 }
 
+.u27-board {
+  display: grid;
+  gap: 1px;
+  margin-left: 1.5rem;
+}
+
+.u27-tile {
+  width: 1rem;
+  height: 1rem;
+  background: #e7e5e4;
+  font: 0.7rem/1rem monospace;
+  text-align: center;
+}
+
+.u27-wall {
+  background: #57534e;
+}
+
+.u27-team-0 {
+  background: #f97316;
+}
+
+.u27-team-1 {
+  background: #3b82f6;
+}
+
 .u27-legend {
   align-self: center;
   margin-left: 1.5rem;

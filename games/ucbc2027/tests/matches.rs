@@ -1,7 +1,7 @@
 //! Full matches through the engine, with minimal bots defined here.
 
 use serde_json::json;
-use ucbc_2027::{State, Ucbc2027};
+use ucbc_2027::{Item, Ucbc2027};
 use ucbc_engine::{
     Bot, BotFailure, BotResourceLimit, GameRegistry, MatchConfig, MatchRunner, MatchSpec, Reason,
     Replay, SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
@@ -10,15 +10,20 @@ use ucbc_engine::{
 const LIMITS: BotResourceLimit = BotResourceLimit::new(500, 1 << 30);
 const TICKS: u32 = 5;
 
-/// Checks the state query against the engine's tick, then does nothing.
+/// Finds team 0's player in the top-left corner, then does nothing.
 #[derive(Default)]
 struct Noop;
 
 impl Bot for Noop {
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> StepResult {
-        let state: State =
-            serde_json::from_value(ctx.query(&json!({"type": "state"})).unwrap()).unwrap();
-        assert_eq!(state.tick, ctx.tick);
+        let item: Option<Item> =
+            serde_json::from_value(ctx.query(&json!({"type": "item", "x": 0, "y": 0})).unwrap())
+                .unwrap();
+        assert_eq!(item, Some(Item::Player { team: 0 }));
+        assert!(
+            ctx.query(&json!({"type": "item", "x": 99, "y": 0}))
+                .is_err()
+        );
         assert_eq!(ctx.act(&json!({"type": "noop"})).unwrap(), json!(null));
         StepResult::ok()
     }

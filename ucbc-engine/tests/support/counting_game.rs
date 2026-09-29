@@ -12,8 +12,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ucbc_engine::{
-    ActionError, BotFailure, BotId, BotRef, EngineError, Game, GameStatus, Outcome, QueryError,
-    SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotId, BotRef, EngineError, Game, GameStatus, Outcome, Query,
+    QueryError, SetSetup, TeamId,
 };
 
 #[derive(Deserialize, JsonSchema)]
@@ -29,12 +29,15 @@ pub struct Incremented {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Query {
-    Counts,
-    /// Answered after `ms` milliseconds; engine time, not the bot's.
-    Slow {
-        ms: u64,
-    },
+pub enum Queries {
+    Counts(Query<(), Counts>),
+    /// Counts, answered after `ms` milliseconds; engine time, not the bot's.
+    Slow(Query<Slow, Counts>),
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct Slow {
+    pub ms: u64,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -64,8 +67,7 @@ pub struct CountingGame {
 
 impl Game for CountingGame {
     const NAME: &'static str = "counting";
-    type Query = Query;
-    type QueryResponse = Counts;
+    type Query = Queries;
     type Action = Action;
     type ActionResponse = Incremented;
     type Snapshot = Snapshot;
@@ -98,16 +100,17 @@ impl Game for CountingGame {
         self.order.clone()
     }
 
-    fn handle_query(&self, bot: BotRef, query: Query) -> Result<Counts, QueryError> {
+    fn handle_query(&self, bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
+        let counts = Counts {
+            counts: self.counts.clone(),
+            you: bot.team,
+            bot: bot.id,
+        };
         match query {
-            Query::Counts => Ok(Counts {
-                counts: self.counts.clone(),
-                you: bot.team,
-                bot: bot.id,
-            }),
-            Query::Slow { ms } => {
-                std::thread::sleep(std::time::Duration::from_millis(ms));
-                Self::handle_query(self, bot, Query::Counts)
+            Queries::Counts(q) => Ok(q.reply(counts)),
+            Queries::Slow(q) => {
+                std::thread::sleep(std::time::Duration::from_millis(q.ms));
+                Ok(q.reply(counts))
             }
         }
     }

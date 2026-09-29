@@ -67,7 +67,7 @@ class Handle:
         """Per bot, per set; stable for a given match seed."""
         return self._identity.seed
 
-    def _call(self, name: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _call(self, name: str, payload: dict[str, Any]) -> Any:
         reply = self._bridge(name, payload)
         if "err" in reply:
             kind, message = reply["err"]["kind"], reply["err"]["message"]
@@ -76,11 +76,10 @@ class Handle:
             if kind == "set_over":
                 raise SetOver(message)
             raise ActionError(message)
-        response: dict[str, Any] = reply["ok"]
-        return response
+        return reply["ok"]
 
-    def _query(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _query(self, payload: dict[str, Any]) -> Any:
         return self._call("query", payload)
 
-    def _act(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def _act(self, payload: dict[str, Any]) -> Any:
         return self._call("act", payload)

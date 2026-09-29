@@ -1,14 +1,15 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
-    ActionError, BotFailure, BotRef, EngineError, Game, GameStatus, QueryError, SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, Query, QueryError,
+    SetSetup, TeamId,
 };
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Query {
+pub enum Queries {
     /// The game state.
-    State,
+    State(Query<(), State>),
 }
 
 /// How many ticks have ended this set.
@@ -35,8 +36,7 @@ pub struct Ucbc2027 {
 
 impl Game for Ucbc2027 {
     const NAME: &'static str = "ucbc2027";
-    type Query = Query;
-    type QueryResponse = State;
+    type Query = Queries;
     type Action = Action;
     type ActionResponse = ();
     type Snapshot = State;
@@ -62,9 +62,9 @@ impl Game for Ucbc2027 {
             .collect()
     }
 
-    fn handle_query(&self, _bot: BotRef, query: Query) -> Result<State, QueryError> {
+    fn handle_query(&self, _bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
         match query {
-            Query::State => Ok(self.state.clone()),
+            Queries::State(q) => Ok(q.reply(self.state.clone())),
         }
     }
 

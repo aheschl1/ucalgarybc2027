@@ -28,6 +28,15 @@ struct Field {
     doc: Option<String>,
 }
 
+/// One variant of a `#[serde(tag = "type")]` enum.
+struct Variant {
+    tag: String,
+    fields: Vec<Field>,
+    doc: Option<String>,
+    /// A query's reply type, from its `x-returns`.
+    returns: Option<Ty>,
+}
+
 enum Def {
     Enum(Vec<String>),
     Class(Vec<Field>),
@@ -82,10 +91,10 @@ impl Types {
             Def::Enum(strings(values)?)
         } else if let Some(variants) = variants(s)? {
             let mut tags = Vec::new();
-            for (tag, fields, vdoc) in variants {
-                let class = format!("{name}{}", pascal(&tag));
-                self.add(&class, vdoc, Def::Class(fields))?;
-                tags.push((tag, class));
+            for v in variants {
+                let class = format!("{name}{}", pascal(&v.tag));
+                self.add(&class, v.doc, Def::Class(v.fields))?;
+                tags.push((v.tag, class));
             }
             Def::Union(tags)
         } else if s.get("type") == Some(&Value::String("object".into())) {
@@ -111,25 +120,32 @@ impl Types {
         Ok(Ty::Named(title.clone()))
     }
 
-    /// Methods from a query or action schema: one per variant.
+    /// Methods from a query or action schema: one per variant, returning the variant's
+    /// own reply type or else `shared`.
     fn methods(
         &mut self,
         root: &Schema,
         call: &'static str,
-        returns: &Ty,
+        shared: Option<&Ty>,
     ) -> Result<Vec<Method>, String> {
         self.collect(root)?;
         let variants = variants(root)?.ok_or("queries and actions must be tagged enums")?;
-        Ok(variants
+        variants
             .into_iter()
-            .map(|(tag, params, doc)| Method {
-                name: tag,
-                doc,
-                params,
-                call,
-                returns: returns.clone(),
+            .map(|v| {
+                let returns = v
+                    .returns
+                    .or_else(|| shared.cloned())
+                    .ok_or_else(|| format!("query `{}` must hold a `Query<Q, R>`", v.tag))?;
+                Ok(Method {
+                    name: v.tag,
+                    doc: v.doc,
+                    params: v.fields,
+                    call,
+                    returns,
+                })
             })
-            .collect())
+            .collect()
     }
 
     fn kind(&self, name: &str) -> &Def {
@@ -145,9 +161,10 @@ impl Types {
                 v if v == "v" => format!("list({value})"),
                 each => format!("[{each} for v in {value}]"),
             },
-            Ty::Optional(inner) => {
-                format!("None if {value} is None else {}", self.decode(inner, value))
-            }
+            Ty::Optional(inner) => match self.decode(inner, value) {
+                v if v == value => v,
+                each => format!("None if {value} is None else {each}"),
+            },
             Ty::Named(name) => match self.kind(name) {
                 Def::Enum(_) => format!("{name}({value})"),
                 Def::Class(_) => format!("{name}._from({value})"),
@@ -212,9 +229,8 @@ fn strings(v: &Value) -> Result<Vec<String>, String> {
         .collect()
 }
 
-/// The variants of a `#[serde(tag = "type")]` enum: tag, fields, doc.
-#[allow(clippy::type_complexity)]
-fn variants(s: &Schema) -> Result<Option<Vec<(String, Vec<Field>, Option<String>)>>, String> {
+/// The variants of a `#[serde(tag = "type")]` enum.
+fn variants(s: &Schema) -> Result<Option<Vec<Variant>>, String> {
     let Some(one_of) = s.get("oneOf") else {
         return Ok(None);
     };
@@ -226,7 +242,15 @@ fn variants(s: &Schema) -> Result<Option<Vec<(String, Vec<Field>, Option<String>
             .and_then(|p| p.remove("type"))
             .and_then(|t| t.get("const").and_then(Value::as_str).map(str::to_string))
             .ok_or("variant without a `type` tag")?;
-        out.push((tag, fields(&v)?, description(&v)));
+        out.push(Variant {
+            tag,
+            fields: fields(&v)?,
+            doc: description(&v),
+            returns: v
+                .get("x-returns")
+                .map(|r| obj(r).and_then(ty))
+                .transpose()?,
+        });
     }
     Ok(Some(out))
 }
@@ -378,10 +402,9 @@ fn docstring(out: &mut String, indent: &str, doc: &str) {
 /// The Python module for `api`.
 pub fn generate(api: &GameApi) -> Result<String, String> {
     let mut types = Types::default();
-    let query_response = types.response(obj(&api.query_response)?)?;
     let action_response = types.response(obj(&api.action_response)?)?;
-    let mut methods = types.methods(obj(&api.query)?, "_query", &query_response)?;
-    methods.extend(types.methods(obj(&api.action)?, "_act", &action_response)?);
+    let mut methods = types.methods(obj(&api.query)?, "_query", None)?;
+    methods.extend(types.methods(obj(&api.action)?, "_act", Some(&action_response))?);
 
     let uses_asdict = methods
         .iter()
@@ -393,16 +416,29 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
         "\"\"\"Generated by `ucbc-dev gen-sdk` from the Rust types of the `{}` game. Do not edit.\"\"\"\n",
         api.name
     );
+    // Only the imports something uses: a game may expose no classes at all.
+    let has = |kind: fn(&Def) -> bool| types.0.values().any(|t| kind(&t.def));
+    let classes = has(|d| matches!(d, Def::Class(_)));
+    let unions = has(|d| matches!(d, Def::Union(_)));
+    let enums = has(|d| matches!(d, Def::Enum(_)));
     out.push_str("from __future__ import annotations\n\n");
-    out.push_str(if uses_asdict {
-        "from dataclasses import asdict, dataclass\n"
-    } else {
-        "from dataclasses import dataclass\n"
-    });
-    if types.0.values().any(|t| matches!(t.def, Def::Enum(_))) {
+    if uses_asdict {
+        out.push_str("from dataclasses import asdict, dataclass\n");
+    } else if classes {
+        out.push_str("from dataclasses import dataclass\n");
+    }
+    if enums {
         out.push_str("from enum import Enum\n");
     }
-    out.push_str("from typing import Any, Self\n\nfrom ucbc.handle import Handle\n");
+    if classes {
+        out.push_str("from typing import Any, Self\n");
+    } else if unions {
+        out.push_str("from typing import Any\n");
+    }
+    if classes || unions || enums {
+        out.push('\n');
+    }
+    out.push_str("from ucbc.handle import Handle\n");
 
     // Unions last: their aliases name the variant classes when the module loads.
     let (unions, others): (Vec<_>, Vec<_>) = types
@@ -509,8 +545,16 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
         }
         payload.push('}');
         let call = format!("self.{}({payload})", m.call);
+        let decoded = types.decode(&m.returns, "reply");
         if m.returns == Ty::Unit {
             let _ = writeln!(out, "        {call}");
+        } else if decoded == "reply" {
+            // Already the Python value; annotated, so the method does not return `Any`.
+            let ty = py_type(&m.returns);
+            let _ = writeln!(out, "        reply: {ty} = {call}\n        return reply");
+        } else if matches!(m.returns, Ty::Optional(_)) {
+            // The decode reads the reply twice.
+            let _ = writeln!(out, "        reply = {call}\n        return {decoded}");
         } else {
             let _ = writeln!(out, "        return {}", types.decode(&m.returns, &call));
         }
@@ -530,18 +574,17 @@ mod tests {
             query: json!({
                 "oneOf": [
                     {"type": "object", "required": ["type"], "properties": {"type": {"const": "look"}},
-                     "description": "Look around."},
+                     "description": "Look around.", "x-returns": {"$ref": "#/$defs/Seen"}},
                     {"type": "object", "required": ["type", "at"],
-                     "properties": {"type": {"const": "peek"}, "at": {"$ref": "#/$defs/Spot"}}},
+                     "properties": {"type": {"const": "peek"}, "at": {"$ref": "#/$defs/Spot"}},
+                     "x-returns": {"anyOf": [{"$ref": "#/$defs/Kind"}, {"type": "null"}]}},
+                    {"type": "object", "required": ["type"], "properties": {"type": {"const": "count"}},
+                     "x-returns": {"type": "integer"}},
                 ],
-                "$defs": {"Spot": {"type": "object", "required": ["x", "y"],
-                                    "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}}},
-            }),
-            query_response: json!({
-                "title": "Seen", "type": "object", "required": ["kind"],
-                "properties": {"spots": {"type": "array", "items": {"$ref": "#/$defs/Spot"}},
-                               "kind": {"$ref": "#/$defs/Kind"}},
-                "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]},
+                "$defs": {"Seen": {"type": "object", "required": ["kind"],
+                                   "properties": {"spots": {"type": "array", "items": {"$ref": "#/$defs/Spot"}},
+                                                  "kind": {"$ref": "#/$defs/Kind"}}},
+                          "Kind": {"type": "string", "enum": ["near", "far"]},
                           "Spot": {"type": "object", "required": ["x", "y"],
                                     "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}}},
             }),
@@ -579,8 +622,10 @@ mod tests {
             "    def look(self) -> Seen:",
             "        \"\"\"Look around.\"\"\"",
             "        return Seen._from(self._query({\"type\": \"look\"}))",
-            "    def peek(self, at: Spot) -> Seen:",
-            "        return Seen._from(self._query({\"type\": \"peek\", \"at\": asdict(at)}))",
+            "    def peek(self, at: Spot) -> Kind | None:",
+            "        reply = self._query({\"type\": \"peek\", \"at\": asdict(at)})\n        return None if reply is None else Kind(reply)",
+            "    def count(self) -> int:",
+            "        reply: int = self._query({\"type\": \"count\"})\n        return reply",
             "    def go(self, how: Kind) -> Went:",
             "        return _from_Went(self._act({\"type\": \"go\", \"how\": how}))",
             "from dataclasses import asdict, dataclass",
@@ -595,10 +640,37 @@ mod tests {
     }
 
     #[test]
+    fn imports_only_what_it_uses() {
+        let mut api = api();
+        api.query = json!({
+            "oneOf": [{"type": "object", "required": ["type"], "properties": {"type": {"const": "kind"}},
+                       "x-returns": {"$ref": "#/$defs/Kind"}}],
+            "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]}},
+        });
+        api.action = json!({"oneOf": [{"type": "object", "required": ["type"],
+                                       "properties": {"type": {"const": "wait"}}}]});
+        api.action_response = json!({"type": "null"});
+        let py = generate(&api).unwrap();
+        assert!(
+            py.contains("from __future__ import annotations\n\nfrom enum import Enum\n\nfrom ucbc.handle import Handle\n"),
+            "{py}"
+        );
+        assert!(!py.contains("dataclass") && !py.contains("typing"), "{py}");
+    }
+
+    #[test]
     fn refuses_what_it_cannot_express() {
         let mut bad = api();
-        bad.query_response = json!({"title": "Odd", "type": "object",
-            "properties": {"inline": {"type": "object", "properties": {}}}});
+        bad.query["oneOf"][2]["x-returns"] = json!({"type": "object", "properties": {}});
         assert!(generate(&bad).unwrap_err().contains("inline objects"));
+        bad.query["oneOf"][2]
+            .as_object_mut()
+            .unwrap()
+            .remove("x-returns");
+        assert!(
+            generate(&bad)
+                .unwrap_err()
+                .contains("query `count` must hold")
+        );
     }
 }

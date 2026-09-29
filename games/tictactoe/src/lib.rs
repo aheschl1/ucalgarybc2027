@@ -4,5 +4,5 @@
 pub mod game;
 pub mod rules;
 
-pub use game::{Action, BoardView, Placed, Query, TicTacToe};
+pub use game::{Action, BoardView, Placed, Queries, TicTacToe};
 pub use rules::{Board, Cell, PlaceError};

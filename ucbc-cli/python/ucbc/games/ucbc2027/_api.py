@@ -2,32 +2,37 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Self
+from enum import Enum
 
 from ucbc.handle import Handle
 
 
-@dataclass(frozen=True)
-class State:
-    """How many ticks have ended this set."""
+class Environment(str, Enum):
+    EMPTY = "Empty"
+    WALL = "Wall"
 
-    tick: int
 
-    @classmethod
-    def _from(cls, d: dict[str, Any]) -> Self:
-        return cls(
-            tick=d["tick"],
-        )
+class Item(str, Enum):
+    PLAYER = "Player"
 
 
 class Ucbc2027Api(Handle):
     """Queries and actions of the `ucbc2027` game, one method each."""
 
-    def state(self) -> State:
-        """The game state."""
-        return State._from(self._query({"type": "state"}))
+    def item(self, x: int, y: int) -> Item | None:
+        reply = self._query({"type": "item", "x": x, "y": y})
+        return None if reply is None else Item(reply)
+
+    def environment(self, x: int, y: int) -> Environment:
+        return Environment(self._query({"type": "environment", "x": x, "y": y}))
+
+    def width(self) -> int:
+        reply: int = self._query({"type": "width"})
+        return reply
+
+    def height(self) -> int:
+        reply: int = self._query({"type": "height"})
+        return reply
 
     def noop(self) -> None:
-        """Does nothing."""
         self._act({"type": "noop"})

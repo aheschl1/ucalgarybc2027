@@ -2,13 +2,15 @@
 //! `step_ms` is bot time at `FUEL_PER_MS` fuel a millisecond, so a step that runs out is
 //! suspended where it is and resumes on the bot's next turn. Its messages, JSON either
 //! way, are answered here; the meter is off meanwhile, so engine time costs it nothing.
+//! A team's code is compiled to bytecode once, before any bot, so loading it is cheap.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
-use ucbc_engine::{ActionError, Bot, BotFailure, SpawnCtx, StepCtx, StepResult};
+use tempfile::TempDir;
+use ucbc_engine::{ActionError, Bot, BotFailure, BotResourceLimit, SpawnCtx, StepCtx, StepResult};
 use ucbc_wasm::{FUEL_PER_MS, Guest, Outcome, Runtime, bot_time};
 
 #[derive(Deserialize)]
@@ -52,15 +54,24 @@ enum FromBot {
     Done(StepReply),
 }
 
+/// Bot time for compiling a team's code, on no bot's budget: a guard, not a limit.
+const COMPILE_MS: u64 = 10_000;
+
 /// A Python team: a directory with `main.py`, imported by each of its bots.
 pub struct PyTeam {
     runtime: Arc<Runtime>,
     dir: PathBuf,
+    cache: TempDir,
     game: String,
 }
 
 impl PyTeam {
-    pub fn read(runtime: Arc<Runtime>, dir: &Path, game: &str) -> Result<Self, BotFailure> {
+    pub fn read(
+        runtime: Arc<Runtime>,
+        dir: &Path,
+        game: &str,
+        limits: &BotResourceLimit,
+    ) -> Result<Self, BotFailure> {
         let path = dir.join("main.py");
         if !path.is_file() {
             return Err(BotFailure::exception(
@@ -68,9 +79,23 @@ impl PyTeam {
                 format!("{}: no such file", path.display()),
             ));
         }
+        let cache = tempfile::tempdir().map_err(crash)?;
+        let fuel = COMPILE_MS * FUEL_PER_MS;
+        match Guest::compile(&runtime, dir, cache.path(), limits.memory_bytes, fuel)
+            .map_err(crash)?
+        {
+            Outcome::Returned => {}
+            Outcome::OutOfFuel => {
+                return Err(BotFailure::exception(
+                    "TimeoutError",
+                    format!("compiling the team took longer than {} ms", COMPILE_MS),
+                ));
+            }
+        }
         Ok(Self {
             runtime,
             dir: dir.to_path_buf(),
+            cache,
             game: game.to_string(),
         })
     }
@@ -88,8 +113,14 @@ pub struct PyBot {
 impl PyBot {
     /// Creates the guest and imports `main.py` on the step budget.
     fn spawn(ctx: &SpawnCtx, team: &PyTeam) -> Result<Self, BotFailure> {
-        let mut guest = Guest::new(&team.runtime, &team.dir, ctx.seed, ctx.limits.memory_bytes)
-            .map_err(crash)?;
+        let mut guest = Guest::new(
+            &team.runtime,
+            &team.dir,
+            team.cache.path(),
+            ctx.seed,
+            ctx.limits.memory_bytes,
+        )
+        .map_err(crash)?;
         let identity = json!({ "identity": {
             "bot_id": ctx.bot.id.0,
             "team": ctx.bot.team.0,

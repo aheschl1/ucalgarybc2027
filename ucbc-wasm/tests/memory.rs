@@ -21,10 +21,12 @@ fn bots_share_the_snapshot() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let runtime = Runtime::new(&root.join("../ucbc-cli/python/ucbc")).unwrap();
     let bot = root.join("tests/bots/multi");
+    let cache = tempfile::tempdir().unwrap();
+    Guest::compile(&runtime, &bot, cache.path(), 256 << 20, 500_000_000).unwrap();
     let before = private_bytes();
     let bots: Vec<Guest> = (0..30)
         .map(|seed| {
-            let mut guest = Guest::new(&runtime, &bot, seed, 256 << 20).unwrap();
+            let mut guest = Guest::new(&runtime, &bot, cache.path(), seed, 256 << 20).unwrap();
             let run = guest
                 .load(500_000_000, |m| match m.get("ready") {
                     Some(_) => serde_json::json!({ "identity": {

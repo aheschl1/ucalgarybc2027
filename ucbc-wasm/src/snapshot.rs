@@ -14,8 +14,8 @@ use crate::Runtime;
 /// `guest` is the linked interpreter, `package` the `ucbc` directory with the stdlib zip
 /// in `runtime/lib`, `target` the triple to compile for when it is not this machine's.
 /// The mounts are the ones a bot gets, in the same order: wasi-libc records them during
-/// `init`, so the snapshot expects them at the same descriptors. Nothing reads `/bot`
-/// yet, so it can be any directory.
+/// `init`, so the snapshot expects them at the same descriptors. Nothing reads `/bot` or
+/// `/cache` yet, so they can be any directory.
 pub fn snapshot(
     guest: &Path,
     package: &Path,
@@ -36,6 +36,7 @@ pub fn snapshot(
         .preopened_dir(package.join("runtime/lib"), "/lib", FsPerms::ReadOnly)?
         .preopened_dir(package, "/ucbc", FsPerms::ReadOnly)?
         .preopened_dir(package, "/bot", FsPerms::ReadOnly)?
+        .preopened_dir(package, "/cache", FsPerms::ReadOnly)?
         .build_p1();
     let mut store = Store::new(&engine, wasi);
 

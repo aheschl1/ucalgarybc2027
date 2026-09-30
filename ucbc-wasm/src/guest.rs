@@ -15,7 +15,7 @@ use crate::runtime::{Mailbox, RESERVE, Runtime, State};
 /// A call in progress, owning the store until it returns.
 type Call = Pin<Box<dyn Future<Output = (Store<State>, wasmtime::Result<()>)> + Send>>;
 
-/// One bot: its own instance of the snapshot, `/bot` mounted read-only.
+/// One bot: its own instance of the snapshot, `/bot` and `/cache` mounted read-only.
 pub struct Guest {
     /// Absent while a call is suspended; the call holds it.
     store: Option<Store<State>>,
@@ -42,11 +42,46 @@ pub struct Run {
 }
 
 impl Guest {
-    /// `seed` drives everything random the bot sees; `memory_bytes` caps its memory,
-    /// the interpreter's included.
+    /// `cache` holds the bytecode [`Guest::compile`] wrote for `bot_dir`; `seed` drives
+    /// everything random the bot sees; `memory_bytes` caps its memory, the interpreter's
+    /// included.
     pub fn new(
         runtime: &Runtime,
         bot_dir: &Path,
+        cache: &Path,
+        seed: u64,
+        memory_bytes: u64,
+    ) -> wasmtime::Result<Self> {
+        Self::instantiate(
+            runtime,
+            bot_dir,
+            cache,
+            FsPerms::ReadOnly,
+            seed,
+            memory_bytes,
+        )
+    }
+
+    /// Compiles every module under `bot_dir` to bytecode in `cache`, for the bots created
+    /// with it to load: once per team, on no bot's budget.
+    pub fn compile(
+        runtime: &Runtime,
+        bot_dir: &Path,
+        cache: &Path,
+        memory_bytes: u64,
+        fuel: u64,
+    ) -> wasmtime::Result<Outcome> {
+        let mut guest =
+            Self::instantiate(runtime, bot_dir, cache, FsPerms::ReadWrite, 0, memory_bytes)?;
+        let run = guest.run("compile", (), fuel, |_| Value::Null)?;
+        Ok(run.outcome)
+    }
+
+    fn instantiate(
+        runtime: &Runtime,
+        bot_dir: &Path,
+        cache: &Path,
+        cache_perms: FsPerms,
         seed: u64,
         memory_bytes: u64,
     ) -> wasmtime::Result<Self> {
@@ -56,6 +91,7 @@ impl Guest {
             .preopened_dir(package.join("runtime/lib"), "/lib", FsPerms::ReadOnly)?
             .preopened_dir(package, "/ucbc", FsPerms::ReadOnly)?
             .preopened_dir(bot_dir, "/bot", FsPerms::ReadOnly)?
+            .preopened_dir(cache, "/cache", cache_perms)?
             .secure_random(ChaCha20Rng::seed_from_u64(seed))
             .insecure_random(ChaCha20Rng::seed_from_u64(seed))
             .insecure_random_seed(u128::from(seed))

@@ -1,6 +1,6 @@
 //! One bot's interpreter. `init` starts CPython and imports `ucbc._guest`; the build
 //! snapshots the instance right after it (`ucbc-dev snapshot`). The engine then calls
-//! `load` once and `step` per turn. `_host.call` is the bot's one way out: a message to
+//! `compile` once per team, `load` once per bot and `step` per turn. `_host.call` is the bot's one way out: a message to
 //! the engine, answered with a reply.
 #![allow(unsafe_code)]
 
@@ -118,6 +118,12 @@ fn run(result: *mut PyObject) {
             Py_DECREF(result);
         }
     }
+}
+
+#[unsafe(export_name = "compile")]
+pub extern "C" fn compile() {
+    let guest = GUEST.load(Ordering::Relaxed);
+    run(unsafe { PyObject_CallMethod(guest, c"compile".as_ptr(), std::ptr::null()) });
 }
 
 #[unsafe(export_name = "load")]

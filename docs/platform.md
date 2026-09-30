@@ -98,6 +98,10 @@ not built yet); a user sees matches with one of their team's submissions. `?mine
 narrows any caller to the matches one of their team's submissions is in. An admin may queue
 any submissions at any priority; a member needs one of their team's, at normal priority.
 
+A set's replay is stored as its JSON gzipped (`sets.replay bytea`) and served with
+`Content-Encoding: gzip`, so the browser decompresses it and the page reads plain JSON.
+Moving replays to the blob store keeps that artifact and changes only where it lives.
+
 `/viewer/<match id>` in the web app plays a done match: it reads the match and each of its
 sets through these endpoints and hands the assembled replay to the viewer (`ucbc-viewer`), so
 it shows exactly the matches the API shows the caller. It bundles every game's renderer

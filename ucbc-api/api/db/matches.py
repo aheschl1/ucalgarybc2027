@@ -1,3 +1,4 @@
+import gzip
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -157,7 +158,8 @@ class MatchRepo:
         return cur.rowcount == 1
 
     async def add_set(self, match_id: UUID, replay: SetReplay) -> None:
-        """Raises `psycopg.errors.UniqueViolation` when the set index exists."""
+        """Stores the set's JSON gzipped. Raises `psycopg.errors.UniqueViolation` when the
+        set index exists."""
         r = replay.result
         await self._conn.execute(
             "insert into sets (match_id, index, first_team, winner_team, reason, detail, ticks, "
@@ -170,7 +172,7 @@ class MatchRepo:
                 r.reason,
                 r.detail,
                 r.ticks,
-                Jsonb(replay.model_dump(exclude_unset=True)),
+                gzip.compress(replay.model_dump_json(exclude_unset=True).encode(), 6),
             ),
         )
 
@@ -184,9 +186,10 @@ class MatchRepo:
         )
         return [SetResult.model_validate(row) for row in await cur.fetchall()]
 
-    async def get_set_replay(self, match_id: UUID, index: int) -> SetReplay | None:
+    async def get_set_replay(self, match_id: UUID, index: int) -> bytes | None:
+        """The set's JSON, gzipped, as stored."""
         cur = await self._conn.execute(
             "select replay from sets where match_id = %s and index = %s", (match_id, index)
         )
         row = await cur.fetchone()
-        return None if row is None else SetReplay.model_validate(row["replay"])
+        return None if row is None else bytes(row["replay"])

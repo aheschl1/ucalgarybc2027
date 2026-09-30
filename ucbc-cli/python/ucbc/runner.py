@@ -8,7 +8,7 @@ from ucbc import _engine
 
 __all__ = ["DEFAULT_MEMORY_BYTES", "DEFAULT_STEP_MS", "default_game", "run_match"]
 
-DEFAULT_STEP_MS = 500
+DEFAULT_STEP_MS = 3
 DEFAULT_MEMORY_BYTES = 2**30
 
 

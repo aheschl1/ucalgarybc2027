@@ -7,8 +7,8 @@ UCalgary Battlecode: Python bots, Rust engine. Work tracked in [Linear](https://
 Rust 1.96+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
 ```bash
-make setup      # once: env files, dependencies, then `make dev`
-make dev        # after any change: generated code, the viewer page, the bot runtime, the engine in .venv
+make setup      # once: env files, dependencies, then `make build`
+make build        # after any change: generated code, the viewer page, the bot runtime, the engine in .venv
 make test       # rust, python, api (needs Docker), viewer; `make test-api` for the API alone
 make lint
 make up         # the platform in compose

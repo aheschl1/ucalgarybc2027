@@ -1,4 +1,4 @@
-.PHONY: help setup dev gen sdk viewer-types viewer web runtime guest wheels test test-api lint clean up down db release-check release
+.PHONY: help setup build gen sdk viewer-types viewer web runtime guest wheels test test-api lint clean up down db release-check release
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -14,18 +14,18 @@ PY := ucbc-cli/python ucbc-api ucbc-worker alembic tests bots
 help:
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##\s*/\t/' | column -ts '	' | sed 's/^/  /'
 
-setup: .env .env.local dev  ## once: env files, then everything `make dev` does
+setup: .env .env.local build  ## once: env files, then everything `make build` does
 
 # uv builds the engine, here and only here: a `uv run` afterwards leaves the build alone.
-dev: gen viewer runtime  ## after any change: generated code, the viewer page, the bot runtime, dependencies and the engine in .venv
+build: gen viewer runtime  ## after any change: generated code, the viewer page, the bot runtime, dependencies and the engine in .venv
 	MATURIN_PEP517_ARGS="$(FEATURES)" uv sync --all-packages --reinstall-package ucbc
 
-test: dev .env .env.local  ## rust, python, api (needs Docker), viewer
+test: build .env .env.local  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
 	uv run pytest
 	npm test --workspaces --if-present
 
-test-api: dev .env .env.local
+test-api: build .env .env.local
 	uv run pytest tests/api
 
 lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale checkout shows in git status
@@ -160,7 +160,7 @@ db: .env .env.$(ENV)
 # cross-compiled with zig (`rustup target add` each once). No sdist: a platform without a
 # wheel should fail to find one, not try to build.
 # The runtime is precompiled per target, so the snapshot is redone for each wheel and
-# removed after, for the next `make dev` to rebuild for this machine.
+# removed after, for the next `make build` to rebuild for this machine.
 TARGETS := x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 wheels: sdk viewer $(CACHE)/guest.wasm $(RUNTIME)/lib/python314.zip
 	rm -rf dist && mkdir -p dist

@@ -83,9 +83,9 @@ RUNTIME := ucbc-cli/python/ucbc/runtime
 CACHE := .cache
 BUILD := $(CACHE)/build
 SNAPSHOT := cargo run -q --release -p ucbc-dev -- snapshot
-GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-1
-GUEST_SHA256 := e391c18aeabaa425f8f63ffecc6d1d6d591e9e897e6fdf0169d593dbbab84c66
-STDLIB_SHA256 := 3587dccbe07538e219e5f3885137d43875d0fd98ea99c5a07822bf3b4b0e8405
+GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-3
+GUEST_SHA256 := 36e4120a95527f0f323a46f92c9a252c1ee1c97091d12c6f26cc58a3d30964ed
+STDLIB_SHA256 := 4f399c9d7f967a9beb62ab2dacf46f5b9de7c5376d42bd3085132fb3979e6c0d
 SHA256 := $(shell command -v sha256sum || echo shasum -a 256)
 
 runtime: $(RUNTIME)/bot.cwasm

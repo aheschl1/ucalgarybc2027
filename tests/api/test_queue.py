@@ -1,5 +1,7 @@
 """The match queue: enqueue and read through the API, claim and lease through the services."""
 
+import gzip
+import json
 from collections.abc import AsyncIterator, Callable
 from datetime import timedelta
 from pathlib import Path
@@ -145,9 +147,12 @@ async def test_claim_is_exclusive(
     expected = [{"detail": "", **set_replay(i, w)["result"]} for i, w in enumerate([None, 0, 0])]
     assert match["sets"] == expected
 
-    # Set replays come back exactly as stored.
+    # Set replays are stored gzipped and come back as the JSON that went in.
+    stored = await db.match_repo.get_set_replay(match_id, 0)
+    assert stored is not None and json.loads(gzip.decompress(stored)) == set_replay(0, None)
     r = await admin_client.get(f"/matches/{match_id}/sets/0")
     assert r.status_code == 200
+    assert r.headers["content-encoding"] == "gzip"
     assert r.json() == set_replay(0, None)
     assert (await admin_client.get(f"/matches/{match_id}/sets/1")).json() == set_replay(1, 0)
     assert (await admin_client.get(f"/matches/{match_id}/sets/3")).status_code == 404

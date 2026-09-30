@@ -8,7 +8,6 @@ from api.models.matches import (
     MatchEnqueue,
     MatchReplay,
     MatchRow,
-    SetReplay,
     TeamInfo,
 )
 from api.models.users import User
@@ -48,7 +47,8 @@ async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
     return Match(**row.model_dump(), sets=sets)
 
 
-async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int) -> SetReplay:
+async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int) -> bytes:
+    """The set's replay as stored: JSON, gzipped."""
     await _visible(db, user, match_id)
     replay = await db.match_repo.get_set_replay(match_id, index)
     if replay is None:

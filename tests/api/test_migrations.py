@@ -1,5 +1,7 @@
 """Migrations that move existing rows, run against a database of their own."""
 
+import gzip
+import json
 from collections.abc import Iterator
 from uuid import uuid4
 
@@ -120,3 +122,35 @@ def test_submission_bots(fresh_url: str) -> None:
     with psycopg.connect(fresh_url) as conn:
         rows = conn.execute("select bots from matches order by created_at").fetchall()
         assert rows == [([source(b), source(a)],), ([],)]
+
+
+def test_replays_gzipped(fresh_url: str) -> None:
+    replay = {"index": 0, "first_team": 0, "initial_state": {"cells": ["empty"] * 9}, "ticks": []}
+    alembic(fresh_url, "upgrade", "0009")
+    with psycopg.connect(fresh_url, autocommit=True) as conn:
+        row = conn.execute(
+            "insert into matches (origin, game, teams, config, bots, status) "
+            "values ('user', 'tictactoe', '[]', '{}', '[]', 'done') returning id"
+        ).fetchone()
+        assert row is not None
+        conn.execute(
+            "insert into sets (match_id, index, first_team, reason, ticks, replay) "
+            "values (%s, 0, 0, 'draw', 1, %s)",
+            (row[0], Jsonb(replay)),
+        )
+
+    # Existing rows are compressed in place and come back as the same JSON.
+    alembic(fresh_url, "upgrade", "0010")
+    with psycopg.connect(fresh_url) as conn:
+        (stored,) = conn.execute("select replay from sets").fetchone() or (None,)
+        assert isinstance(stored, bytes)
+        assert json.loads(gzip.decompress(stored)) == replay
+        (kind,) = conn.execute(
+            "select data_type from information_schema.columns "
+            "where table_name = 'sets' and column_name = 'replay'"
+        ).fetchone() or (None,)
+        assert kind == "bytea"
+
+    alembic(fresh_url, "downgrade", "0009")
+    with psycopg.connect(fresh_url) as conn:
+        assert conn.execute("select replay from sets").fetchone() == (replay,)

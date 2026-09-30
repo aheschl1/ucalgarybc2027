@@ -17,7 +17,7 @@ flowchart LR
 ```
 
 `guest.wasm` is CPython linked with `ucbc-wasm/guest`, a reactor that exports `init`,
-`load` and `step` and imports `ucbc.call` and `ucbc.take`. `.github/workflows/guest.yml`
+`compile`, `load` and `step` and imports `ucbc.call` and `ucbc.take`. `.github/workflows/guest.yml`
 builds it and the stdlib zip and publishes both as a release; `make dev` downloads them
 against the checksums in the Makefile, and `make guest` builds them locally instead.
 
@@ -35,10 +35,16 @@ flowchart TD
     R --> B1[Bot 1<br/>own store: fuel, memory cap]
     R --> B2[Bot 2]
     R --> BN[Bot n]
-    B1 -. read-only .-> FS["/bot  /lib  /ucbc"]
+    B1 -. read-only .-> FS["/bot  /cache  /lib  /ucbc"]
     B2 -. read-only .-> FS
     BN -. read-only .-> FS
 ```
+
+Before a team's first bot, one throwaway instance runs `compile`: every module under
+`/bot` to bytecode in `/cache`, a directory the engine keeps for the match. Its bots
+mount `/cache` read-only and load bytecode, so `load` runs `main.py` rather than
+compiling it. A module that does not compile is left for the bot to import from
+source, which reports the error as before.
 
 ## A step
 
@@ -58,6 +64,7 @@ sequenceDiagram
   reads fuel spent; `time.sleep` raises.
 - Memory is a cap on the bot's linear memory, interpreter included. The allocation that
   would cross it raises `MemoryError`.
-- A bot sees `/bot`, `/lib` and `/ucbc` read-only, seeded randomness, and nothing else:
-  no network, no other files, no real clock.
-- Loading `main.py` is `load`, once per bot, on the same fuel budget as a step.
+- A bot sees `/bot`, `/cache`, `/lib` and `/ucbc` read-only, seeded randomness, and
+  nothing else: no network, no other files, no real clock.
+- Loading `main.py` is `load`, once per bot, on the same fuel budget as a step; the
+  team's bytecode was compiled beforehand, on no budget.

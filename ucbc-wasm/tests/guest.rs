@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use serde_json::{Value, json};
+use tempfile::TempDir;
 use ucbc_wasm::{Guest, Outcome, Runtime};
 
 const LOAD_FUEL: u64 = 500_000_000;
@@ -26,13 +27,22 @@ fn bot(name: &str) -> PathBuf {
 }
 
 /// Answers the guest the way the engine does and keeps what it reports.
-#[derive(Default)]
 struct Harness {
+    /// The team's bytecode cache, the engine's to keep for as long as its bots run.
+    cache: TempDir,
     loaded: Option<Value>,
     done: Vec<Value>,
 }
 
 impl Harness {
+    fn new() -> Self {
+        Self {
+            cache: tempfile::tempdir().unwrap(),
+            loaded: None,
+            done: Vec::new(),
+        }
+    }
+
     fn answer(&mut self, message: Value) -> Value {
         let (kind, payload) = message.as_object().unwrap().iter().next().unwrap();
         match kind.as_str() {
@@ -57,9 +67,16 @@ impl Harness {
     }
 }
 
+/// A bot loaded from source: nothing compiled into the cache.
 fn loaded(name: &str, memory: u64) -> (Guest, Harness) {
-    let mut guest = Guest::new(runtime(), &bot(name), 7, memory).unwrap();
-    let mut harness = Harness::default();
+    let mut harness = Harness::new();
+    let (guest, _) = load(&bot(name), &mut harness, memory);
+    (guest, harness)
+}
+
+/// Loads a bot with what `harness` holds in its cache, and returns the fuel it took.
+fn load(dir: &Path, harness: &mut Harness, memory: u64) -> (Guest, u64) {
+    let mut guest = Guest::new(runtime(), dir, harness.cache.path(), 7, memory).unwrap();
     let run = guest.load(LOAD_FUEL, |m| harness.answer(m)).unwrap();
     assert_eq!(run.outcome, Outcome::Returned);
     assert_eq!(
@@ -68,7 +85,13 @@ fn loaded(name: &str, memory: u64) -> (Guest, Harness) {
         "load failed: {:?}",
         harness.loaded
     );
-    (guest, harness)
+    harness.loaded = None;
+    (guest, run.fuel)
+}
+
+fn compile(dir: &Path, harness: &Harness) {
+    let outcome = Guest::compile(runtime(), dir, harness.cache.path(), MEMORY, LOAD_FUEL).unwrap();
+    assert_eq!(outcome, Outcome::Returned);
 }
 
 fn step(guest: &mut Guest, harness: &mut Harness, tick: u32) -> ucbc_wasm::Run {
@@ -177,9 +200,45 @@ fn a_bot_sees_only_its_sandbox() {
 }
 
 #[test]
+fn compiled_bytecode_loads_on_a_fraction_of_the_fuel() {
+    // A bot big enough that compiling it is most of loading it.
+    let dir = tempfile::tempdir().unwrap();
+    let mut source = String::new();
+    for i in 0..300 {
+        source += &format!("def f{i}(x):\n    y = x * {i} + 1\n    return y - x\n\n");
+    }
+    source += "def step(handle):\n    pass\n";
+    std::fs::write(dir.path().join("main.py"), source).unwrap();
+    let mut harness = Harness::new();
+    let (_, from_source) = load(dir.path(), &mut harness, MEMORY);
+    compile(dir.path(), &harness);
+    assert!(
+        harness
+            .cache
+            .path()
+            .join("bot/main.cpython-314.pyc")
+            .is_file()
+    );
+    let (_, from_bytecode) = load(dir.path(), &mut harness, MEMORY);
+    assert!(
+        from_bytecode * 10 < from_source,
+        "{from_bytecode} fuel from bytecode, {from_source} from source"
+    );
+}
+
+#[test]
+fn a_module_that_does_not_compile_is_the_bots_error() {
+    let mut harness = Harness::new();
+    compile(&bot("broken"), &harness);
+    let mut guest = Guest::new(runtime(), &bot("broken"), harness.cache.path(), 7, MEMORY).unwrap();
+    guest.load(LOAD_FUEL, |m| harness.answer(m)).unwrap();
+    assert_eq!(harness.loaded.unwrap()["kind"], "SyntaxError");
+}
+
+#[test]
 fn load_reports_a_missing_step() {
-    let mut guest = Guest::new(runtime(), &bot("nostep"), 7, MEMORY).unwrap();
-    let mut harness = Harness::default();
+    let mut harness = Harness::new();
+    let mut guest = Guest::new(runtime(), &bot("nostep"), harness.cache.path(), 7, MEMORY).unwrap();
     guest.load(LOAD_FUEL, |m| harness.answer(m)).unwrap();
     let failure = harness.loaded.unwrap();
     assert_eq!(failure["kind"], "AttributeError");
@@ -188,8 +247,9 @@ fn load_reports_a_missing_step() {
 
 #[test]
 fn a_load_that_never_ends_runs_out_of_fuel() {
-    let mut guest = Guest::new(runtime(), &bot("slowload"), 7, MEMORY).unwrap();
-    let mut harness = Harness::default();
+    let mut harness = Harness::new();
+    let mut guest =
+        Guest::new(runtime(), &bot("slowload"), harness.cache.path(), 7, MEMORY).unwrap();
     let run = guest.load(10_000_000, |m| harness.answer(m)).unwrap();
     assert_eq!(run.outcome, Outcome::OutOfFuel);
     assert!(harness.loaded.is_none());

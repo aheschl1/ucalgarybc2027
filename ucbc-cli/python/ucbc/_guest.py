@@ -1,10 +1,12 @@
 """Runs inside each bot's wasm instance (``ucbc-wasm``). The guest's ``init`` imports this
 module before the build snapshots the interpreter, so everything imported here is already
-loaded in every bot. The engine then calls :func:`load` once and :func:`step` once per turn.
+loaded in every bot. The engine then calls :func:`compile` once per team, :func:`load` once
+per bot and :func:`step` once per turn.
 
 The bot's own directory is ``/bot``, first on ``sys.path``, so ``main.py`` imports its
 siblings as usual. ``_host.call`` sends the engine one message and returns its reply."""
 
+import compileall
 import io
 import json
 import pkgutil
@@ -61,6 +63,8 @@ HANDLES: dict[str, type[Handle]] = {
 }
 
 sys.path[:] = ["/bot", "/lib/python314.zip"]
+# Where :func:`compile` writes the team's bytecode and its bots read it.
+sys.pycache_prefix = "/cache"
 
 _buffer = io.BytesIO()
 _output = io.TextIOWrapper(_buffer, encoding="utf-8", errors="backslashreplace", write_through=True)
@@ -89,6 +93,10 @@ def _take_output() -> str:
     _buffer.seek(0)
     _buffer.truncate()
     return output
+
+
+def compile() -> None:
+    compileall.compile_dir("/bot", quiet=2)
 
 
 def load() -> None:

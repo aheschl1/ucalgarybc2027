@@ -78,6 +78,24 @@ def test_looping_load_fails(bot: BotPath, tmp_path: Path) -> None:
     assert "main.py took longer" in failure["message"]
 
 
+def test_a_big_bot_loads_on_a_small_budget(bot: BotPath, tmp_path: Path) -> None:
+    # The team's code is compiled to bytecode once per match, on no budget; a bot loading
+    # it runs the module and nothing more. Compiling this one would take three budgets.
+    team = tmp_path / "big"
+    team.mkdir()
+    lines = ["from ucbc.games.tictactoe import TicTacToeHandle", ""]
+    for i in range(300):
+        lines += [f"def f{i}(x: int) -> int:", f"    y = x * {i} + 1", "    return y - x", ""]
+    lines += [
+        "def step(handle: TicTacToeHandle) -> None:",
+        "    handle.place(*handle.empty_cells()[0])",
+    ]
+    (team / "main.py").write_text("\n".join(lines))
+    replay = tmp_path / "replay.json"
+    run_match(bot("first_empty"), team, game="tictactoe", sets=1, replay_path=replay, step_ms=5)
+    assert json.loads(replay.read_text())["sets"][0]["result"]["reason"] in ("win", "draw")
+
+
 def test_a_bot_inside_a_c_call_is_suspended_too(bot: BotPath, tmp_path: Path) -> None:
     cut_off(set0(bot, "testing/busy_c", tmp_path))
 

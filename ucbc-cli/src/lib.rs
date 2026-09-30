@@ -52,18 +52,18 @@ fn run_match(
     let init: PathBuf = py.import("ucbc")?.getattr("__file__")?.extract()?;
     let package = init.parent().unwrap_or(&init);
     let runtime = Arc::new(Runtime::new(package).map_err(to_pyerr)?);
+    let limits = BotResourceLimit::new(step_ms, memory_bytes);
     let teams = names
         .into_iter()
         .zip(bot_dirs)
         .map(
-            |(name, dir)| match PyTeam::read(runtime.clone(), &dir, game) {
+            |(name, dir)| match PyTeam::read(runtime.clone(), &dir, game, &limits) {
                 Ok(team) => TeamSpec::new(name, Box::new(move |ctx| team.spawn(ctx))),
                 Err(failure) => TeamSpec::unavailable(name, failure),
             },
         )
         .collect();
     let registry = ucbc_games::registry();
-    let limits = BotResourceLimit::new(step_ms, memory_bytes);
     let config = MatchConfig::new(game, sets, seed, 0, limits);
     let mut spec = MatchSpec::new(match_id, config, teams).echo_bot_output(echo_bot_output);
     if let Some(path) = replay_path {

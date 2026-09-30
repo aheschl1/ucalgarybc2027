@@ -29,7 +29,8 @@ Bot time is wasm fuel: one unit per instruction the bot executes, six million to
 millisecond on its clock (`time.perf_counter`), about what a core runs in one. A match
 uses the same fuel on every machine. Time the engine spends
 answering queries and actions is not metered. Loading `main.py` gets a budget of the
-same size.
+same size; the team's code is compiled to bytecode once per match beforehand, on no
+budget, so loading runs the module rather than compiling it.
 
 A bot past its budget is suspended, not interrupted. The step ends there: whatever the
 bot already did stands, and the replay records an ordinary step with no failure and

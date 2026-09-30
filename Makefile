@@ -147,7 +147,7 @@ $(BUILD)/wasi-sysroot.tar.gz:
 
 define fetch
 mkdir -p $(@D) && curl -fsSL -o $@.part $(1)
-echo "$(2)  $@.part" | $(SHA256) -c - >/build/null && mv $@.part $@
+echo "$(2)  $@.part" | $(SHA256) -c - >/dev/null && mv $@.part $@
 endef
 
 # Postgres alone, for running the API from the checkout.

@@ -9,7 +9,7 @@ siblings as usual. ``_host.call`` sends the engine one message and returns its r
 import compileall
 import gc
 import io
-import json
+import pickle
 import pkgutil
 import random
 import sys
@@ -105,7 +105,7 @@ _step: Callable[[Any], None] | None = None
 
 
 def _call(kind: str, payload: Any) -> Any:
-    return json.loads(_host.call(json.dumps({kind: payload}).encode()))
+    return pickle.loads(_host.call(pickle.dumps({kind: payload}, protocol=5)))
 
 
 def _describe(e: BaseException) -> dict[str, str]:

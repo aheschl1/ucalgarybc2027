@@ -1,14 +1,15 @@
 //! Python teams as wasm bots, one `Guest` per bot (`ucbc-wasm`). A guest runs on fuel:
 //! `step_ms` is bot time at `FUEL_PER_MS` fuel a millisecond, so a step that runs out is
-//! suspended where it is and resumes on the bot's next turn. Its messages, JSON either
+//! suspended where it is and resumes on the bot's next turn. Its messages, pickled either
 //! way, are answered here; the meter is off meanwhile, so engine time costs it nothing.
 //! A team's code is compiled to bytecode once, before any bot, so loading it is cheap.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use serde_pickle::{DeOptions, SerOptions};
 use tempfile::TempDir;
 use ucbc_engine::{ActionError, Bot, BotFailure, BotResourceLimit, SpawnCtx, StepCtx, StepResult};
 use ucbc_wasm::{FUEL_PER_MS, Guest, Outcome, Runtime, bot_time};
@@ -52,6 +53,22 @@ enum FromBot {
     Query(Value),
     Act(Value),
     Done(StepReply),
+}
+
+/// One reply to the guest. A `done` message is answered with `()`, which pickles as `None`.
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ToBot {
+    Ok(Value),
+    Err { kind: &'static str, message: String },
+}
+
+fn decode(message: &[u8]) -> Result<FromBot, serde_pickle::Error> {
+    serde_pickle::from_slice(message, DeOptions::new())
+}
+
+fn encode(reply: &impl Serialize) -> Vec<u8> {
+    serde_pickle::to_vec(reply, SerOptions::new()).expect("a reply pickles")
 }
 
 /// Bot time for compiling a team's code, on no bot's budget: a guard, not a limit.
@@ -121,21 +138,21 @@ impl PyBot {
             ctx.limits.memory_bytes,
         )
         .map_err(crash)?;
-        let identity = json!({ "identity": {
+        let identity = encode(&json!({ "identity": {
             "bot_id": ctx.bot.id.0,
             "team": ctx.bot.team.0,
             "team_name": ctx.team.name,
             "seed": ctx.seed,
             "game": team.game,
-        }});
+        }}));
         let fuel = ctx.limits.step_ms * FUEL_PER_MS;
         let mut loaded = None;
         let run = guest
-            .load(fuel, |message| match serde_json::from_value(message) {
+            .load(fuel, |message| match decode(&message) {
                 Ok(FromBot::Ready(())) => identity.clone(),
                 Ok(FromBot::Loaded(failure)) => {
                     loaded = Some(failure);
-                    Value::Null
+                    encode(&())
                 }
                 _ => error("protocol", "not in a step"),
             })
@@ -159,27 +176,24 @@ impl Bot for PyBot {
         let mut done = None;
         let run = self
             .guest
-            .step(
-                ctx.set_index,
-                ctx.tick,
-                self.fuel,
-                |message| match serde_json::from_value(message) {
+            .step(ctx.set_index, ctx.tick, self.fuel, |message| {
+                match decode(&message) {
                     Ok(FromBot::Query(q)) => match ctx.query(&q) {
-                        Ok(v) => json!({ "ok": v }),
+                        Ok(v) => encode(&ToBot::Ok(v)),
                         Err(e) => error("query", e),
                     },
                     Ok(FromBot::Act(a)) => match ctx.act(&a) {
-                        Ok(v) => json!({ "ok": v }),
+                        Ok(v) => encode(&ToBot::Ok(v)),
                         Err(e @ ActionError::SetOver) => error("set_over", e),
                         Err(e) => error("action", e),
                     },
                     Ok(FromBot::Done(reply)) => {
                         done = Some(reply);
-                        Value::Null
+                        encode(&())
                     }
                     _ => error("protocol", "unexpected message"),
-                },
-            );
+                }
+            });
         let run = match run {
             Ok(run) => run,
             Err(e) => return StepResult::failed(crash(e)),
@@ -207,6 +221,9 @@ fn protocol_error() -> BotFailure {
     BotFailure::Crash("bot protocol error".into())
 }
 
-fn error(kind: &str, e: impl std::fmt::Display) -> Value {
-    json!({ "err": { "kind": kind, "message": e.to_string() } })
+fn error(kind: &'static str, e: impl std::fmt::Display) -> Vec<u8> {
+    encode(&ToBot::Err {
+        kind,
+        message: e.to_string(),
+    })
 }

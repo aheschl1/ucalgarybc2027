@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use serde_json::{Value, json};
+use serde_pickle::{DeOptions, SerOptions};
 use tempfile::TempDir;
 use ucbc_wasm::{Guest, Outcome, Runtime};
 
@@ -67,6 +68,15 @@ impl Harness {
     }
 }
 
+/// The wire format `ucbc-cli` speaks.
+fn decode(message: Vec<u8>) -> Value {
+    serde_pickle::from_slice(&message, DeOptions::new()).unwrap()
+}
+
+fn encode(reply: Value) -> Vec<u8> {
+    serde_pickle::to_vec(&reply, SerOptions::new()).unwrap()
+}
+
 /// A bot loaded from source: nothing compiled into the cache.
 fn loaded(name: &str, memory: u64) -> (Guest, Harness) {
     let mut harness = Harness::new();
@@ -77,7 +87,9 @@ fn loaded(name: &str, memory: u64) -> (Guest, Harness) {
 /// Loads a bot with what `harness` holds in its cache, and returns the fuel it took.
 fn load(dir: &Path, harness: &mut Harness, memory: u64) -> (Guest, u64) {
     let mut guest = Guest::new(runtime(), dir, harness.cache.path(), 7, memory).unwrap();
-    let run = guest.load(LOAD_FUEL, |m| harness.answer(m)).unwrap();
+    let run = guest
+        .load(LOAD_FUEL, |m| encode(harness.answer(decode(m))))
+        .unwrap();
     assert_eq!(run.outcome, Outcome::Returned);
     assert_eq!(
         harness.loaded,
@@ -96,7 +108,7 @@ fn compile(dir: &Path, harness: &Harness) {
 
 fn step(guest: &mut Guest, harness: &mut Harness, tick: u32) -> ucbc_wasm::Run {
     let run = guest
-        .step(0, tick, STEP_FUEL, |m| harness.answer(m))
+        .step(0, tick, STEP_FUEL, |m| encode(harness.answer(decode(m))))
         .unwrap();
     assert_eq!(run.outcome, Outcome::Returned);
     run
@@ -122,7 +134,9 @@ fn a_step_out_of_fuel_is_suspended_and_resumed() {
     let budget = 10_000_000;
     let mut outcomes = Vec::new();
     for tick in 0..20 {
-        let run = guest.step(0, tick, budget, |m| harness.answer(m)).unwrap();
+        let run = guest
+            .step(0, tick, budget, |m| encode(harness.answer(decode(m))))
+            .unwrap();
         if run.outcome == Outcome::OutOfFuel {
             assert_eq!(run.fuel, budget);
         }
@@ -164,7 +178,7 @@ fn python_recursion_is_an_error_and_c_recursion_a_trap() {
     step(&mut guest, &mut harness, 0);
     assert_eq!(harness.stdout(0), "python recursion\n");
     let trap = guest
-        .step(0, 1, u64::MAX / 4, |m| harness.answer(m))
+        .step(0, 1, u64::MAX / 4, |m| encode(harness.answer(decode(m))))
         .unwrap_err();
     assert!(
         format!("{trap:?}").contains("call stack exhausted"),
@@ -231,7 +245,9 @@ fn a_module_that_does_not_compile_is_the_bots_error() {
     let mut harness = Harness::new();
     compile(&bot("broken"), &harness);
     let mut guest = Guest::new(runtime(), &bot("broken"), harness.cache.path(), 7, MEMORY).unwrap();
-    guest.load(LOAD_FUEL, |m| harness.answer(m)).unwrap();
+    guest
+        .load(LOAD_FUEL, |m| encode(harness.answer(decode(m))))
+        .unwrap();
     assert_eq!(harness.loaded.unwrap()["kind"], "SyntaxError");
 }
 
@@ -239,7 +255,9 @@ fn a_module_that_does_not_compile_is_the_bots_error() {
 fn load_reports_a_missing_step() {
     let mut harness = Harness::new();
     let mut guest = Guest::new(runtime(), &bot("nostep"), harness.cache.path(), 7, MEMORY).unwrap();
-    guest.load(LOAD_FUEL, |m| harness.answer(m)).unwrap();
+    guest
+        .load(LOAD_FUEL, |m| encode(harness.answer(decode(m))))
+        .unwrap();
     let failure = harness.loaded.unwrap();
     assert_eq!(failure["kind"], "AttributeError");
     assert_eq!(failure["message"], "main.py must define step(handle)");
@@ -250,7 +268,9 @@ fn a_load_that_never_ends_runs_out_of_fuel() {
     let mut harness = Harness::new();
     let mut guest =
         Guest::new(runtime(), &bot("slowload"), harness.cache.path(), 7, MEMORY).unwrap();
-    let run = guest.load(10_000_000, |m| harness.answer(m)).unwrap();
+    let run = guest
+        .load(10_000_000, |m| encode(harness.answer(decode(m))))
+        .unwrap();
     assert_eq!(run.outcome, Outcome::OutOfFuel);
     assert!(harness.loaded.is_none());
 }

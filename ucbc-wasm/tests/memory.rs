@@ -28,11 +28,16 @@ fn bots_share_the_snapshot() {
         .map(|seed| {
             let mut guest = Guest::new(&runtime, &bot, cache.path(), seed, 256 << 20).unwrap();
             let run = guest
-                .load(500_000_000, |m| match m.get("ready") {
-                    Some(_) => serde_json::json!({ "identity": {
-                        "bot_id": seed, "team": 0, "team_name": "a", "seed": seed, "game": "tictactoe"
-                    }}),
-                    None => serde_json::Value::Null,
+                .load(500_000_000, |m| {
+                    let m: serde_json::Value =
+                        serde_pickle::from_slice(&m, serde_pickle::DeOptions::new()).unwrap();
+                    let reply = match m.get("ready") {
+                        Some(_) => serde_json::json!({ "identity": {
+                            "bot_id": seed, "team": 0, "team_name": "a", "seed": seed, "game": "tictactoe"
+                        }}),
+                        None => serde_json::Value::Null,
+                    };
+                    serde_pickle::to_vec(&reply, serde_pickle::SerOptions::new()).unwrap()
                 })
                 .unwrap();
             assert_eq!(run.outcome, Outcome::Returned);

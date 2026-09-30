@@ -14,6 +14,6 @@ mod runtime;
 mod snapshot;
 
 pub use guest::{Guest, Outcome, Run};
-pub use runtime::Runtime;
+pub use runtime::{FUEL_PER_MS, Runtime, bot_time};
 #[cfg(feature = "snapshot")]
 pub use snapshot::snapshot;

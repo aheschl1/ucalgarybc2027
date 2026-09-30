@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use serde_json::Value;
 use wasmtime::{Caller, Config, Engine, Extern, Linker, Memory, Module, StoreLimits};
@@ -7,6 +8,15 @@ use wasmtime_wasi::p1::{self, WasiP1Ctx};
 
 /// Fuel a call starts with; `fuel_async_yield_interval` hands it out one budget at a time.
 pub(crate) const RESERVE: u64 = u64::MAX / 2;
+
+/// Fuel per millisecond of bot time: about the wasm instructions a core runs in one, so
+/// `step_ms` is close to real time while every machine meters the same count.
+pub const FUEL_PER_MS: u64 = 6_000_000;
+
+/// Bot time for fuel spent.
+pub fn bot_time(fuel: u64) -> Duration {
+    Duration::from_nanos(fuel / (FUEL_PER_MS / 1_000_000))
+}
 
 /// wasi errno `notsup`.
 const NOTSUP: i32 = 58;
@@ -89,13 +99,13 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<State>> {
     let mut linker = Linker::new(engine);
     p1::add_to_linker_sync(&mut linker, |s: &mut State| &mut s.wasi)?;
     linker.allow_shadowing(true);
-    // Time is fuel spent, one unit a nanosecond, so a bot can see its budget and every run
-    // reads the same clock.
+    // Time is fuel spent, so a bot can see its budget and every run reads the same clock.
     linker.func_wrap(
         "wasi_snapshot_preview1",
         "clock_time_get",
         |mut caller: Caller<'_, State>, _clock: u32, _precision: u64, out: u32| {
-            let now = caller.data().spent + (RESERVE - caller.get_fuel()?);
+            let now = bot_time(caller.data().spent + (RESERVE - caller.get_fuel()?));
+            let now = now.as_nanos() as u64;
             memory(&mut caller)?.write(&mut caller, out as usize, &now.to_le_bytes())?;
             wasmtime::Result::Ok(0)
         },

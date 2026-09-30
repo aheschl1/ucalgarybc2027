@@ -1,16 +1,15 @@
 //! Python teams as wasm bots, one `Guest` per bot (`ucbc-wasm`). A guest runs on fuel:
-//! `step_ms` is bot time at one fuel unit a nanosecond, so a step that runs out is
+//! `step_ms` is bot time at `FUEL_PER_MS` fuel a millisecond, so a step that runs out is
 //! suspended where it is and resumes on the bot's next turn. Its messages, JSON either
 //! way, are answered here; the meter is off meanwhile, so engine time costs it nothing.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 use ucbc_engine::{ActionError, Bot, BotFailure, SpawnCtx, StepCtx, StepResult};
-use ucbc_wasm::{Guest, Outcome, Runtime};
+use ucbc_wasm::{FUEL_PER_MS, Guest, Outcome, Runtime, bot_time};
 
 #[derive(Deserialize)]
 struct Failure {
@@ -98,7 +97,7 @@ impl PyBot {
             "seed": ctx.seed,
             "game": team.game,
         }});
-        let fuel = ctx.limits.step_fuel();
+        let fuel = ctx.limits.step_ms * FUEL_PER_MS;
         let mut loaded = None;
         let run = guest
             .load(fuel, |message| match serde_json::from_value(message) {
@@ -160,7 +159,7 @@ impl Bot for PyBot {
             (Outcome::Returned, Some(reply)) => reply.into(),
             (Outcome::Returned, None) => StepResult::failed(protocol_error()),
         };
-        let result = result.with_time(Duration::from_nanos(run.fuel));
+        let result = result.with_time(bot_time(run.fuel));
         match self.guest.memory_bytes() {
             Some(bytes) => result.with_memory(bytes),
             None => result,

@@ -15,7 +15,7 @@ COPY games/ games/
 COPY ucbc-dev/ ucbc-dev/
 COPY ucbc-wasm/ ucbc-wasm/
 COPY ucbc-cli/ ucbc-cli/
-RUN make runtime && uv build --wheel ucbc-cli --out-dir /wheels
+RUN make runtime && MATURIN_PEP517_ARGS="--profile dist" uv build --wheel ucbc-cli --out-dir /wheels
 
 # The worker plays matches with `ucbc run`: the API and worker packages plus that wheel,
 # with no toolchain beside the bots it runs.

@@ -166,7 +166,7 @@ wheels: sdk viewer $(CACHE)/guest.wasm $(RUNTIME)/lib/python314.zip
 	rm -rf dist && mkdir -p dist
 	for t in $(TARGETS); do \
 	  $(SNAPSHOT) --target $$t $(CACHE)/guest.wasm ucbc-cli/python/ucbc $(RUNTIME)/bot.cwasm && \
-	  uv run maturin build --release --zig --compatibility manylinux2014 --target $$t \
+	  uv run maturin build --profile dist --zig --compatibility manylinux2014 --target $$t \
 	    -m ucbc-cli/Cargo.toml -o dist || exit 1; done
 	rm $(RUNTIME)/bot.cwasm
 

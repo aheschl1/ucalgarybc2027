@@ -22,7 +22,12 @@ builds it and the stdlib zip and publishes both as a release; `make dev` downloa
 against the checksums in the Makefile, and `make guest` builds them locally instead.
 
 `ucbc-dev snapshot` runs `init` under wizer and writes the started interpreter out
-precompiled for the machine, `runtime/bot.cwasm` in the `ucbc` package. The engine maps
+precompiled for the machine, `runtime/bot.cwasm` in the `ucbc` package. `init` imports
+the whole standard library and freezes the heap, so a bot's stdlib imports cost it
+nothing and its collections skip the snapshot's objects. A bot can import only what the
+snapshot holds and its own modules; `ucbc._guest` lists what is left out: what cannot
+import under WASI and what would reach outside the sandbox (processes, sockets,
+signals, terminals). The engine maps
 it once; every bot is an instance of it and shares its pages until it writes to them. A
 precompiled module records the wasmtime features of the engine that compiled it, so the
 snapshot step and the engine must be built with the same ones.

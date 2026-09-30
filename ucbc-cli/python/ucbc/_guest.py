@@ -1,12 +1,13 @@
 """Runs inside each bot's wasm instance (``ucbc-wasm``). The guest's ``init`` imports this
-module before the build snapshots the interpreter, so everything imported here is already
-loaded in every bot. The engine then calls :func:`compile` once per team, :func:`load` once
-per bot and :func:`step` once per turn.
+module before the build snapshots the interpreter, so everything imported here, the whole
+standard library included, is already loaded in every bot. The engine then calls
+:func:`compile` once per team, :func:`load` once per bot and :func:`step` once per turn.
 
 The bot's own directory is ``/bot``, first on ``sys.path``, so ``main.py`` imports its
 siblings as usual. ``_host.call`` sends the engine one message and returns its reply."""
 
 import compileall
+import gc
 import io
 import json
 import pkgutil
@@ -15,6 +16,7 @@ import sys
 import traceback
 from collections.abc import Callable
 from importlib import import_module
+from importlib.machinery import PathFinder
 from typing import Any
 
 import _host  # type: ignore[import-not-found]
@@ -22,47 +24,74 @@ import _host  # type: ignore[import-not-found]
 import ucbc.games
 from ucbc.handle import Handle, Identity
 
-# Loaded into the snapshot; any other stdlib module imports at the bot's own cost.
-PRELOAD = (
-    "abc",
-    "array",
-    "bisect",
-    "cmath",
-    "collections",
-    "collections.abc",
-    "contextlib",
-    "copy",
-    "dataclasses",
-    "decimal",
-    "enum",
-    "fractions",
-    "functools",
-    "heapq",
-    "itertools",
-    "math",
-    "numbers",
-    "operator",
-    "pprint",
-    "random",
-    "re",
-    "statistics",
-    "string",
-    "textwrap",
-    "threading",
-    "time",
-    "types",
-    "typing",
-    "weakref",
+# The whole standard library is imported into the snapshot. After that a bot can import
+# only what the snapshot holds and its own modules: no path back to the zip, no builtin or
+# frozen finder. Left out, so unavailable to bots: what cannot import under WASI, what
+# would reach outside the sandbox, and CPython's test scaffolding.
+STDLIB = "/lib/python314.zip"
+EXCLUDED = frozenset(
+    {
+        # No zlib, bz2, lzma or termios in the interpreter; asyncio, email and xml are pruned.
+        "_asyncio",
+        "_elementtree",
+        "bz2",
+        "compression.bz2",
+        "compression.gzip",
+        "compression.lzma",
+        "compression.zlib",
+        "compression.zstd",
+        "encodings.bz2_codec",
+        "encodings.mbcs",
+        "encodings.oem",
+        "encodings.zlib_codec",
+        "gzip",
+        "importlib.metadata",
+        "lzma",
+        "plistlib",
+        "pty",
+        "tty",
+        # Processes, signals, sockets, terminals, browsers.
+        "_posixsubprocess",
+        "_socket",
+        "antigravity",
+        "ftplib",
+        "getpass",
+        "logging.config",
+        "logging.handlers",
+        "poplib",
+        "select",
+        "selectors",
+        "signal",
+        "socket",
+        "socketserver",
+        "subprocess",
+        "webbrowser",
+        # Test scaffolding.
+        "_testbuffer",
+        "_testcapi",
+        "_testclinic",
+        "_testclinic_limited",
+        "_testinternalcapi",
+        "_testlimitedcapi",
+        "_xxtestfuzz",
+        "xxsubtype",
+    }
 )
-for _name in PRELOAD:
-    import_module(_name)
+for _name in sorted(
+    {m.name for m in pkgutil.walk_packages([STDLIB])} | set(sys.builtin_module_names)
+):
+    if _name not in EXCLUDED:
+        import_module(_name)
 
 HANDLES: dict[str, type[Handle]] = {
     m.name: import_module(f"ucbc.games.{m.name}").HANDLE
     for m in pkgutil.iter_modules(ucbc.games.__path__)
 }
 
-sys.path[:] = ["/bot", "/lib/python314.zip"]
+sys.path[:] = ["/bot"]
+sys.meta_path[:] = [PathFinder]
+# Nothing loaded so far is garbage: bots' collections skip it.
+gc.freeze()
 # Where :func:`compile` writes the team's bytecode and its bots read it.
 sys.pycache_prefix = "/cache"
 

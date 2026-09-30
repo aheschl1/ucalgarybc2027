@@ -60,7 +60,7 @@ node_modules: package-lock.json
 gen: sdk viewer-types
 
 sdk:
-	cargo run -q -p ucbc-build -- gen-sdk ucbc-cli/python/ucbc/games
+	cargo run -q -p ucbc-dev -- gen-sdk ucbc-cli/python/ucbc/games
 
 viewer-types: node_modules
 	node ucbc-viewer/scripts/gen-types.mjs
@@ -82,7 +82,7 @@ web: viewer-types
 RUNTIME := ucbc-cli/python/ucbc/runtime
 CACHE := .cache
 BUILD := $(CACHE)/build
-SNAPSHOT := cargo run -q --release -p ucbc-build -- snapshot
+SNAPSHOT := cargo run -q --release -p ucbc-dev -- snapshot
 GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-1
 GUEST_SHA256 := e391c18aeabaa425f8f63ffecc6d1d6d591e9e897e6fdf0169d593dbbab84c66
 STDLIB_SHA256 := 3587dccbe07538e219e5f3885137d43875d0fd98ea99c5a07822bf3b4b0e8405

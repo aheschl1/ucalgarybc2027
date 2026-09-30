@@ -39,11 +39,6 @@ impl BotResourceLimit {
             memory_bytes,
         }
     }
-
-    /// The budget in wasm fuel.
-    pub const fn step_fuel(&self) -> u64 {
-        self.step_ms * 1_000_000
-    }
 }
 
 /// What the engine knows about a bot when it creates it.

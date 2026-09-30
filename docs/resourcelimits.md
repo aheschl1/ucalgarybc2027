@@ -25,9 +25,9 @@ The engine enforces nothing itself; the runtime does. Rust test bots are unlimit
 
 ## Time
 
-Bot time is wasm fuel: one unit per instruction the bot executes, and one nanosecond on
-its clock (`time.perf_counter`). `step_ms` is therefore a million instructions per
-millisecond, and a match uses the same fuel on every machine. Time the engine spends
+Bot time is wasm fuel: one unit per instruction the bot executes, six million to the
+millisecond on its clock (`time.perf_counter`), about what a core runs in one. A match
+uses the same fuel on every machine. Time the engine spends
 answering queries and actions is not metered. Loading `main.py` gets a budget of the
 same size.
 

@@ -1,4 +1,4 @@
-.PHONY: help setup dev gen sdk viewer-types viewer web runtime guest wheels test test-api lint clean up down db release-check release
+.PHONY: help setup build gen sdk viewer-types viewer web runtime guest wheels test test-api lint clean up down db release-check release
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -14,18 +14,18 @@ PY := ucbc-cli/python ucbc-api ucbc-worker alembic tests bots
 help:
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##\s*/\t/' | column -ts '	' | sed 's/^/  /'
 
-setup: .env .env.local dev  ## once: env files, then everything `make dev` does
+setup: .env .env.local build  ## once: env files, then everything `make build` does
 
 # uv builds the engine, here and only here: a `uv run` afterwards leaves the build alone.
-dev: gen viewer runtime  ## after any change: generated code, the viewer page, the bot runtime, dependencies and the engine in .venv
+build: gen viewer runtime  ## after any change: generated code, the viewer page, the bot runtime, dependencies and the engine in .venv
 	MATURIN_PEP517_ARGS="$(FEATURES)" uv sync --all-packages --reinstall-package ucbc
 
-test: dev .env .env.local  ## rust, python, api (needs Docker), viewer
+test: build .env .env.local  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
 	uv run pytest
 	npm test --workspaces --if-present
 
-test-api: dev .env .env.local
+test-api: build .env .env.local
 	uv run pytest tests/api
 
 lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale checkout shows in git status
@@ -60,7 +60,7 @@ node_modules: package-lock.json
 gen: sdk viewer-types
 
 sdk:
-	cargo run -q -p ucbc-dev -- gen-sdk ucbc-cli/python/ucbc/games
+	cargo run -q -p ucbc-build -- gen-sdk ucbc-cli/python/ucbc/games
 
 viewer-types: node_modules
 	node ucbc-viewer/scripts/gen-types.mjs
@@ -82,7 +82,7 @@ web: viewer-types
 RUNTIME := ucbc-cli/python/ucbc/runtime
 CACHE := .cache
 BUILD := $(CACHE)/build
-SNAPSHOT := cargo run -q --release -p ucbc-dev -- snapshot
+SNAPSHOT := cargo run -q --release -p ucbc-build -- snapshot
 GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-1
 GUEST_SHA256 := e391c18aeabaa425f8f63ffecc6d1d6d591e9e897e6fdf0169d593dbbab84c66
 STDLIB_SHA256 := 3587dccbe07538e219e5f3885137d43875d0fd98ea99c5a07822bf3b4b0e8405
@@ -147,7 +147,7 @@ $(BUILD)/wasi-sysroot.tar.gz:
 
 define fetch
 mkdir -p $(@D) && curl -fsSL -o $@.part $(1)
-echo "$(2)  $@.part" | $(SHA256) -c - >/dev/null && mv $@.part $@
+echo "$(2)  $@.part" | $(SHA256) -c - >/build/null && mv $@.part $@
 endef
 
 # Postgres alone, for running the API from the checkout.
@@ -160,7 +160,7 @@ db: .env .env.$(ENV)
 # cross-compiled with zig (`rustup target add` each once). No sdist: a platform without a
 # wheel should fail to find one, not try to build.
 # The runtime is precompiled per target, so the snapshot is redone for each wheel and
-# removed after, for the next `make dev` to rebuild for this machine.
+# removed after, for the next `make build` to rebuild for this machine.
 TARGETS := x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 wheels: sdk viewer $(CACHE)/guest.wasm $(RUNTIME)/lib/python314.zip
 	rm -rf dist && mkdir -p dist

@@ -97,7 +97,7 @@ raw SQL in `op.execute`.
 ## Install and release
 
 ```bash
-pip install ucbc        # Linux x86_64/aarch64 (WSL2 or a container elsewhere)
+pip install ucbc        # Linux x86_64/aarch64, Windows x86_64
 ```
 
 To release, set the same version in `Cargo.toml` and `ucbc-cli/pyproject.toml`, commit, then

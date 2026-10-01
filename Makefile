@@ -112,7 +112,7 @@ endif
 # Building the guest: CPython for WASI from a pinned release of ours (`make cpython`,
 # below), the guest crate linked against it, and the stdlib zipped without what a bot
 # cannot use.
-CPYTHON_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/cpython-1
+CPYTHON_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/cpython-2
 CPYTHON_BUILD_SHA256 :=
 CPYTHON_LIB_SHA256 :=
 WASI_SDK := https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24

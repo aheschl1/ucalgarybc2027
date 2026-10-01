@@ -17,12 +17,13 @@ flowchart LR
 ```
 
 `guest.wasm` is CPython linked with `ucbc-wasm/guest`, a reactor that exports `init`,
-`compile`, `load` and `step` and imports `ucbc.call` and `ucbc.take`. `.github/workflows/guest.yml`
-builds it and the stdlib zip and publishes both as a release; `make build` downloads them
-against the checksums in the Makefile, and `make guest` builds them locally instead.
-CPython itself comes from a release of ours too: `.github/workflows/cpython.yml` runs
-`make cpython`, the upstream WASI configuration plus pymalloc, LTO and the wasm features
-wasmtime has, and the Makefile pins what it published.
+`compile`, `load` and `step` and imports `ucbc.call` and `ucbc.take`. On a `guest-N` tag
+(`make tag KIND=guest`), `.github/workflows/guest.yml` builds it and the stdlib zip and
+publishes both as a release; `make build` downloads them against the checksums in the
+Makefile, and `make guest` builds them locally instead. CPython itself comes from a release
+of ours too: on a `cpython-N` tag, `.github/workflows/cpython.yml` runs `make cpython`, the
+upstream WASI configuration plus pymalloc, LTO and the wasm features wasmtime has, and the
+Makefile pins what it published.
 
 `ucbc-dev snapshot` runs `init` under wizer and writes the started interpreter out
 precompiled for the machine, `runtime/bot.cwasm` in the `ucbc` package. `init` imports

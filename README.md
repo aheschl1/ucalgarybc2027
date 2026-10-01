@@ -100,8 +100,10 @@ raw SQL in `op.execute`.
 pip install ucbc        # Linux x86_64/aarch64 (WSL2 or a container elsewhere)
 ```
 
-To release, set the same version in `Cargo.toml` and `ucbc-cli/pyproject.toml`, commit, then `ENV=prod make release` (PyPI, with `PYPI_API_TOKEN` from
-`.env.prod`).
+To release, set the same version in `Cargo.toml` and `ucbc-cli/pyproject.toml`, commit, then
+`make tag`: CI builds the wheels, publishes them to PyPI and attaches them to a GitHub
+release at `v<version>`. `make tag KIND=guest` or `KIND=cpython` rebuilds that artifact the
+same way, for the Makefile to pin.
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The bot runtime:
 [docs/wasm.md](docs/wasm.md). The API, queue, and worker: [docs/platform.md](docs/platform.md).

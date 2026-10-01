@@ -56,10 +56,12 @@ async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: in
     if replay is None:
         raise NotFound(f"no set {index} in match {match_id}")
 
+    # if the replay is stored in the blob store, fetch it from there
     replay_key = replay
-    if replay_key is not None: # added a check here, can probably remove it later
+    if replay_key is not None: # added a check here
         return await blobs.get(replay_key)
-
+    
+    # otherwise decompress old bytes
     return replay
 
 
@@ -99,6 +101,8 @@ async def finish_match(
     """Records the replay and marks the match done. Sets from an earlier attempt are
     replaced, so a rerun after a lost worker leaves one consistent replay."""
     replay_keys: dict[int, str] = {}
+
+    # loops each set in the replay and builds the blob and stores returned key for DB
     for s in replay.sets:
         # this is my idea for the key, makes sense for this but can change later
         key = f"matches/{match.id}/attempts/{match.attempts}/sets/{s.index}.json.gz"

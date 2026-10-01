@@ -171,7 +171,7 @@ class MatchRepo:
                 r.reason,
                 r.detail,
                 r.ticks,
-                replay_key, # store key instead of the gzipped json
+                replay_key, # store key which is string instead of the gzipped json
             ),
         )
 
@@ -193,7 +193,7 @@ class MatchRepo:
             "select replay_key, replay from sets where match_id = %s and index = %s",
             (match_id, index),
         )
-        row = await cur.fetchone() # cursor get single row
+        row = await cur.fetchone() # cursor get single row (tuple)
         if row is None:
             return None
         replay = row["replay"]

@@ -42,9 +42,9 @@ up: .env .env.$(ENV)  ## the platform in Docker
 down:  ## stop compose
 	$(COMPOSE) down
 
-clean:  ## build outputs, .venv, node_modules (not the downloads in .cache)
+clean:  ## build outputs, .venv, node_modules, and the downloads and builds in .cache
 	cargo clean
-	rm -rf .venv dist node_modules ucbc-api/api/static $(RUNTIME)
+	rm -rf .venv dist node_modules ucbc-api/api/static $(RUNTIME) $(CACHE)
 
 # Pieces
 
@@ -78,7 +78,7 @@ web: viewer-types
 # machine, and the stdlib as one zip. Guest and zip are downloaded from a release that
 # .github/workflows/guest.yml built; `make guest` builds them here instead, which needs
 # the wasm32-wasip1 target and three more downloads. Downloads land in .cache, checked
-# against their sha256, and survive `make clean`.
+# against their sha256; `make clean` removes them.
 RUNTIME := ucbc-cli/python/ucbc/runtime
 CACHE := .cache
 BUILD := $(CACHE)/build

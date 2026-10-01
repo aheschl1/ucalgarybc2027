@@ -7,8 +7,7 @@ repository.workspace = true
 description = "Python bots as WebAssembly: CPython for WASI, one wasmtime instance per bot, run on fuel"
 
 [features]
-# `snapshot`: the build step ucbc-dev runs, not something the engine needs.
-snapshot = ["dep:wasmtime-wizer"]
+snapshot = ["dep:wasmtime-wizer", "wasmtime/all-arch"]
 
 [dependencies]
 wasmtime = { workspace = true }

@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
+import gzip
 from uuid import UUID
 
+from api.blobs import BlobStore
 from api.db import DBConnection
 from api.errors import ApiError, Forbidden, NotFound
 from api.models.matches import (
@@ -53,12 +55,17 @@ async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
     return Match(**row.model_dump(), sets=sets)
 
 
-async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int) -> bytes:
+async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int, blobs: BlobStore) -> bytes:
     """The set's replay as stored: JSON, gzipped."""
     await _visible(db, user, match_id)
     replay = await db.match_repo.get_set_replay(match_id, index)
     if replay is None:
         raise NotFound(f"no set {index} in match {match_id}")
+
+    replay_key = replay
+    if replay_key is not None:
+        return await blobs.get(replay_key)
+
     return replay
 
 
@@ -106,14 +113,25 @@ async def claim_match(db: DBConnection, worker: str, lease: timedelta) -> MatchR
     return None
 
 
-async def finish_match(db: DBConnection, match: MatchRow, replay: MatchReplay) -> None:
+async def finish_match(
+    db: DBConnection, match: MatchRow, replay: MatchReplay, blobs: BlobStore
+) -> None:
     """Records the replay, marks the match done, and moves both teams' ratings. Sets from
     an earlier attempt are replaced, so a rerun after a lost worker leaves one consistent
     replay, and a lost lease writes nothing."""
+    replay_keys: dict[int, str] = {}
+    for s in replay.sets:
+        key = f"matches/{match.id}/attempts/{match.attempts}/sets/{s.index}.json.gz"
+        data = gzip.compress(s.model_dump_json(exclude_unset=True).encode(), 6) # please check this
+        await blobs.put(key, data, "application/json")
+        replay_keys[s.index] = key
+
     async with db.conn.transaction():
         await db.match_repo.delete_sets(match.id)
         for s in replay.sets:
-            await db.match_repo.add_set(match.id, s)
+            await db.match_repo.add_set(
+                match.id, s, replay_keys[s.index] # i'm pretty sure it's s.index
+            )
         done = await db.match_repo.complete(
             match.id,
             _claimed_at(match),

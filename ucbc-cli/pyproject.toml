@@ -13,7 +13,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
 ]
-dependencies = ["click>=8.1"]
+dependencies = ["click>=8.1", "httpx>=0.27"]
 
 [project.urls]
 Homepage = "https://ucbc.andrewheschl.ca"
@@ -25,3 +25,4 @@ ucbc = "ucbc.cli:main"
 python-source = "python"
 module-name = "ucbc._engine"
 exclude = ["**/__pycache__/**"]
+

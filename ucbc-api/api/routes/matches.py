@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Response, status
 
 from api.auth import CurrentUser
+from api.blobs import Blobs
 from api.db import DB
 from api.models.matches import Match, MatchCreated, MatchEnqueue, MatchRow
 from api.services import matches
@@ -29,8 +30,8 @@ async def get(match_id: UUID, db: DB, user: CurrentUser) -> Match:
 
 
 @router.get("/{match_id}/sets/{index}", response_class=Response)
-async def get_set(match_id: UUID, index: int, db: DB, user: CurrentUser) -> Response:
+async def get_set(match_id: UUID, index: int, db: DB, user: CurrentUser, blobs: Blobs) -> Response:
     """One set of the replay as JSON, sent gzipped: the browser decompresses it, so the
     page reads it like any other JSON."""
-    data = await matches.get_set_replay(db, user, match_id, index)
+    data = await matches.get_set_replay(db, user, match_id, index, blobs)
     return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip"})

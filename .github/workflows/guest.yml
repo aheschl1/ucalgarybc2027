@@ -1,14 +1,12 @@
-# Builds the bot interpreter (ucbc-wasm/guest) and the stdlib zip and publishes them as a
-# release, which `make dev` downloads: the Makefile pins the release and both checksums,
-# printed in this run's summary. Runs when the guest changes; run it by hand after a
-# CPython bump in the Makefile.
+# On a guest-N tag (`make tag KIND=guest`): builds the bot interpreter (ucbc-wasm/guest)
+# and the stdlib zip and publishes them as a release at the tag, which `make build`
+# downloads: the Makefile pins the release and both checksums, printed in this run's
+# summary.
 name: Guest
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
-    paths: [ucbc-wasm/guest/**, .github/workflows/guest.yml]
+    tags: ['guest-*']
 
 permissions:
   contents: write
@@ -27,6 +25,6 @@ jobs:
       - run: uv python install 3.14.7
       - run: make guest
       - run: sha256sum .cache/guest.wasm .cache/stdlib.zip | tee -a "$GITHUB_STEP_SUMMARY"
-      - run: gh release create guest-${{ github.run_number }} .cache/guest.wasm .cache/stdlib.zip --title "guest-${{ github.run_number }}" --notes "Bot interpreter and stdlib built from ${{ github.sha }}"
+      - run: gh release create ${{ github.ref_name }} .cache/guest.wasm .cache/stdlib.zip --title ${{ github.ref_name }} --notes "Bot interpreter and stdlib built from ${{ github.sha }}"
         env:
           GH_TOKEN: ${{ github.token }}

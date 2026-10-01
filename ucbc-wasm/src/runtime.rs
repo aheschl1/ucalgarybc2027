@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use wasmtime::{Caller, Config, Engine, Extern, Linker, Memory, Module, StoreLimits};
+use wasmtime::{Caller, Config, Engine, Extern, Inlining, Linker, Memory, Module, StoreLimits};
 use wasmtime_wasi::p1::{self, WasiP1Ctx};
 
 /// Fuel a call starts with; `fuel_async_yield_interval` hands it out one budget at a time.
@@ -89,7 +89,9 @@ impl Runtime {
             .memory_guaranteed_dense_image_size(256 << 20)
             .max_wasm_stack(8 << 20)
             .async_stack_size(9 << 20)
-            .cranelift_nan_canonicalization(true);
+            .cranelift_nan_canonicalization(true)
+            // A few percent of wall time, no change in fuel; the snapshot compiles slower.
+            .compiler_inlining(Inlining::Yes);
         config
     }
 }

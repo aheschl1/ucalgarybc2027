@@ -1,4 +1,4 @@
-.PHONY: help setup build gen sdk viewer-types viewer web runtime guest cpython wheels test test-api lint clean up down db release-check release
+.PHONY: help setup build gen sdk viewer-types viewer web runtime guest cpython wheels test test-api lint clean up down db release-check tag
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -230,11 +230,12 @@ wheels: sdk viewer $(CACHE)/guest.wasm $(RUNTIME)/lib/python314.zip
 	    -m ucbc-cli/Cargo.toml -o dist || exit 1; done
 	rm $(RUNTIME)/bot.cwasm
 
-# Publishing: `ENV=prod make release` uploads dist/ to PyPI and tags the commit; any other
-# ENV is refused. PYPI_API_TOKEN comes from the environment, else .env.$(ENV) over .env,
-# like every other setting. A version can be uploaded once, ever. release-check refuses
-# versions that disagree or a dirty tree, then installs the x86_64 wheel in clean containers
-# and plays a match.
+# Publishing is CI's, keyed by tag. `make tag` pushes v$(VERSION): .github/workflows/release.yml
+# runs release-check, uploads dist/ to PyPI (secret PYPI_API_TOKEN) and attaches the wheels
+# to a GitHub release at the tag. `make tag KIND=guest` or `KIND=cpython` pushes the next
+# guest-N or cpython-N instead, which rebuilds that artifact for this file to pin. A version
+# can be uploaded once, ever. release-check refuses versions that disagree or a dirty tree,
+# then installs the x86_64 wheel in clean containers and plays a match.
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-cli/pyproject.toml)
 release-check: wheels
 	@grep -q '^version = "$(VERSION)"' Cargo.toml \
@@ -246,9 +247,9 @@ release-check: wheels
 	    "pip install -q --find-links /dist ucbc==$(VERSION) && ucbc run /bots/ucbc2027/noop /bots/ucbc2027/noop" \
 	    || exit 1; done
 
-release:  ## ENV=prod make release: wheels to PyPI, tag the commit
-	@test "$(ENV)" = prod || { echo "publishing is a prod action: ENV=prod make release"; exit 1; }
-	$(MAKE) release-check
-	@UV_PUBLISH_TOKEN=$${PYPI_API_TOKEN:-$$(cat .env .env.$(ENV) | sed -n 's/^PYPI_API_TOKEN=//p' | tail -1)} \
-	  uv publish dist/*
-	git tag v$(VERSION)
+tag:  ## tag HEAD and push it: v$(VERSION) to publish; KIND=guest or KIND=cpython to rebuild that artifact
+	@test -z "$(KIND)" -o "$(KIND)" = guest -o "$(KIND)" = cpython || { echo "KIND is guest or cpython"; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "commit or stash first"; exit 1; }
+	@git fetch -q --tags
+	@tag=$(if $(KIND),$(KIND)-$$(($$(git tag -l '$(KIND)-*' | sed 's/.*-//' | sort -n | tail -1) + 1)),v$(VERSION)); \
+	  git tag $$tag && git push -q origin $$tag && echo "pushed $$tag"

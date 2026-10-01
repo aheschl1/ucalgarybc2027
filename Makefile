@@ -174,7 +174,8 @@ CPYTHON_LIBS := libpython3.14.a Modules/_decimal/libmpdec/libmpdec.a Modules/exp
 CPYTHON_ENV := CC=$(CPYTHON_SDK)/bin/clang CPP=$(CPYTHON_SDK)/bin/clang-cpp AR=$(CPYTHON_SDK)/bin/llvm-ar \
   RANLIB=$(CPYTHON_SDK)/bin/ranlib PKG_CONFIG_PATH= PKG_CONFIG_SYSROOT_DIR=$(CPYTHON_SYSROOT) \
   PKG_CONFIG_LIBDIR=$(CPYTHON_SYSROOT)/lib/pkgconfig:$(CPYTHON_SYSROOT)/share/pkgconfig \
-  WASI_SDK_PATH=$(CPYTHON_SDK) WASI_SYSROOT=$(CPYTHON_SYSROOT) HOSTRUNNER=true
+  WASI_SDK_PATH=$(CPYTHON_SDK) WASI_SYSROOT=$(CPYTHON_SYSROOT) HOSTRUNNER=true \
+  PATH=$(CPYTHON_SDK)/bin:$$PATH
 
 cpython: $(CPYTHON_SRC) $(CPYTHON_SDK)  ## build CPython for WASI into .cache/build/python-build.zip and python.zip (Linux x86_64; needs uv)
 	mkdir -p $(CPYTHON_OUT) && cd $(CPYTHON_OUT) && $(CPYTHON_ENV) \

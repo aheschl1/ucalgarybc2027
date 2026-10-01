@@ -8,8 +8,8 @@ use serde_json::Value;
 use crate::error::{ActionError, BotFailure, EngineError, QueryError};
 use crate::ids::{BotId, BotRef, TeamId};
 use crate::payload::{decode, encode};
-use crate::query::Answer;
 use crate::replay::Reason;
+use crate::request::Answer;
 
 #[derive(Clone, Debug)]
 pub struct SetSetup {
@@ -81,8 +81,8 @@ pub enum GameStatus {
 }
 
 /// One set of one game, in the game's own types. The engine decodes each bot's
-/// tagged-JSON payloads into `Query` and `Action` and encodes the responses and
-/// snapshots back, so a game never touches JSON.
+/// tagged-JSON payloads into `Query` and `Action` and encodes the replies and snapshots
+/// back, so a game never touches JSON.
 ///
 /// A tick is one run of [`schedule`](Self::schedule); a step is one scheduled bot's
 /// turn within it. Per step the engine forwards the bot's queries and actions, then
@@ -96,11 +96,11 @@ pub trait Game: Send + 'static {
     /// Registry key, e.g. `"tictactoe"`.
     const NAME: &'static str;
     /// A `#[serde(tag = "type")]` enum of what bots may ask, each variant holding a
-    /// [`Query`](crate::Query) that names its reply type.
+    /// [`Request`](crate::Request) that names its reply type.
     type Query: DeserializeOwned + JsonSchema;
-    /// A `#[serde(tag = "type")]` enum of what bots may do.
+    /// A `#[serde(tag = "type")]` enum of what bots may do, each variant holding a
+    /// [`Request`](crate::Request) that names its reply type.
     type Action: DeserializeOwned + JsonSchema;
-    type ActionResponse: Serialize + JsonSchema;
     type Snapshot: Serialize + JsonSchema;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError>
@@ -114,11 +114,7 @@ pub trait Game: Send + 'static {
 
     /// Only the stepping bot ever calls this. On `Err` the state is untouched and the
     /// bot may try again. `Ok` carries what the action produced for the bot to see.
-    fn apply_action(
-        &mut self,
-        bot: BotRef,
-        action: Self::Action,
-    ) -> Result<Self::ActionResponse, ActionError>;
+    fn apply_action(&mut self, bot: BotRef, action: Self::Action) -> Result<Answer, ActionError>;
 
     /// The bot's step returned normally.
     fn end_step(&mut self, bot: BotRef);
@@ -169,8 +165,7 @@ impl<G: Game> DynGame for G {
     }
 
     fn apply_action(&mut self, bot: BotRef, action: &Value) -> Result<Value, ActionError> {
-        let response = Game::apply_action(self, bot, decode(action)?)?;
-        Ok(encode(response))
+        Ok(Game::apply_action(self, bot, decode(action)?)?.into_value())
     }
 
     fn end_step(&mut self, bot: BotRef) {
@@ -214,7 +209,6 @@ pub struct GameApi {
     pub type_name: &'static str,
     pub query: Value,
     pub action: Value,
-    pub action_response: Value,
     pub snapshot: Value,
 }
 
@@ -228,7 +222,6 @@ impl GameApi {
                 .unwrap_or("Game"),
             query: schema_for!(G::Query).to_value(),
             action: schema_for!(G::Action).to_value(),
-            action_response: schema_for!(G::ActionResponse).to_value(),
             snapshot: schema_for!(G::Snapshot).to_value(),
         }
     }

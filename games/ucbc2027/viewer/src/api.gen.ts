@@ -13,9 +13,6 @@ export interface Ucbc2027Api {
   snapshot: State;
   action: Action;
 }
-/**
- * The board, `board[y][x]`, and how many ticks have ended this set.
- */
 export interface State {
   board: Tile[][];
   tick: number;

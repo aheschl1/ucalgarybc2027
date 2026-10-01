@@ -33,7 +33,7 @@ struct Variant {
     tag: String,
     fields: Vec<Field>,
     doc: Option<String>,
-    /// A query's reply type, from its `x-returns`.
+    /// The variant's reply type, from its `x-returns`.
     returns: Option<Ty>,
 }
 
@@ -107,27 +107,9 @@ impl Types {
         self.add(name, doc, def)
     }
 
-    /// The type a response schema describes.
-    fn response(&mut self, root: &Schema) -> Result<Ty, String> {
-        self.collect(root)?;
-        if root.get("type") == Some(&Value::String("null".into())) {
-            return Ok(Ty::Unit);
-        }
-        let Some(Value::String(title)) = root.get("title") else {
-            return Err("a response type needs a name; use a struct or enum".into());
-        };
-        self.define(title, root)?;
-        Ok(Ty::Named(title.clone()))
-    }
-
-    /// Methods from a query or action schema: one per variant, returning the variant's
-    /// own reply type or else `shared`.
-    fn methods(
-        &mut self,
-        root: &Schema,
-        call: &'static str,
-        shared: Option<&Ty>,
-    ) -> Result<Vec<Method>, String> {
+    /// Methods from a query or action schema, one per variant, each returning its
+    /// variant's reply type.
+    fn methods(&mut self, root: &Schema, call: &'static str) -> Result<Vec<Method>, String> {
         self.collect(root)?;
         let variants = variants(root)?.ok_or("queries and actions must be tagged enums")?;
         variants
@@ -135,8 +117,7 @@ impl Types {
             .map(|v| {
                 let returns = v
                     .returns
-                    .or_else(|| shared.cloned())
-                    .ok_or_else(|| format!("query `{}` must hold a `Query<Q, R>`", v.tag))?;
+                    .ok_or_else(|| format!("`{}` must hold a `Request<P, R>`", v.tag))?;
                 Ok(Method {
                     name: v.tag,
                     doc: v.doc,
@@ -402,9 +383,8 @@ fn docstring(out: &mut String, indent: &str, doc: &str) {
 /// The Python module for `api`.
 pub fn generate(api: &GameApi) -> Result<String, String> {
     let mut types = Types::default();
-    let action_response = types.response(obj(&api.action_response)?)?;
-    let mut methods = types.methods(obj(&api.query)?, "_query", None)?;
-    methods.extend(types.methods(obj(&api.action)?, "_act", Some(&action_response))?);
+    let mut methods = types.methods(obj(&api.query)?, "_query")?;
+    methods.extend(types.methods(obj(&api.action)?, "_act")?);
 
     let uses_asdict = methods
         .iter()
@@ -590,16 +570,14 @@ mod tests {
             }),
             action: json!({
                 "oneOf": [{"type": "object", "required": ["type", "how"],
-                           "properties": {"type": {"const": "go"}, "how": {"$ref": "#/$defs/Kind"}}}],
-                "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]}},
-            }),
-            action_response: json!({
-                "title": "Went",
-                "oneOf": [
-                    {"type": "object", "required": ["type"], "properties": {"type": {"const": "ok"}}},
-                    {"type": "object", "required": ["type", "why"],
-                     "properties": {"type": {"const": "blocked"}, "why": {"type": "string"}}},
-                ],
+                           "properties": {"type": {"const": "go"}, "how": {"$ref": "#/$defs/Kind"}},
+                           "x-returns": {"$ref": "#/$defs/Went"}}],
+                "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]},
+                          "Went": {"oneOf": [
+                              {"type": "object", "required": ["type"], "properties": {"type": {"const": "ok"}}},
+                              {"type": "object", "required": ["type", "why"],
+                               "properties": {"type": {"const": "blocked"}, "why": {"type": "string"}}},
+                          ]}},
             }),
             snapshot: json!({"type": "null"}),
         }
@@ -648,8 +626,8 @@ mod tests {
             "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]}},
         });
         api.action = json!({"oneOf": [{"type": "object", "required": ["type"],
-                                       "properties": {"type": {"const": "wait"}}}]});
-        api.action_response = json!({"type": "null"});
+                                       "properties": {"type": {"const": "wait"}},
+                                       "x-returns": {"type": "null"}}]});
         let py = generate(&api).unwrap();
         assert!(
             py.contains("from __future__ import annotations\n\nfrom enum import Enum\n\nfrom ucbc.handle import Handle\n"),
@@ -670,7 +648,17 @@ mod tests {
         assert!(
             generate(&bad)
                 .unwrap_err()
-                .contains("query `count` must hold")
+                .contains("`count` must hold a `Request<P, R>`")
+        );
+        let mut bad = api();
+        bad.action["oneOf"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("x-returns");
+        assert!(
+            generate(&bad)
+                .unwrap_err()
+                .contains("`go` must hold a `Request<P, R>`")
         );
     }
 }

@@ -12,14 +12,19 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotId, BotRef, EngineError, Game, GameStatus, Outcome, Query,
-    QueryError, SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotId, BotRef, EngineError, Game, GameStatus, Outcome,
+    QueryError, Request, SetSetup, TeamId,
 };
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    Increment { by: u32 },
+    Increment(Request<By, Incremented>),
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct By {
+    pub by: u32,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -30,7 +35,7 @@ pub struct Incremented {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    Counts(Query<(), Counts>),
+    Counts(Request<(), Counts>),
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -62,7 +67,6 @@ impl Game for CountingGame {
     const NAME: &'static str = "counting";
     type Query = Queries;
     type Action = Action;
-    type ActionResponse = Incremented;
     type Snapshot = Snapshot;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
@@ -103,11 +107,12 @@ impl Game for CountingGame {
         Ok(q.reply(counts))
     }
 
-    fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Incremented, ActionError> {
+    fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Answer, ActionError> {
         if self.acted {
             return Err(ActionError::Invalid("already acted this step".into()));
         }
-        let Action::Increment { by } = action;
+        let Action::Increment(a) = action;
+        let by = a.by;
         if !(1..=3).contains(&by) {
             return Err(ActionError::Invalid(format!(
                 "increment must be 1..=3, got {by}"
@@ -119,9 +124,9 @@ impl Game for CountingGame {
         if self.counts[team] >= self.target {
             self.status = GameStatus::Complete(Outcome::win(bot.team));
         }
-        Ok(Incremented {
+        Ok(a.reply(Incremented {
             count: self.counts[team],
-        })
+        }))
     }
 
     fn end_step(&mut self, _bot: BotRef) {

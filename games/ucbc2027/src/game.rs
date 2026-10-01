@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, Query, QueryError,
+    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, QueryError, Request,
     SetSetup, TeamId,
 };
 
@@ -26,7 +26,6 @@ pub struct Tile {
     pub item: Option<Item>,
 }
 
-/// The board, `board[y][x]`, and how many ticks have ended this set.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct State {
     pub tick: u32,
@@ -63,16 +62,16 @@ pub struct At {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    Item(Query<At, Option<Item>>),
-    Environment(Query<At, Environment>),
-    Width(Query<(), usize>),
-    Height(Query<(), usize>),
+    Item(Request<At, Option<Item>>),
+    Environment(Request<At, Environment>),
+    Width(Request<(), usize>),
+    Height(Request<(), usize>),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    Noop,
+    Noop(Request<(), ()>),
 }
 
 pub struct Ucbc2027 {
@@ -85,7 +84,6 @@ impl Game for Ucbc2027 {
     const NAME: &'static str = "ucbc2027";
     type Query = Queries;
     type Action = Action;
-    type ActionResponse = ();
     type Snapshot = State;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
@@ -118,9 +116,9 @@ impl Game for Ucbc2027 {
         }
     }
 
-    fn apply_action(&mut self, _bot: BotRef, action: Action) -> Result<(), ActionError> {
+    fn apply_action(&mut self, _bot: BotRef, action: Action) -> Result<Answer, ActionError> {
         match action {
-            Action::Noop => Ok(()),
+            Action::Noop(a) => Ok(a.reply(())),
         }
     }
 

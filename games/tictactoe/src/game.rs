@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, Outcome, Query,
-    QueryError, SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, Outcome, QueryError,
+    Request, SetSetup, TeamId,
 };
 
 use crate::rules::{Board, Cell};
@@ -11,7 +11,7 @@ use crate::rules::{Board, Cell};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
     /// The board and whose turn it is.
-    Board(Query<(), BoardView>),
+    Board(Request<(), BoardView>),
 }
 
 /// What a bot sees when it asks for the board.
@@ -31,7 +31,13 @@ pub struct BoardView {
 pub enum Action {
     /// Place this bot's mark. Refused if the cell is taken or a mark was already
     /// placed this step.
-    Place { row: u32, col: u32 },
+    Place(Request<Spot, Placed>),
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct Spot {
+    pub row: u32,
+    pub col: u32,
 }
 
 /// The mark that was placed.
@@ -89,7 +95,6 @@ impl Game for TicTacToe {
     const NAME: &'static str = "tictactoe";
     type Query = Queries;
     type Action = Action;
-    type ActionResponse = Placed;
     type Snapshot = Board;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
@@ -123,11 +128,12 @@ impl Game for TicTacToe {
         }
     }
 
-    fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Placed, ActionError> {
+    fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Answer, ActionError> {
         if matches!(self.state, State::Playing { placed: true }) {
             return Err(ActionError::Invalid("already placed this turn".into()));
         }
-        let Action::Place { row, col } = action;
+        let Action::Place(a) = action;
+        let (row, col) = (a.row, a.col);
         let mark = self.mark(bot.team);
         self.board
             .place(row, col, mark)
@@ -139,7 +145,7 @@ impl Game for TicTacToe {
         } else {
             State::Playing { placed: true }
         };
-        Ok(Placed { row, col, mark })
+        Ok(a.reply(Placed { row, col, mark }))
     }
 
     fn end_step(&mut self, bot: BotRef) {

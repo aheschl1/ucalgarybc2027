@@ -113,8 +113,8 @@ endif
 # below), the guest crate linked against it, and the stdlib zipped without what a bot
 # cannot use.
 CPYTHON_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/cpython-2
-CPYTHON_BUILD_SHA256 :=
-CPYTHON_LIB_SHA256 :=
+CPYTHON_BUILD_SHA256 := 45364f2130c9b5e1c66ce382952faaa688f807792ce4119741eca2f11c55fb0b
+CPYTHON_LIB_SHA256 := 0c95009010f7ab4290ff47d077aa7860f796b143f2eede297220679f1c5abfa5
 WASI_SDK := https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24
 PRUNE := asyncio concurrent ctypes curses dbm email ensurepip html http idlelib lib-dynload \
   multiprocessing pydoc_data _pyrepl site-packages sqlite3 test tkinter turtledemo unittest \

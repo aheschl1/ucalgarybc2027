@@ -240,7 +240,7 @@ VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-cli/pyproject.toml)
 release-check: wheels
 	@grep -q '^version = "$(VERSION)"' Cargo.toml \
 	  || { echo "versions disagree with ucbc-cli $(VERSION)"; exit 1; }
-	@test -z "$$(git status --porcelain)" || { echo "commit or stash first"; exit 1; }
+	@test -z "$$(git status --porcelain)" || { git status --short; echo "commit or stash first"; exit 1; }
 	uvx twine check dist/*
 	for py in 3.12 3.14; do \
 	  docker run --rm -v $(CURDIR)/dist:/dist:ro -v $(CURDIR)/bots:/bots:ro python:$$py-slim sh -c \

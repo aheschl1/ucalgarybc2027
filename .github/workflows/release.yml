@@ -1,6 +1,7 @@
-# On a v* tag (`make tag`): builds the wheels, runs release-check (the installed wheel plays
-# a match in clean containers), uploads them to PyPI and attaches them to a GitHub release
-# at the tag. PYPI_API_TOKEN is a repository secret.
+# On a v* tag (`make tag`): builds the wheels, Linux through make, Windows natively, runs
+# release-check (the installed Linux wheel plays a match in clean containers), uploads them
+# to PyPI and attaches them to a GitHub release at the tag. PYPI_API_TOKEN is a repository
+# secret.
 name: Release
 
 on:
@@ -11,7 +12,40 @@ permissions:
   contents: write
 
 jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: npm ci && npm run build -w @ucbc/viewer -- --outDir ../ucbc-cli/python/ucbc/viewer/static --emptyOutDir
+      # The pinned guest and stdlib, as make build fetches them.
+      - run: |
+          eval "$(sed -n 's/^\(GUEST_RELEASE\|GUEST_SHA256\|STDLIB_SHA256\) := /\1=/p' Makefile)"
+          mkdir -p .cache ucbc-cli/python/ucbc/runtime/lib
+          curl -fsSL -o .cache/guest.wasm "$GUEST_RELEASE/guest.wasm"
+          curl -fsSL -o ucbc-cli/python/ucbc/runtime/lib/python314.zip "$GUEST_RELEASE/stdlib.zip"
+          printf '%s  %s\n' "$GUEST_SHA256" .cache/guest.wasm "$STDLIB_SHA256" ucbc-cli/python/ucbc/runtime/lib/python314.zip | sha256sum -c -
+      - run: cargo run -q --release -p ucbc-dev -- snapshot .cache/guest.wasm ucbc-cli/python/ucbc ucbc-cli/python/ucbc/runtime/bot.cwasm
+      - run: uvx --from 'maturin>=1.9,<2' maturin build --profile dist -m ucbc-cli/Cargo.toml -o dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
   release:
+    needs: windows
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -27,6 +61,10 @@ jobs:
           python-version-file: .python-version
       - uses: astral-sh/setup-uv@v10.2.0
       - run: make release-check
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-wheel
+          path: dist
       - run: uv publish dist/*
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}

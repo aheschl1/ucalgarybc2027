@@ -1,4 +1,4 @@
-.PHONY: help setup build gen sdk viewer-types viewer web runtime guest cpython wheels test test-api lint clean up down db release-check release
+.PHONY: help setup build gen sdk viewer-types viewer web runtime guest cpython wheels test test-api lint clean up down db release-check tag
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -42,9 +42,9 @@ up: .env .env.$(ENV)  ## the platform in Docker
 down:  ## stop compose
 	$(COMPOSE) down
 
-clean:  ## build outputs, .venv, node_modules (not the downloads in .cache)
+clean:  ## build outputs, .venv, node_modules, and the downloads and builds in .cache
 	cargo clean
-	rm -rf .venv dist node_modules ucbc-api/api/static $(RUNTIME)
+	rm -rf .venv dist node_modules ucbc-api/api/static $(RUNTIME) $(CACHE)
 
 # Pieces
 
@@ -78,14 +78,14 @@ web: viewer-types
 # machine, and the stdlib as one zip. Guest and zip are downloaded from a release that
 # .github/workflows/guest.yml built; `make guest` builds them here instead, which needs
 # the wasm32-wasip1 target and three more downloads. Downloads land in .cache, checked
-# against their sha256, and survive `make clean`.
+# against their sha256; `make clean` removes them.
 RUNTIME := ucbc-cli/python/ucbc/runtime
 CACHE := .cache
 BUILD := $(CACHE)/build
 SNAPSHOT := cargo run -q --release -p ucbc-dev -- snapshot
-GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-3
-GUEST_SHA256 := 36e4120a95527f0f323a46f92c9a252c1ee1c97091d12c6f26cc58a3d30964ed
-STDLIB_SHA256 := 4f399c9d7f967a9beb62ab2dacf46f5b9de7c5376d42bd3085132fb3979e6c0d
+GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-4
+GUEST_SHA256 := 566e4a58ccd1123c0704a5c84d5d32f87d8fab8f09eae81cdac0a05f1230c8b4
+STDLIB_SHA256 := 8c36afdf444548ce9a10bbe07915b4503d274ccd3f99d5b559d9ce1e441b7cee
 SHA256 := $(shell command -v sha256sum || echo shasum -a 256)
 
 runtime: $(RUNTIME)/bot.cwasm
@@ -112,9 +112,9 @@ endif
 # Building the guest: CPython for WASI from a pinned release of ours (`make cpython`,
 # below), the guest crate linked against it, and the stdlib zipped without what a bot
 # cannot use.
-CPYTHON_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/cpython-1
-CPYTHON_BUILD_SHA256 :=
-CPYTHON_LIB_SHA256 :=
+CPYTHON_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/cpython-2
+CPYTHON_BUILD_SHA256 := 45364f2130c9b5e1c66ce382952faaa688f807792ce4119741eca2f11c55fb0b
+CPYTHON_LIB_SHA256 := 0c95009010f7ab4290ff47d077aa7860f796b143f2eede297220679f1c5abfa5
 WASI_SDK := https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24
 PRUNE := asyncio concurrent ctypes curses dbm email ensurepip html http idlelib lib-dynload \
   multiprocessing pydoc_data _pyrepl site-packages sqlite3 test tkinter turtledemo unittest \
@@ -174,7 +174,8 @@ CPYTHON_LIBS := libpython3.14.a Modules/_decimal/libmpdec/libmpdec.a Modules/exp
 CPYTHON_ENV := CC=$(CPYTHON_SDK)/bin/clang CPP=$(CPYTHON_SDK)/bin/clang-cpp AR=$(CPYTHON_SDK)/bin/llvm-ar \
   RANLIB=$(CPYTHON_SDK)/bin/ranlib PKG_CONFIG_PATH= PKG_CONFIG_SYSROOT_DIR=$(CPYTHON_SYSROOT) \
   PKG_CONFIG_LIBDIR=$(CPYTHON_SYSROOT)/lib/pkgconfig:$(CPYTHON_SYSROOT)/share/pkgconfig \
-  WASI_SDK_PATH=$(CPYTHON_SDK) WASI_SYSROOT=$(CPYTHON_SYSROOT) HOSTRUNNER=true
+  WASI_SDK_PATH=$(CPYTHON_SDK) WASI_SYSROOT=$(CPYTHON_SYSROOT) HOSTRUNNER=true \
+  PATH=$(CPYTHON_SDK)/bin:$$PATH
 
 cpython: $(CPYTHON_SRC) $(CPYTHON_SDK)  ## build CPython for WASI into .cache/build/python-build.zip and python.zip (Linux x86_64; needs uv)
 	mkdir -p $(CPYTHON_OUT) && cd $(CPYTHON_OUT) && $(CPYTHON_ENV) \
@@ -229,11 +230,12 @@ wheels: sdk viewer $(CACHE)/guest.wasm $(RUNTIME)/lib/python314.zip
 	    -m ucbc-cli/Cargo.toml -o dist || exit 1; done
 	rm $(RUNTIME)/bot.cwasm
 
-# Publishing: `ENV=prod make release` uploads dist/ to PyPI and tags the commit; any other
-# ENV is refused. PYPI_API_TOKEN comes from the environment, else .env.$(ENV) over .env,
-# like every other setting. A version can be uploaded once, ever. release-check refuses
-# versions that disagree or a dirty tree, then installs the x86_64 wheel in clean containers
-# and plays a match.
+# Publishing is CI's, keyed by tag. `make tag` pushes v$(VERSION): .github/workflows/release.yml
+# runs release-check, uploads dist/ to PyPI (secret PYPI_API_TOKEN) and attaches the wheels
+# to a GitHub release at the tag. `make tag KIND=guest` or `KIND=cpython` pushes the next
+# guest-N or cpython-N instead, which rebuilds that artifact for this file to pin. A version
+# can be uploaded once, ever. release-check refuses versions that disagree or a dirty tree,
+# then installs the x86_64 wheel in clean containers and plays a match.
 VERSION := $(shell sed -n 's/^version = "\(.*\)"/\1/p' ucbc-cli/pyproject.toml)
 release-check: wheels
 	@grep -q '^version = "$(VERSION)"' Cargo.toml \
@@ -245,9 +247,9 @@ release-check: wheels
 	    "pip install -q --find-links /dist ucbc==$(VERSION) && ucbc run /bots/ucbc2027/noop /bots/ucbc2027/noop" \
 	    || exit 1; done
 
-release:  ## ENV=prod make release: wheels to PyPI, tag the commit
-	@test "$(ENV)" = prod || { echo "publishing is a prod action: ENV=prod make release"; exit 1; }
-	$(MAKE) release-check
-	@UV_PUBLISH_TOKEN=$${PYPI_API_TOKEN:-$$(cat .env .env.$(ENV) | sed -n 's/^PYPI_API_TOKEN=//p' | tail -1)} \
-	  uv publish dist/*
-	git tag v$(VERSION)
+tag:  ## tag HEAD and push it: v$(VERSION) to publish; KIND=guest or KIND=cpython to rebuild that artifact
+	@test -z "$(KIND)" -o "$(KIND)" = guest -o "$(KIND)" = cpython || { echo "KIND is guest or cpython"; exit 1; }
+	@test -z "$$(git status --porcelain)" || { echo "commit or stash first"; exit 1; }
+	@git fetch -q --tags
+	@tag=$(if $(KIND),$(KIND)-$$(($$(git tag -l '$(KIND)-*' | sed 's/.*-//' | sort -n | tail -1) + 1)),v$(VERSION)); \
+	  git tag $$tag && git push -q origin $$tag && echo "pushed $$tag"

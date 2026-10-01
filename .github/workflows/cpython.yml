@@ -1,11 +1,12 @@
-# Builds CPython for WASI (`make cpython`: pymalloc, LTO, the wasm features wasmtime has)
-# and publishes the build and stdlib zips as a release, which `make guest` downloads: the
-# Makefile pins the release and both checksums, printed in this run's summary. Run it by
-# hand after a CPython bump or a flag change in the Makefile.
+# On a cpython-N tag (`make tag KIND=cpython`): builds CPython for WASI (`make cpython`:
+# pymalloc, LTO, the wasm features wasmtime has) and publishes the build and stdlib zips as
+# a release at the tag, which `make guest` downloads: the Makefile pins the release and
+# both checksums, printed in this run's summary.
 name: CPython
 
 on:
-  workflow_dispatch:
+  push:
+    tags: ['cpython-*']
 
 permissions:
   contents: write
@@ -20,6 +21,6 @@ jobs:
       - run: uv python install 3.14.7
       - run: make cpython
       - run: sha256sum .cache/build/python-build.zip .cache/build/python.zip | tee -a "$GITHUB_STEP_SUMMARY"
-      - run: gh release create cpython-${{ github.run_number }} .cache/build/python-build.zip .cache/build/python.zip --title "cpython-${{ github.run_number }}" --notes "CPython for WASI built by make cpython at ${{ github.sha }}"
+      - run: gh release create ${{ github.ref_name }} .cache/build/python-build.zip .cache/build/python.zip --title ${{ github.ref_name }} --notes "CPython for WASI built by make cpython at ${{ github.sha }}"
         env:
           GH_TOKEN: ${{ github.token }}

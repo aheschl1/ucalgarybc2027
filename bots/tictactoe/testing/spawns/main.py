@@ -1,10 +1,10 @@
-"""Imports socket; the snapshot leaves it out."""
+"""Imports subprocess; the snapshot leaves it out."""
 
-import socket
+import subprocess
 
 from ucbc.games.tictactoe import TicTacToeHandle
 
 
 def step(handle: TicTacToeHandle) -> None:
-    socket.socket()
+    subprocess.run(["ls"], check=False)
     handle.place(*handle.empty_cells()[0])

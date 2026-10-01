@@ -1,4 +1,4 @@
-"""Imports a stdlib module that is not preloaded: it comes from the stdlib zip."""
+"""Imports a stdlib module the SDK itself never uses."""
 
 from ucbc.games.tictactoe import TicTacToeHandle
 

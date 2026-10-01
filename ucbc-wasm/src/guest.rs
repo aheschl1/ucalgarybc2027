@@ -6,7 +6,6 @@ use std::task::{Context, Poll, Waker};
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use serde_json::Value;
 use wasmtime::{Instance, Store, StoreLimitsBuilder, WasmParams};
 use wasmtime_wasi::{FsPerms, WasiCtxBuilder};
 
@@ -73,7 +72,7 @@ impl Guest {
     ) -> wasmtime::Result<Outcome> {
         let mut guest =
             Self::instantiate(runtime, bot_dir, cache, FsPerms::ReadWrite, 0, memory_bytes)?;
-        let run = guest.run("compile", (), fuel, |_| Value::Null)?;
+        let run = guest.run("compile", (), fuel, |_| Vec::new())?;
         Ok(run.outcome)
     }
 
@@ -126,7 +125,7 @@ impl Guest {
     pub fn load(
         &mut self,
         fuel: u64,
-        on_message: impl FnMut(Value) -> Value,
+        on_message: impl FnMut(Vec<u8>) -> Vec<u8>,
     ) -> wasmtime::Result<Run> {
         self.run("load", (), fuel, on_message)
     }
@@ -137,7 +136,7 @@ impl Guest {
         set_index: u32,
         tick: u32,
         fuel: u64,
-        on_message: impl FnMut(Value) -> Value,
+        on_message: impl FnMut(Vec<u8>) -> Vec<u8>,
     ) -> wasmtime::Result<Run> {
         self.run("step", (set_index as i32, tick as i32), fuel, on_message)
     }
@@ -154,7 +153,7 @@ impl Guest {
         export: &str,
         params: P,
         fuel: u64,
-        on_message: impl FnMut(Value) -> Value,
+        on_message: impl FnMut(Vec<u8>) -> Vec<u8>,
     ) -> wasmtime::Result<Run> {
         let call = match self.suspended.take() {
             Some(call) => call,
@@ -187,7 +186,7 @@ impl Guest {
     fn drive(
         &mut self,
         mut call: Call,
-        mut on_message: impl FnMut(Value) -> Value,
+        mut on_message: impl FnMut(Vec<u8>) -> Vec<u8>,
     ) -> wasmtime::Result<Run> {
         let mut cx = Context::from_waker(Waker::noop());
         loop {

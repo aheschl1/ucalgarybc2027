@@ -106,11 +106,12 @@ def test_the_sandbox(bot: BotPath, tmp_path: Path) -> None:
         "testing/forks": "AttributeError",
         "testing/reads": "FileNotFoundError",
         "testing/writes": "PermissionError",
-        "testing/sockets": "OSError",
+        "testing/sockets": "ModuleNotFoundError",
+        "testing/spawns": "ModuleNotFoundError",
     }
     for name, kind in refused.items():
         assert failure_of(set0(bot, name, tmp_path))["kind"] == kind, name
-    # The standard library, on the other hand, is all there.
+    # The rest of the standard library is there, already imported.
     replay = set0(bot, "testing/imports", tmp_path)
     assert replay["sets"][0]["result"]["reason"] in ("win", "draw")
     assert "(0.0, 1.0, 1.0)" in steps_of(replay, bot=1)[0]["stdout"]

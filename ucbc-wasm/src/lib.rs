@@ -5,8 +5,8 @@
 //!
 //! A bot runs on fuel: a budget of wasm instructions per call, the same on every
 //! machine. A call that runs out is suspended and the next call resumes it. The guest
-//! (`ucbc._guest`) reaches the engine only by message: JSON out, a JSON reply back,
-//! answered by whoever drives the call.
+//! (`ucbc._guest`) reaches the engine only by message: bytes out, a reply back, answered
+//! by whoever drives the call, in whatever encoding the two agree on (`ucbc-cli`: pickle).
 
 mod guest;
 mod runtime;

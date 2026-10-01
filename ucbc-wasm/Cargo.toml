@@ -15,12 +15,13 @@ wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
 wasmtime-wizer = { workspace = true, optional = true }
 pollster = { workspace = true }
-serde_json = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+serde_json = { workspace = true }
+serde-pickle = { workspace = true }
 
 [lints]
 workspace = true

@@ -83,9 +83,9 @@ RUNTIME := ucbc-cli/python/ucbc/runtime
 CACHE := .cache
 BUILD := $(CACHE)/build
 SNAPSHOT := cargo run -q --release -p ucbc-dev -- snapshot
-GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-1
-GUEST_SHA256 := e391c18aeabaa425f8f63ffecc6d1d6d591e9e897e6fdf0169d593dbbab84c66
-STDLIB_SHA256 := 3587dccbe07538e219e5f3885137d43875d0fd98ea99c5a07822bf3b4b0e8405
+GUEST_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/guest-3
+GUEST_SHA256 := 36e4120a95527f0f323a46f92c9a252c1ee1c97091d12c6f26cc58a3d30964ed
+STDLIB_SHA256 := 4f399c9d7f967a9beb62ab2dacf46f5b9de7c5376d42bd3085132fb3979e6c0d
 SHA256 := $(shell command -v sha256sum || echo shasum -a 256)
 
 runtime: $(RUNTIME)/bot.cwasm
@@ -121,9 +121,12 @@ PRUNE := asyncio concurrent ctypes curses dbm email ensurepip html http idlelib 
 guest: $(BUILD)/guest.wasm $(BUILD)/stdlib.zip  ## build the guest interpreter and stdlib zip locally (needs the wasm32-wasip1 target)
 	cp $^ $(CACHE)
 
-$(BUILD)/guest.wasm: $(shell find ucbc-wasm/guest -type f -not -path '*/target/*') $(BUILD)/python-build $(BUILD)/wasi-sysroot-24.0
+BINARYEN := https://github.com/WebAssembly/binaryen/releases/download/version_123
+WASM_OPT := $(BUILD)/binaryen-version_123/bin/wasm-opt
+
+$(BUILD)/guest.wasm: $(shell find ucbc-wasm/guest -type f -not -path '*/target/*') $(BUILD)/python-build $(BUILD)/wasi-sysroot-24.0 $(WASM_OPT)
 	cd ucbc-wasm/guest && cargo build -q --release
-	cp target/wasm32-wasip1/release/ucbc_guest.wasm $@
+	$(WASM_OPT) -O3 target/wasm32-wasip1/release/ucbc_guest.wasm -o $@
 
 # Stored, not deflated: the interpreter has no zlib. `-I` keeps the host Python from
 # importing the 3.14 stdlib it is standing in.
@@ -144,6 +147,11 @@ $(BUILD)/python-build.zip:
 	$(call fetch,$(CPYTHON_WASI)/_build-python-3.14.7-wasi_sdk-24.zip,a2a9fca77dc47bb9d2b0dd7d04538f8aa188e5f0a87b362fd569c0d024039100)
 $(BUILD)/wasi-sysroot.tar.gz:
 	$(call fetch,$(WASI_SDK)/wasi-sysroot-24.0.tar.gz,35172f7d2799485b15a46b1d87f50a585d915ec662080f005d99153a50888f08)
+
+$(WASM_OPT): $(BUILD)/binaryen.tar.gz
+	tar -xzf $< -C $(BUILD) binaryen-version_123/bin/wasm-opt && touch $@
+$(BUILD)/binaryen.tar.gz:
+	$(call fetch,$(BINARYEN)/binaryen-version_123-x86_64-linux.tar.gz,e959f2170af4c20c552e9de3a0253704d6a9d2766e8fdb88e4d6ac4bae9388fe)
 
 define fetch
 mkdir -p $(@D) && curl -fsSL -o $@.part $(1)

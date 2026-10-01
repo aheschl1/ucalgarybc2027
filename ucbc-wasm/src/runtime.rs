@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::Value;
 use wasmtime::{Caller, Config, Engine, Extern, Linker, Memory, Module, StoreLimits};
 use wasmtime_wasi::p1::{self, WasiP1Ctx};
 
@@ -55,8 +54,8 @@ impl State {
 /// Where a message waits for the driver of the call, and its reply for the guest.
 #[derive(Default)]
 pub(crate) struct Mailbox {
-    pub(crate) message: Option<Value>,
-    pub(crate) reply: Option<Value>,
+    pub(crate) message: Option<Vec<u8>>,
+    pub(crate) reply: Option<Vec<u8>>,
 }
 
 impl Runtime {
@@ -123,16 +122,14 @@ fn linker(engine: &Engine) -> wasmtime::Result<Linker<State>> {
             Box::new(async move {
                 let mut bytes = vec![0; len as usize];
                 memory(&mut caller)?.read(&caller, ptr as usize, &mut bytes)?;
-                let message: Value = serde_json::from_slice(&bytes)?;
                 let mailbox = caller.data().mailbox.clone();
-                mailbox.lock().unwrap().message = Some(message);
+                mailbox.lock().unwrap().message = Some(bytes);
                 // The driver sees the message when the call suspends here, and replies.
                 let reply = std::future::poll_fn(|_| match mailbox.lock().unwrap().reply.take() {
                     Some(reply) => std::task::Poll::Ready(reply),
                     None => std::task::Poll::Pending,
                 })
                 .await;
-                let reply = serde_json::to_vec(&reply)?;
                 let len = u32::try_from(reply.len())?;
                 caller.data_mut().reply = reply;
                 Ok(len)

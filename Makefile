@@ -1,4 +1,4 @@
-.PHONY: help setup build gen sdk viewer-types viewer web runtime guest wheels test test-api lint clean up down db release-check release
+.PHONY: help setup build gen sdk viewer-types viewer web runtime guest cpython wheels test test-api lint clean up down db release-check release
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -109,9 +109,12 @@ $(CACHE)/stdlib.zip: $(BUILD)/stdlib.zip
 	cp $< $@
 endif
 
-# Building the guest: CPython's WASI build from a pinned release, the guest crate linked
-# against it, and the stdlib zipped without what a bot cannot use.
-CPYTHON_WASI := https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.7
+# Building the guest: CPython for WASI from a pinned release of ours (`make cpython`,
+# below), the guest crate linked against it, and the stdlib zipped without what a bot
+# cannot use.
+CPYTHON_RELEASE := https://github.com/aheschl1/ucalgarybc2027/releases/download/cpython-1
+CPYTHON_BUILD_SHA256 :=
+CPYTHON_LIB_SHA256 :=
 WASI_SDK := https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-24
 PRUNE := asyncio concurrent ctypes curses dbm email ensurepip html http idlelib lib-dynload \
   multiprocessing pydoc_data _pyrepl site-packages sqlite3 test tkinter turtledemo unittest \
@@ -141,12 +144,60 @@ $(BUILD)/python-build: $(BUILD)/python-build.zip
 $(BUILD)/wasi-sysroot-24.0: $(BUILD)/wasi-sysroot.tar.gz
 	tar -xzf $< -C $(BUILD) wasi-sysroot-24.0/lib/wasm32-wasip1 && touch $@
 
-$(BUILD)/python.zip:
-	$(call fetch,$(CPYTHON_WASI)/python-3.14.7-wasi_sdk-24.zip,2e064d3fb8172471d39d741348efa722349c40b96301f69968dff714999c584b)
+# Until the first release exists the checksums are empty and CPython is built here.
+ifneq ($(CPYTHON_BUILD_SHA256),)
 $(BUILD)/python-build.zip:
-	$(call fetch,$(CPYTHON_WASI)/_build-python-3.14.7-wasi_sdk-24.zip,a2a9fca77dc47bb9d2b0dd7d04538f8aa188e5f0a87b362fd569c0d024039100)
+	$(call fetch,$(CPYTHON_RELEASE)/python-build.zip,$(CPYTHON_BUILD_SHA256))
+$(BUILD)/python.zip:
+	$(call fetch,$(CPYTHON_RELEASE)/python.zip,$(CPYTHON_LIB_SHA256))
+else
+$(BUILD)/python-build.zip $(BUILD)/python.zip: cpython
+endif
 $(BUILD)/wasi-sysroot.tar.gz:
 	$(call fetch,$(WASI_SDK)/wasi-sysroot-24.0.tar.gz,35172f7d2799485b15a46b1d87f50a585d915ec662080f005d99153a50888f08)
+
+# CPython for WASI (wasi-sdk 24, CPython's own config.site) 
+# plus pymalloc, which configure leaves out on WASI, LTO, and
+# the wasm features wasmtime has: together 7-10% less fuel per step. The archives hold
+# bitcode; the guest's link runs the LTO. .github/workflows/cpython.yml runs this and
+# publishes both zips, Linux x86_64 only: the wasi-sdk (100 MB), Python 3.14 through uv
+# as the build Python, about five minutes. Entries are dated so a rebuild of the same
+# source gives the same checksums.
+CPYTHON_VERSION := 3.14.7
+CPYTHON_SRC := $(BUILD)/Python-$(CPYTHON_VERSION)
+CPYTHON_OUT := $(CPYTHON_SRC)/cross-build/wasm32-wasip1
+CPYTHON_SDK := $(CURDIR)/$(BUILD)/wasi-sdk-24.0-x86_64-linux
+CPYTHON_SYSROOT := $(CPYTHON_SDK)/share/wasi-sysroot
+CPYTHON_CFLAGS := -mnontrapping-fptoint -msign-ext -mmutable-globals
+CPYTHON_LIBS := libpython3.14.a Modules/_decimal/libmpdec/libmpdec.a Modules/expat/libexpat.a \
+  $(addprefix Modules/_hacl/libHacl_,Hash_MD5.a Hash_SHA1.a Hash_SHA2.a Hash_SHA3.a Hash_BLAKE2.a HMAC.a)
+CPYTHON_ENV := CC=$(CPYTHON_SDK)/bin/clang CPP=$(CPYTHON_SDK)/bin/clang-cpp AR=$(CPYTHON_SDK)/bin/llvm-ar \
+  RANLIB=$(CPYTHON_SDK)/bin/ranlib PKG_CONFIG_PATH= PKG_CONFIG_SYSROOT_DIR=$(CPYTHON_SYSROOT) \
+  PKG_CONFIG_LIBDIR=$(CPYTHON_SYSROOT)/lib/pkgconfig:$(CPYTHON_SYSROOT)/share/pkgconfig \
+  WASI_SDK_PATH=$(CPYTHON_SDK) WASI_SYSROOT=$(CPYTHON_SYSROOT) HOSTRUNNER=true
+
+cpython: $(CPYTHON_SRC) $(CPYTHON_SDK)  ## build CPython for WASI into .cache/build/python-build.zip and python.zip (Linux x86_64; needs uv)
+	mkdir -p $(CPYTHON_OUT) && cd $(CPYTHON_OUT) && $(CPYTHON_ENV) \
+	  CONFIG_SITE=../../Tools/wasm/wasi/config.site-wasm32-wasi ../../configure -q \
+	  --host=wasm32-wasip1 --build=x86_64-pc-linux-gnu --with-build-python=$$(uv python find $(CPYTHON_VERSION)) \
+	  --with-pymalloc --with-lto=full CFLAGS="$(CPYTHON_CFLAGS)"
+	$(MAKE) -s -C $(CPYTHON_OUT) -j$(shell nproc) HOSTRUNNER=true pybuilddir.txt $(CPYTHON_LIBS)
+	rm -rf $(BUILD)/python-lib && mkdir -p $(BUILD)/python-lib/lib/python3.14 \
+	  && cp -r $(CPYTHON_SRC)/Lib/. $(CPYTHON_OUT)/build/lib.wasi-wasm32-3.14/_sysconfigdata__wasi_wasm32-wasi.py $(BUILD)/python-lib/lib/python3.14 \
+	  && find $(BUILD)/python-lib -name __pycache__ -prune -exec rm -rf {} +
+	find $(BUILD)/python-lib $(addprefix $(CPYTHON_OUT)/,$(CPYTHON_LIBS) pyconfig.h config.log) -exec touch -d 2020-01-01T00:00:00Z {} +
+	rm -f $(BUILD)/python-build.zip $(BUILD)/python.zip
+	cd $(CPYTHON_OUT) && TZ=UTC zip -q -X $(CURDIR)/$(BUILD)/python-build.zip $(CPYTHON_LIBS) pyconfig.h config.log
+	cd $(BUILD)/python-lib && TZ=UTC zip -q -X -r $(CURDIR)/$(BUILD)/python.zip lib
+
+$(CPYTHON_SRC): $(BUILD)/Python-$(CPYTHON_VERSION).tar.xz
+	rm -rf $@ && tar -xJf $< -C $(BUILD) && echo "# Edit this file for local setup changes" > $@/Modules/Setup.local
+$(CPYTHON_SDK): $(BUILD)/wasi-sdk.tar.gz
+	tar -xzf $< -C $(BUILD) && touch $@
+$(BUILD)/Python-$(CPYTHON_VERSION).tar.xz:
+	$(call fetch,https://www.python.org/ftp/python/$(CPYTHON_VERSION)/Python-$(CPYTHON_VERSION).tar.xz,3b48dac8fb59f62eaa67ac83c1eb12bda1b7a08406dd286e252c11a66be27f81)
+$(BUILD)/wasi-sdk.tar.gz:
+	$(call fetch,$(WASI_SDK)/wasi-sdk-24.0-x86_64-linux.tar.gz,c6c38aab56e5de88adf6c1ebc9c3ae8da72f88ec2b656fb024eda8d4167a0bc5)
 
 $(WASM_OPT): $(BUILD)/binaryen.tar.gz
 	tar -xzf $< -C $(BUILD) binaryen-version_123/bin/wasm-opt && touch $@

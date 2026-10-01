@@ -22,6 +22,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
+      # Only until the Makefile pins a CPython release: `make guest` then builds it here.
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.14.7
       - run: make guest
       - run: sha256sum .cache/guest.wasm .cache/stdlib.zip | tee -a "$GITHUB_STEP_SUMMARY"
       - run: gh release create guest-${{ github.run_number }} .cache/guest.wasm .cache/stdlib.zip --title "guest-${{ github.run_number }}" --notes "Bot interpreter and stdlib built from ${{ github.sha }}"

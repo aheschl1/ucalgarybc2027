@@ -8,7 +8,7 @@ crate `ucbc-wasm`, driven by `ucbc-cli/src/bot.rs`. The limits it enforces are i
 
 ```mermaid
 flowchart LR
-    CP[CPython 3.14 for WASI<br/>pinned release] --> G[guest.wasm<br/>ucbc-wasm/guest: init, load, step]
+    CP[CPython 3.14 for WASI<br/>ours: pymalloc, LTO] --> G[guest.wasm<br/>ucbc-wasm/guest: init, load, step]
     CP --> Z[stdlib zip<br/>pruned]
     G --> S[ucbc-dev snapshot<br/>runs init: start Python,<br/>import ucbc._guest]
     Z --> S
@@ -18,8 +18,11 @@ flowchart LR
 
 `guest.wasm` is CPython linked with `ucbc-wasm/guest`, a reactor that exports `init`,
 `compile`, `load` and `step` and imports `ucbc.call` and `ucbc.take`. `.github/workflows/guest.yml`
-builds it and the stdlib zip and publishes both as a release; `make dev` downloads them
+builds it and the stdlib zip and publishes both as a release; `make build` downloads them
 against the checksums in the Makefile, and `make guest` builds them locally instead.
+CPython itself comes from a release of ours too: `.github/workflows/cpython.yml` runs
+`make cpython`, the upstream WASI configuration plus pymalloc, LTO and the wasm features
+wasmtime has, and the Makefile pins what it published.
 
 `ucbc-dev snapshot` runs `init` under wizer and writes the started interpreter out
 precompiled for the machine, `runtime/bot.cwasm` in the `ucbc` package. `init` imports

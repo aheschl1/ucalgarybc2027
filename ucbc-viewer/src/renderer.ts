@@ -1,4 +1,6 @@
-import type { SetReplay, TeamInfo, Tick } from "./replay.gen.ts";
+import type { ComponentType } from "react";
+
+import type { BotId, SetReplay, TeamInfo, Tick } from "./replay.gen.ts";
 
 /** One point of a set: the game state and the tick that produced it. */
 export interface Frame {
@@ -9,15 +11,24 @@ export interface Frame {
   teams: TeamInfo[];
 }
 
-export interface RendererInstance {
-  draw(frame: Frame): void;
-  destroy(): void;
+export interface FrameProps {
+  frame: Frame;
+  /** The bot the viewer has selected; it may not be in this frame. */
+  selected: BotId | null;
 }
 
-/** What a game provides to the viewer. */
+export interface BoardProps extends FrameProps {
+  /** Selects a bot, or clears the selection with `null`. */
+  onSelect(bot: BotId | null): void;
+}
+
+/** What a game provides to the viewer. Both components throw on state they do not
+ * recognise, e.g. a replay from an older engine. */
 export interface GameRenderer {
   /** Matches `replay.config.game`. */
   game: string;
-  /** `board` sits in the zoomable view; `info` is a panel beside it for text, such as scores. */
-  mount(board: HTMLElement, info: HTMLElement): RendererInstance;
+  /** Drawn in the zoomable view. */
+  Board: ComponentType<BoardProps>;
+  /** A panel beside the board for text, such as scores. */
+  Info: ComponentType<FrameProps>;
 }

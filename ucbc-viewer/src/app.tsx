@@ -1,22 +1,23 @@
 // The standalone page: loads `?replay=<url>` (default `replay.json`, which `ucbc view`
 // serves), or a replay file, gzipped or not, dropped onto the page.
 
+import { StrictMode, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+
 import { renderers } from "./games.ts";
 import type { Replay } from "./replay.gen.ts";
-import { createViewer } from "./shell.ts";
+import { Viewer } from "./viewer.tsx";
 
-const app = document.getElementById("app")!;
-const message = document.createElement("p");
-message.className = "ucbc-app-message";
-message.hidden = true;
-const viewer = createViewer(app, { renderers });
-const root = app.querySelector<HTMLElement>(".ucbc-viewer")!;
-root.hidden = true;
-app.append(message);
+const root = createRoot(document.getElementById("app")!);
+// Each opened replay gets a new key, so the viewer starts it from the beginning.
+let opened = 0;
+
+function render(node: ReactNode) {
+  root.render(<StrictMode>{node}</StrictMode>);
+}
 
 function show(text: string) {
-  message.textContent = text;
-  message.hidden = false;
+  render(<p className="ucbc-app-message">{text}</p>);
 }
 
 function open(text: string, source: string) {
@@ -26,13 +27,10 @@ function open(text: string, source: string) {
   } catch {
     return show(`${source} is not JSON.`);
   }
-  if (!Array.isArray(replay?.sets) || typeof replay.config?.game !== "string") {
+  if (!Array.isArray(replay?.sets) || !replay.sets.length || typeof replay.config?.game !== "string") {
     return show(`${source} is not a replay.`);
   }
-  message.hidden = true;
-  root.hidden = false;
-  viewer.load(replay);
-  root.focus();
+  render(<Viewer key={++opened} replay={replay} renderers={renderers} />);
 }
 
 const url = new URLSearchParams(location.search).get("replay") ?? "replay.json";

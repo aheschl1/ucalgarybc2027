@@ -1,7 +1,6 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
     "types": ["node", "vite/client"],
     "noUnusedLocals": true,
     "noUnusedParameters": true

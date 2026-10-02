@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 
+import { cleanup, render } from "@testing-library/react";
 import type { SetReplay, Tick } from "@ucbc/viewer";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import type { Board } from "./api.gen.ts";
-import { renderer } from "./index.ts";
+import { renderer } from "./index.tsx";
+
+const { Board, Info } = renderer;
+afterEach(cleanup);
 
 it("draws marks, highlights this tick's placements, and names X and O", () => {
   const board: Board = { cells: ["x", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "o"] };
@@ -28,22 +32,18 @@ it("draws marks, highlights this tick's placements, and names X and O", () => {
     { id: 1, name: "beta" },
   ];
 
-  const el = document.createElement("div");
-  const info = document.createElement("div");
-  const instance = renderer.mount(el, info);
-  instance.draw({ state: board, tick, set, teams });
+  const el = render(<Board frame={{ state: board, tick, set, teams }} selected={null} onSelect={() => {}} />);
+  const info = render(<Info frame={{ state: board, tick, set, teams }} selected={null} />).container;
 
-  const cells = [...el.querySelectorAll(".ttt-cell")];
+  const cells = [...el.container.querySelectorAll(".ttt-cell")];
   expect(cells.map((c) => c.textContent).join(",")).toBe("X,,,,,,,,O");
   expect(cells.map((c, i) => (c.classList.contains("ttt-placed") ? i : -1)).filter((i) => i >= 0)).toEqual([0, 8]);
   expect(info.textContent).toBe("X beta · O alpha");
 
-  instance.draw({ state: set.initial_state, tick: null, set, teams });
-  expect(el.querySelectorAll(".ttt-placed")).toHaveLength(0);
-
-  instance.destroy();
-  expect(el.children).toHaveLength(0);
-  expect(info.children).toHaveLength(0);
+  el.rerender(
+    <Board frame={{ state: set.initial_state, tick: null, set, teams }} selected={null} onSelect={() => {}} />,
+  );
+  expect(el.container.querySelectorAll(".ttt-placed")).toHaveLength(0);
 });
 
 it("rejects a board it does not recognise", () => {
@@ -54,9 +54,14 @@ it("rejects a board it does not recognise", () => {
     ticks: [],
     result: { index: 0, first_team: 0, reason: "draw", ticks: 0 },
   };
-  const instance = renderer.mount(document.createElement("div"), document.createElement("div"));
+  // React logs what a component throws.
+  vi.spyOn(console, "error").mockImplementation(() => {});
   // Cells as integers: replays from before `Cell` serialized as strings.
   const old = { cells: [1, 0, 0, 0, 0, 0, 2, 0, 0] };
-  expect(() => instance.draw({ state: old, tick: null, set, teams: [] })).toThrow("not a tic-tac-toe board");
-  expect(() => instance.draw({ state: null, tick: null, set, teams: [] })).toThrow("not a tic-tac-toe board");
+  for (const state of [old, null]) {
+    expect(() =>
+      render(<Board frame={{ state, tick: null, set, teams: [] }} selected={null} onSelect={() => {}} />),
+    ).toThrow("not a tic-tac-toe board");
+  }
+  vi.restoreAllMocks();
 });

@@ -489,17 +489,22 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
                 } else {
                     out.push_str("        return cls(\n");
                     for f in fields {
-                        let value = if matches!(f.ty, Ty::Optional(_)) {
-                            format!("d.get(\"{}\")", f.name)
-                        } else {
-                            format!("d[\"{}\"]", f.name)
+                        // An optional field is read once, so the type checker can
+                        // narrow it.
+                        let value = match &f.ty {
+                            Ty::Optional(inner) => {
+                                let get = format!("d.get(\"{}\")", f.name);
+                                let bound = format!("_{}", f.name);
+                                match types.decode(inner, &bound) {
+                                    v if v == bound => get,
+                                    each => {
+                                        format!("None if ({bound} := {get}) is None else {each}")
+                                    }
+                                }
+                            }
+                            ty => types.decode(ty, &format!("d[\"{}\"]", f.name)),
                         };
-                        let _ = writeln!(
-                            out,
-                            "            {}={},",
-                            f.name,
-                            types.decode(&f.ty, &value)
-                        );
+                        let _ = writeln!(out, "            {}={value},", f.name);
                     }
                     out.push_str("        )\n");
                 }
@@ -635,7 +640,7 @@ mod tests {
             "    NEAR = \"near\"",
             "class Seen:",
             "    spots: list[Spot] | None",
-            "            spots=None if d.get(\"spots\") is None else [Spot._from(v) for v in d.get(\"spots\")],",
+            "            spots=None if (_spots := d.get(\"spots\")) is None else [Spot._from(v) for v in _spots],",
             "Went = WentOk | WentBlocked",
             "def _from_Went(d: dict[str, Any]) -> Went:",
             "        case \"blocked\":\n            return WentBlocked._from(d)",

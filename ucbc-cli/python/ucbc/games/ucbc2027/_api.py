@@ -3,86 +3,181 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any, Self
 
 from ucbc.handle import Handle
 
 
 @dataclass(frozen=True)
-class BotTypeBase:
+class Coord:
+    """A tile: `x` grows to the right, `y` downward."""
+
+    x: int
+    y: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            x=d["x"],
+            y=d["y"],
+        )
+
+
+@dataclass(frozen=True)
+class EnvironmentEmpty:
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls()
 
-    def _to(self) -> dict[str, Any]:
-        return {"type": "base"}
-
 
 @dataclass(frozen=True)
-class BotTypeDino:
-    level: int
+class EnvironmentLab:
+    """One of a team's four lab tiles."""
 
-    @classmethod
-    def _from(cls, d: dict[str, Any]) -> Self:
-        return cls(
-            level=d["level"],
-        )
-
-    def _to(self) -> dict[str, Any]:
-        return {"type": "dino", "level": self.level}
-
-
-class Environment(str, Enum):
-    EMPTY = "Empty"
-    WALL = "Wall"
-
-
-@dataclass(frozen=True)
-class ItemBot:
     team: int
-    bot_type: BotType
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
             team=d["team"],
-            bot_type=_from_BotType(d["bot_type"]),
         )
 
 
-BotType = BotTypeBase | BotTypeDino
+@dataclass(frozen=True)
+class EnvironmentWall:
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
 
 
-def _from_BotType(d: dict[str, Any]) -> BotType:
+@dataclass(frozen=True)
+class ItemViewDino:
+    team: int
+    level: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            team=d["team"],
+            level=d["level"],
+        )
+
+
+@dataclass(frozen=True)
+class ItemViewFossil:
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class Spawned:
+    """The dino a spawn created."""
+
+    bot_id: int
+    at: Coord
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            bot_id=d["bot_id"],
+            at=Coord._from(d["at"]),
+        )
+
+
+@dataclass(frozen=True)
+class UnitViewDino:
+    pos: Coord
+    level: int
+    health: int
+    held: ItemView | None
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            pos=Coord._from(d["pos"]),
+            level=d["level"],
+            health=d["health"],
+            held=None if (_held := d.get("held")) is None else _from_ItemView(_held),
+        )
+
+
+@dataclass(frozen=True)
+class UnitViewLab:
+    origin: Coord
+    """Top-left of its four tiles."""
+    health: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            origin=Coord._from(d["origin"]),
+            health=d["health"],
+        )
+
+
+Environment = EnvironmentEmpty | EnvironmentWall | EnvironmentLab
+"""What a tile is made of. Fixed for the whole set."""
+
+
+def _from_Environment(d: dict[str, Any]) -> Environment:
     match d["type"]:
-        case "base":
-            return BotTypeBase._from(d)
+        case "empty":
+            return EnvironmentEmpty._from(d)
+        case "wall":
+            return EnvironmentWall._from(d)
+        case "lab":
+            return EnvironmentLab._from(d)
+    raise ValueError(f"unknown Environment type {d['type']!r}")
+
+
+ItemView = ItemViewDino | ItemViewFossil
+"""What is on a tile."""
+
+
+def _from_ItemView(d: dict[str, Any]) -> ItemView:
+    match d["type"]:
         case "dino":
-            return BotTypeDino._from(d)
-    raise ValueError(f"unknown BotType type {d['type']!r}")
+            return ItemViewDino._from(d)
+        case "fossil":
+            return ItemViewFossil._from(d)
+    raise ValueError(f"unknown ItemView type {d['type']!r}")
 
 
-Item = ItemBot
+UnitView = UnitViewLab | UnitViewDino
+"""A bot as it sees itself."""
 
 
-def _from_Item(d: dict[str, Any]) -> Item:
+def _from_UnitView(d: dict[str, Any]) -> UnitView:
     match d["type"]:
-        case "bot":
-            return ItemBot._from(d)
-    raise ValueError(f"unknown Item type {d['type']!r}")
+        case "lab":
+            return UnitViewLab._from(d)
+        case "dino":
+            return UnitViewDino._from(d)
+    raise ValueError(f"unknown UnitView type {d['type']!r}")
 
 
 class Ucbc2027Api(Handle):
     """Queries and actions of the `ucbc2027` game, one method each."""
 
-    def item(self, x: int, y: int) -> Item | None:
+    def me(self) -> UnitView:
+        """This bot."""
+        return _from_UnitView(self._query({"type": "me"}))
+
+    def bones(self) -> int:
+        """Your team's bones."""
+        reply: int = self._query({"type": "bones"})
+        return reply
+
+    def item(self, x: int, y: int) -> ItemView | None:
         reply = self._query({"type": "item", "x": x, "y": y})
-        return None if reply is None else _from_Item(reply)
+        return None if reply is None else _from_ItemView(reply)
 
     def environment(self, x: int, y: int) -> Environment:
-        return Environment(self._query({"type": "environment", "x": x, "y": y}))
+        return _from_Environment(self._query({"type": "environment", "x": x, "y": y}))
 
     def width(self) -> int:
         reply: int = self._query({"type": "width"})
@@ -95,5 +190,7 @@ class Ucbc2027Api(Handle):
     def noop(self) -> None:
         self._act({"type": "noop"})
 
-    def spawn(self, x: int, y: int, bot_type: BotType) -> None:
-        self._act({"type": "spawn", "x": x, "y": y, "bot_type": bot_type._to()})
+    def spawn(self, x: int, y: int) -> Spawned:
+        """Lab only: a level 1 dino on a free tile next to the lab. It steps from the
+        next tick."""
+        return Spawned._from(self._act({"type": "spawn", "x": x, "y": y}))

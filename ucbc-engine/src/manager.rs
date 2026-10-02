@@ -49,7 +49,7 @@ impl<T> BotManager<T> {
     }
 
     /// Adds a bot; it steps from the next tick.
-    pub fn schedule(&mut self, team: TeamId, data: T) -> BotId {
+    pub fn spawn(&mut self, team: TeamId, data: T) -> BotId {
         let id = BotId(self.next_id);
         self.next_id += 1;
         self.bots.insert(id, BotWrap { team, data });

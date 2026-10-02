@@ -1,52 +1,24 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use ucbc_engine::{
     ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, QueryError,
     Request, SetSetup,
 };
 
-use crate::{
-    BotType,
-    state::{Board, Environment, Item, State},
-};
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct Coord {
-    pub x: usize,
-    pub y: usize,
-}
-
-impl Coord {
-    pub fn new(x: usize, y: usize) -> Self {
-        Self { x, y }
-    }
-
-    /// The up to eight neighbours, skipping any that would go below zero. No upper bound check.
-    pub fn around(&self) -> impl Iterator<Item = Coord> {
-        let Coord { x, y } = *self;
-        (-1..=1)
-            .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
-            .filter(|&d| d != (0, 0))
-            .filter_map(move |(dx, dy)| {
-                Some(Coord::new(
-                    x.checked_add_signed(dx)?,
-                    y.checked_add_signed(dy)?,
-                ))
-            })
-    }
-}
-
-#[derive(Deserialize, JsonSchema)]
-pub struct SpawnRequest {
-    pub x: usize,
-    pub y: usize,
-    pub bot_type: BotType,
-}
+use crate::coord::Coord;
+use crate::map::{Environment, Map};
+use crate::state::{Item, State};
+use crate::unit::{Lab, Unit};
+use crate::view::{ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    Item(Request<Coord, Option<Item>>),
+    /// This bot.
+    Me(Request<(), UnitView>),
+    /// Your team's bones.
+    Bones(Request<(), u32>),
+    Item(Request<Coord, Option<ItemView>>),
     Environment(Request<Coord, Environment>),
     Width(Request<(), usize>),
     Height(Request<(), usize>),
@@ -56,20 +28,55 @@ pub enum Queries {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
     Noop(Request<(), ()>),
-    Spawn(Request<SpawnRequest, ()>),
+    /// Lab only: a level 1 dino on a free tile next to the lab. It steps from the
+    /// next tick.
+    Spawn(Request<Coord, Spawned>),
 }
 
 pub struct Ucbc2027 {
-    bots: BotManager<BotType>,
-    board: Board,
+    pub(crate) bots: BotManager<Unit>,
+    pub(crate) state: State,
+}
+
+impl Ucbc2027 {
+    fn item_view(&self, item: Item) -> ItemView {
+        match item {
+            Item::Dino(id) => {
+                let bot = &self.bots[id];
+                let Unit::Dino(dino) = &**bot else {
+                    unreachable!("bot {id} on the board is not a dino")
+                };
+                ItemView::Dino {
+                    team: bot.team().0,
+                    level: dino.level,
+                }
+            }
+            Item::Fossil => ItemView::Fossil,
+        }
+    }
+
+    fn unit_view(&self, bot: BotId) -> UnitView {
+        match &*self.bots[bot] {
+            Unit::Lab(lab) => UnitView::Lab {
+                origin: lab.origin,
+                health: lab.health,
+            },
+            Unit::Dino(dino) => UnitView::Dino {
+                pos: dino.pos,
+                level: dino.level,
+                health: dino.health,
+                held: dino.held.map(|item| self.item_view(item)),
+            },
+        }
+    }
 }
 
 impl Game for Ucbc2027 {
     const NAME: &'static str = "ucbc2027";
     type Query = Queries;
     type Action = Action;
-    type Snapshot = State;
-    type Bot = BotType;
+    type Snapshot = Snapshot;
+    type Bot = Unit;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
         if setup.teams.len() != 2 {
@@ -78,68 +85,94 @@ impl Game for Ucbc2027 {
                 setup.teams.len()
             )));
         }
+        let map = Map::standard();
         let mut bots = BotManager::new();
-        let mut board = Board::new();
+        // In step order, so the first team's lab steps first.
         for &team in &setup.teams {
-            let base = bots.schedule(team, BotType::Base);
-            board.place(&board.base_location(team), base);
+            bots.spawn(team, Unit::Lab(Lab::new(map.lab(team))));
         }
-        Ok(Self { bots, board })
+        Ok(Self {
+            bots,
+            state: State::new(map),
+        })
     }
 
-    fn bots(&self) -> &BotManager<BotType> {
+    fn bots(&self) -> &BotManager<Unit> {
         &self.bots
     }
 
-    fn bots_mut(&mut self) -> &mut BotManager<BotType> {
+    fn bots_mut(&mut self) -> &mut BotManager<Unit> {
         &mut self.bots
     }
 
-    fn handle_query(&self, _bot: BotId, query: Queries) -> Result<Answer, QueryError> {
+    fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
+        let off_board =
+            |at: Coord| QueryError::Rejected(format!("({}, {}) is off the board", at.x, at.y));
         match query {
-            Queries::Item(q) => Ok(q.reply(self.board.tile(&q, &self.bots)?.item)),
-            Queries::Environment(q) => Ok(q.reply(self.board.tile(&q, &self.bots)?.environment)),
-            Queries::Width(q) => Ok(q.reply(self.board.width())),
-            Queries::Height(q) => Ok(q.reply(self.board.height())),
+            Queries::Me(q) => Ok(q.reply(self.unit_view(bot))),
+            Queries::Bones(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).bones)),
+            Queries::Item(q) => {
+                let item = self.state.items.get(*q).ok_or_else(|| off_board(*q))?;
+                Ok(q.reply(item.map(|item| self.item_view(item))))
+            }
+            Queries::Environment(q) => {
+                let env = self.state.map.env(*q).ok_or_else(|| off_board(*q))?;
+                Ok(q.reply(env))
+            }
+            Queries::Width(q) => Ok(q.reply(self.state.map.width())),
+            Queries::Height(q) => Ok(q.reply(self.state.map.height())),
         }
     }
 
     fn apply_action(&mut self, bot: BotId, action: Action) -> Result<Answer, ActionError> {
         match action {
             Action::Noop(a) => Ok(a.reply(())),
-            Action::Spawn(req) => {
-                let spawner = &self.bots[bot];
-                if **spawner != BotType::Base {
-                    return Err(ActionError::Invalid("Cannot spawn from this bot.".into()));
-                }
-                if req.bot_type == BotType::Base {
-                    return Err(ActionError::Invalid("A base spawns dinos only.".into()));
-                }
-                let team = spawner.team();
-                let at = Coord::new(req.x, req.y);
-                self.board.check_spawn(&at, team)?;
-                let spawned = self.bots.schedule(team, req.bot_type);
-                self.board.place(&at, spawned);
-                Ok(req.reply(()))
-            }
+            Action::Spawn(a) => Ok(a.reply(self.spawn(bot, *a)?)),
         }
     }
 
     fn end_step(&mut self, _bot: BotId) {}
 
     fn bot_failed(&mut self, bot: BotId, _failure: &BotFailure) {
-        self.board.remove(bot);
+        if let Unit::Dino(dino) = &*self.bots[bot] {
+            self.state.clear_dino(dino);
+        }
     }
 
     fn end_tick(&mut self) {
-        self.board.tick += 1;
+        self.state.tick += 1;
     }
 
     fn status(&self) -> GameStatus {
         GameStatus::InProgress
     }
 
-    fn snapshot(&self) -> State {
-        self.board.snapshot(&self.bots)
+    fn snapshot(&self) -> Snapshot {
+        let state = &self.state;
+        Snapshot {
+            tick: state.tick,
+            environment: state.map.rows().map(<[_]>::to_vec).collect(),
+            units: self
+                .bots
+                .ids()
+                .into_iter()
+                .map(|id| UnitEntry {
+                    id: id.0,
+                    team: self.bots[id].team().0,
+                    unit: self.unit_view(id),
+                })
+                .collect(),
+            fossils: state
+                .items
+                .iter()
+                .filter(|&(_, item)| *item == Some(Item::Fossil))
+                .map(|(at, _)| at)
+                .collect(),
+            teams: state
+                .teams
+                .iter()
+                .map(|t| TeamView { bones: t.bones })
+                .collect(),
+        }
     }
 }

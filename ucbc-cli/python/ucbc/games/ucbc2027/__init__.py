@@ -2,24 +2,36 @@
 :class:`Ucbc2027Handle`: the generated queries and actions."""
 
 from ucbc.games.ucbc2027._api import (
-    BotType,
-    BotTypeBase,
-    BotTypeDino,
+    Coord,
     Environment,
-    Item,
-    ItemBot,
+    EnvironmentEmpty,
+    EnvironmentLab,
+    EnvironmentWall,
+    ItemView,
+    ItemViewDino,
+    ItemViewFossil,
+    Spawned,
     Ucbc2027Api,
+    UnitView,
+    UnitViewDino,
+    UnitViewLab,
 )
 
 __all__ = [
     "HANDLE",
-    "BotType",
-    "BotTypeBase",
-    "BotTypeDino",
+    "Coord",
     "Environment",
-    "Item",
-    "ItemBot",
+    "EnvironmentEmpty",
+    "EnvironmentLab",
+    "EnvironmentWall",
+    "ItemView",
+    "ItemViewDino",
+    "ItemViewFossil",
+    "Spawned",
     "Ucbc2027Handle",
+    "UnitView",
+    "UnitViewDino",
+    "UnitViewLab",
 ]
 
 

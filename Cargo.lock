@@ -1629,7 +1629,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "ucbc-2027"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "schemars",
  "serde",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-cli"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "pyo3",
  "serde",
@@ -1653,7 +1653,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-dev"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "clap",
  "schemars",
@@ -1665,7 +1665,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-engine"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "indexmap",
  "rand",
@@ -1678,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-games"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "ucbc-2027",
  "ucbc-engine",
@@ -1687,7 +1687,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-tictactoe"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "schemars",
  "serde",
@@ -1698,7 +1698,7 @@ dependencies = [
 
 [[package]]
 name = "ucbc-wasm"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "pollster",
  "rand",

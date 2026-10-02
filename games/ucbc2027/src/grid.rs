@@ -56,7 +56,7 @@ impl<T> Index<Coord> for Grid<T> {
 
     fn index(&self, at: Coord) -> &T {
         self.get(at)
-            .unwrap_or_else(|| panic!("({}, {}) is off the board", at.x, at.y))
+            .unwrap_or_else(|| panic!("{at} is off the board"))
     }
 }
 
@@ -65,7 +65,7 @@ impl<T> IndexMut<Coord> for Grid<T> {
     fn index_mut(&mut self, at: Coord) -> &mut T {
         let i = self
             .index(at)
-            .unwrap_or_else(|| panic!("({}, {}) is off the board", at.x, at.y));
+            .unwrap_or_else(|| panic!("{at} is off the board"));
         &mut self.cells[i]
     }
 }

@@ -183,7 +183,7 @@ def _from_ItemView(d: dict[str, Any]) -> ItemView:
 
 
 UnitView = UnitViewLab | UnitViewDino
-"""A bot as it sees itself."""
+"""A bot: in `me` replies and the snapshot."""
 
 
 def _from_UnitView(d: dict[str, Any]) -> UnitView:
@@ -208,21 +208,26 @@ class Ucbc2027Api(Handle):
         return reply
 
     def item(self, x: int, y: int) -> ItemView | None:
+        """What is on a tile; None if nothing."""
         reply = self._query({"type": "item", "x": x, "y": y})
         return None if reply is None else _from_ItemView(reply)
 
     def environment(self, x: int, y: int) -> Environment:
+        """What a tile is made of."""
         return _from_Environment(self._query({"type": "environment", "x": x, "y": y}))
 
     def width(self) -> int:
+        """Tiles across the board."""
         reply: int = self._query({"type": "width"})
         return reply
 
     def height(self) -> int:
+        """Tiles down the board."""
         reply: int = self._query({"type": "height"})
         return reply
 
     def noop(self) -> None:
+        """Does nothing."""
         self._act({"type": "noop"})
 
     def spawn(self, x: int, y: int) -> Spawned:

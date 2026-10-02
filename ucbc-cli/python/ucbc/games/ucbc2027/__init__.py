@@ -74,6 +74,8 @@ class Ucbc2027Handle(Ucbc2027Api):
         """Move one tile in ``direction``."""
         pos = self.pos()
         dx, dy = direction.value
+        if pos.x + dx < 0 or pos.y + dy < 0:
+            raise ActionError("off the board")
         return self.move(pos.x + dx, pos.y + dy)
 
     def step_toward(self, x: int, y: int) -> Coord:

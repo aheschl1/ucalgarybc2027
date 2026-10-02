@@ -19,15 +19,20 @@ pub enum Queries {
     Me(Request<(), UnitView>),
     /// Your team's bones.
     Bones(Request<(), u32>),
+    /// What is on a tile; None if nothing.
     Item(Request<Coord, Option<ItemView>>),
+    /// What a tile is made of.
     Environment(Request<Coord, Environment>),
+    /// Tiles across the board.
     Width(Request<(), usize>),
+    /// Tiles down the board.
     Height(Request<(), usize>),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
+    /// Does nothing.
     Noop(Request<(), ()>),
     /// Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
     /// lab. It steps from the next tick.
@@ -125,8 +130,7 @@ impl Game for Ucbc2027 {
     }
 
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
-        let off_board =
-            |at: Coord| QueryError::Rejected(format!("({}, {}) is off the board", at.x, at.y));
+        let off_board = |at: Coord| QueryError::Rejected(format!("{at} is off the board"));
         match query {
             Queries::Me(q) => Ok(q.reply(self.unit_view(bot))),
             Queries::Bones(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).bones)),

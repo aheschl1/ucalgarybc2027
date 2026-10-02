@@ -12,8 +12,8 @@ pub const ACTION_RANGE: usize = 1;
 pub const BASE_INCOME: u32 = 1;
 pub const INCOME_PER_FOSSIL: u32 = 1;
 
-/// What a dino can do this turn.
-pub struct Stats {
+/// What a dino can reach.
+pub(crate) struct Stats {
     /// How far one move may go.
     pub move_range: usize,
     /// How far away a grab or drop may reach.
@@ -21,7 +21,7 @@ pub struct Stats {
 }
 
 /// The same for every dino until levels and artifacts change it.
-pub fn stats(_dino: &Dino) -> Stats {
+pub(crate) fn stats(_dino: &Dino) -> Stats {
     Stats {
         move_range: MOVE_RANGE,
         action_range: ACTION_RANGE,
@@ -29,6 +29,6 @@ pub fn stats(_dino: &Dino) -> Stats {
 }
 
 /// Bones a team earns per tick.
-pub fn income(team: &TeamState) -> u32 {
+pub(crate) fn income(team: &TeamState) -> u32 {
     BASE_INCOME + INCOME_PER_FOSSIL * team.fossils
 }

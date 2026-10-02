@@ -15,7 +15,7 @@ export type Environment =
       type: "lab";
     };
 /**
- * A bot as it sees itself.
+ * A bot: in `me` replies and the snapshot.
  */
 export type UnitEntry = {
   id: number;

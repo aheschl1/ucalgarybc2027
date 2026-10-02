@@ -13,4 +13,4 @@ mod view;
 pub use coord::Coord;
 pub use game::{Action, Queries, Ucbc2027};
 pub use map::Environment;
-pub use view::{ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};
+pub use view::{Dropped, ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};

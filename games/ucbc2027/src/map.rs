@@ -1,5 +1,5 @@
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use ucbc_engine::TeamId;
 
 use crate::coord::Coord;
@@ -9,7 +9,7 @@ const WIDTH: usize = 16;
 const HEIGHT: usize = 16;
 
 /// What a tile is made of. Fixed for the whole set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Environment {
     Empty,

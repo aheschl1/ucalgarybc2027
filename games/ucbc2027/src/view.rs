@@ -15,7 +15,7 @@ pub enum ItemView {
     Fossil,
 }
 
-/// A bot as it sees itself.
+/// A bot: in `me` replies and the snapshot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UnitView {

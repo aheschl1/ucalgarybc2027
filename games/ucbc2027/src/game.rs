@@ -32,6 +32,9 @@ pub enum Action {
     /// Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
     /// lab. It steps from the next tick.
     Spawn(Request<Coord, Spawned>),
+    /// Dino only, once per turn: to a free tile within move range. Replies with the
+    /// new position.
+    Move(Request<Coord, Coord>),
 }
 
 pub struct Ucbc2027 {
@@ -44,6 +47,7 @@ pub struct Ucbc2027 {
 #[derive(Default)]
 pub(crate) struct Turn {
     pub spawned: bool,
+    pub moved: bool,
 }
 
 impl Ucbc2027 {
@@ -137,6 +141,7 @@ impl Game for Ucbc2027 {
         match action {
             Action::Noop(a) => Ok(a.reply(())),
             Action::Spawn(a) => Ok(a.reply(self.spawn(bot, *a)?)),
+            Action::Move(a) => Ok(a.reply(self.move_to(bot, *a)?)),
         }
     }
 

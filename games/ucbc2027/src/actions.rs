@@ -38,4 +38,26 @@ impl Ucbc2027 {
         self.turn.spawned = true;
         Ok(Spawned { bot_id: id.0, at })
     }
+
+    pub(crate) fn move_to(&mut self, bot: BotId, to: Coord) -> Result<Coord, ActionError> {
+        let dino = self.bots[bot]
+            .as_dino_mut()
+            .ok_or_else(|| invalid("only a dino can move"))?;
+        if self.turn.moved {
+            return Err(invalid("already moved this turn"));
+        }
+        if dino.pos.dist(to) > rules::stats(dino).move_range {
+            return Err(invalid("out of range"));
+        }
+        if self.state.map.env(to).is_none() {
+            return Err(invalid("off the board"));
+        }
+        if !self.state.is_free(to) {
+            return Err(invalid("the tile is not free"));
+        }
+        self.state.items[to] = self.state.items[dino.pos].take();
+        dino.pos = to;
+        self.turn.moved = true;
+        Ok(to)
+    }
 }

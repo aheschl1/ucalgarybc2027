@@ -18,6 +18,22 @@ fn spawn(game: &mut dyn DynGame, bot: BotId, x: u64, y: u64) -> Result<Value, Ac
     game.apply_action(bot, &json!({"type": "spawn", "x": x, "y": y}))
 }
 
+fn go(game: &mut dyn DynGame, bot: BotId, x: u64, y: u64) -> Result<Value, ActionError> {
+    game.apply_action(bot, &json!({"type": "move", "x": x, "y": y}))
+}
+
+fn item(game: &dyn DynGame, x: u64, y: u64) -> Value {
+    game.handle_query(LAB0, &json!({"type": "item", "x": x, "y": y}))
+        .unwrap()
+}
+
+/// Team 0's lab spawns a dino at (x, y) and ends its turn; the dino's id.
+fn dino_at(game: &mut dyn DynGame, x: u64, y: u64) -> BotId {
+    let spawned = spawn(game, LAB0, x, y).unwrap();
+    game.end_step(LAB0);
+    BotId(spawned["bot_id"].as_u64().unwrap())
+}
+
 fn bones(game: &dyn DynGame, bot: BotId) -> u64 {
     game.handle_query(bot, &json!({"type": "bones"}))
         .unwrap()
@@ -101,4 +117,55 @@ fn every_team_earns_bones_each_tick() {
     assert_eq!(bones(g.as_ref(), LAB0), after);
     assert_eq!(bones(g.as_ref(), LAB1), after);
     assert_eq!(g.snapshot()["teams"][0]["bones"], json!(after));
+}
+
+#[test]
+fn a_dino_moves_once_per_turn_diagonals_included() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    assert_eq!(go(g.as_mut(), dino, 4, 6).unwrap(), json!({"x": 4, "y": 6}));
+    let me = g.handle_query(dino, &json!({"type": "me"})).unwrap();
+    assert_eq!(me["pos"], json!({"x": 4, "y": 6}));
+    assert_eq!(item(g.as_ref(), 3, 7), Value::Null);
+    assert_eq!(
+        item(g.as_ref(), 4, 6),
+        json!({"type": "dino", "team": 0, "level": 1})
+    );
+    refused(go(g.as_mut(), dino, 4, 7), "already moved");
+    g.end_step(dino);
+    go(g.as_mut(), dino, 4, 7).unwrap();
+}
+
+#[test]
+fn a_move_must_be_in_range_onto_a_free_tile() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    dino_at(g.as_mut(), 3, 8);
+    refused(go(g.as_mut(), dino, 5, 7), "out of range");
+    refused(go(g.as_mut(), dino, 2, 7), "not free"); // the lab
+    refused(go(g.as_mut(), dino, 3, 8), "not free"); // another dino
+    refused(go(g.as_mut(), dino, 3, 7), "not free"); // itself
+    let negative = json!({"type": "move", "x": -1, "y": 7});
+    assert!(matches!(
+        g.apply_action(dino, &negative),
+        Err(ActionError::Malformed(_))
+    ));
+    refused(go(g.as_mut(), LAB0, 0, 7), "only a dino");
+    assert_eq!(item(g.as_ref(), 3, 7)["type"], "dino");
+    // None of that used the turn; walk up to the wall at (5, 5), then the fossil
+    // at (6, 7).
+    go(g.as_mut(), dino, 4, 6).unwrap();
+    g.end_step(dino);
+    refused(go(g.as_mut(), dino, 5, 5), "not free");
+    go(g.as_mut(), dino, 5, 6).unwrap();
+    g.end_step(dino);
+    refused(go(g.as_mut(), dino, 6, 7), "not free");
+}
+
+#[test]
+fn a_move_stays_on_the_board() {
+    let mut g = game();
+    let spawned = spawn(g.as_mut(), LAB1, 15, 7).unwrap();
+    let dino = BotId(spawned["bot_id"].as_u64().unwrap());
+    refused(go(g.as_mut(), dino, 16, 7), "off the board");
 }

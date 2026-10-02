@@ -1,6 +1,6 @@
 //! A game's live bots: the one place ids are handed out and teams are recorded.
 
-use std::ops::{Deref, DerefMut, Index};
+use std::ops::{Deref, DerefMut, Index, IndexMut};
 
 use indexmap::IndexMap;
 
@@ -82,5 +82,12 @@ impl<T> Index<BotId> for BotManager<T> {
 
     fn index(&self, id: BotId) -> &BotWrap<T> {
         &self.bots[&id]
+    }
+}
+
+/// Panics on an id the manager does not have.
+impl<T> IndexMut<BotId> for BotManager<T> {
+    fn index_mut(&mut self, id: BotId) -> &mut BotWrap<T> {
+        &mut self.bots[&id]
     }
 }

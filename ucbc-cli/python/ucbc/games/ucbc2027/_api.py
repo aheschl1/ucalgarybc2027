@@ -194,3 +194,8 @@ class Ucbc2027Api(Handle):
         """Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
         lab. It steps from the next tick."""
         return Spawned._from(self._act({"type": "spawn", "x": x, "y": y}))
+
+    def move(self, x: int, y: int) -> Coord:
+        """Dino only, once per turn: to a free tile within move range. Replies with the
+        new position."""
+        return Coord._from(self._act({"type": "move", "x": x, "y": y}))

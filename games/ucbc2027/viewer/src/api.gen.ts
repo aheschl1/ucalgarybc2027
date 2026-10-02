@@ -54,6 +54,11 @@ export type Action =
       type: "spawn";
       x: number;
       y: number;
+    }
+  | {
+      type: "move";
+      x: number;
+      y: number;
     };
 
 export interface Ucbc2027Api {

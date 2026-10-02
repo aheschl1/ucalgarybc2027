@@ -16,6 +16,13 @@ impl Unit {
             Unit::Dino(_) => None,
         }
     }
+
+    pub fn as_dino_mut(&mut self) -> Option<&mut Dino> {
+        match self {
+            Unit::Dino(dino) => Some(dino),
+            Unit::Lab(_) => None,
+        }
+    }
 }
 
 /// A team's base. Its tiles are environment; the lab bot spawns dinos.

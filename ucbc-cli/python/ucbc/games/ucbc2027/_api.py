@@ -3,31 +3,97 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Self
 
 from ucbc.handle import Handle
 
 
 @dataclass(frozen=True)
-class State:
-    """How many ticks have ended this set."""
+class BotTypeBase:
 
-    tick: int
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+    def _to(self) -> dict[str, Any]:
+        return {"type": "base"}
+
+
+@dataclass(frozen=True)
+class BotTypeDino:
+    level: int
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
-            tick=d["tick"],
+            level=d["level"],
         )
+
+    def _to(self) -> dict[str, Any]:
+        return {"type": "dino", "level": self.level}
+
+
+class Environment(str, Enum):
+    EMPTY = "Empty"
+    WALL = "Wall"
+
+
+@dataclass(frozen=True)
+class ItemBot:
+    team: int
+    bot_type: BotType
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            team=d["team"],
+            bot_type=_from_BotType(d["bot_type"]),
+        )
+
+
+BotType = BotTypeBase | BotTypeDino
+
+
+def _from_BotType(d: dict[str, Any]) -> BotType:
+    match d["type"]:
+        case "base":
+            return BotTypeBase._from(d)
+        case "dino":
+            return BotTypeDino._from(d)
+    raise ValueError(f"unknown BotType type {d['type']!r}")
+
+
+Item = ItemBot
+
+
+def _from_Item(d: dict[str, Any]) -> Item:
+    match d["type"]:
+        case "bot":
+            return ItemBot._from(d)
+    raise ValueError(f"unknown Item type {d['type']!r}")
 
 
 class Ucbc2027Api(Handle):
     """Queries and actions of the `ucbc2027` game, one method each."""
 
-    def state(self) -> State:
-        """The game state."""
-        return State._from(self._query({"type": "state"}))
+    def item(self, x: int, y: int) -> Item | None:
+        reply = self._query({"type": "item", "x": x, "y": y})
+        return None if reply is None else _from_Item(reply)
+
+    def environment(self, x: int, y: int) -> Environment:
+        return Environment(self._query({"type": "environment", "x": x, "y": y}))
+
+    def width(self) -> int:
+        reply: int = self._query({"type": "width"})
+        return reply
+
+    def height(self) -> int:
+        reply: int = self._query({"type": "height"})
+        return reply
 
     def noop(self) -> None:
-        """Does nothing."""
         self._act({"type": "noop"})
+
+    def spawn(self, x: int, y: int, bot_type: BotType) -> None:
+        self._act({"type": "spawn", "x": x, "y": y, "bot_type": bot_type._to()})

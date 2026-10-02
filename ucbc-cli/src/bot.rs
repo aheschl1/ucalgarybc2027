@@ -139,8 +139,8 @@ impl PyBot {
         )
         .map_err(crash)?;
         let identity = encode(&json!({ "identity": {
-            "bot_id": ctx.bot.id.0,
-            "team": ctx.bot.team.0,
+            "bot_id": ctx.bot.0,
+            "team": ctx.team.id.0,
             "team_name": ctx.team.name,
             "seed": ctx.seed,
             "game": team.game,

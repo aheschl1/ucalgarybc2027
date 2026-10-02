@@ -26,7 +26,7 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | Flag | |
 | --- | --- |
 | `--seed N`, `--sets N` | |
-| `--step-ms`, `--memory-mb` | per bot; default 500 ms, 1 GiB ([limits](docs/resourcelimits.md)) |
+| `--step-ms`, `--memory-mb` | per bot; default 3 ms, 1 GiB ([limits](docs/resourcelimits.md)) |
 | `--show-bot-output` | bot stdout/stderr |
 | `--replay FILE`, `--summary FILE` | write JSON |
 | `--view` | open replay in browser |

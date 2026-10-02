@@ -1,4 +1,4 @@
-"""Matches run with the SDK defaults: 500 ms of bot time per step and 1 GiB per bot."""
+"""Matches run on a roomy 500 ms step budget (the SDK default is 3 ms) and 1 GiB per bot."""
 
 import json
 import subprocess
@@ -173,6 +173,7 @@ def test_limits_are_set_per_match_and_recorded(bot: BotPath, tmp_path: Path) -> 
         game="tictactoe",
         sets=1,
         replay_path=replay,
+        step_ms=STEP_MS,
         memory_bytes=2**26,
     )
     small = json.loads(replay.read_text())

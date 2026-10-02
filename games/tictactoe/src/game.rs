@@ -1,8 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, Outcome, Query,
-    QueryError, SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, Outcome,
+    QueryError, Request, SetSetup, TeamId,
 };
 
 use crate::rules::{Board, Cell};
@@ -11,7 +11,7 @@ use crate::rules::{Board, Cell};
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
     /// The board and whose turn it is.
-    Board(Query<(), BoardView>),
+    Board(Request<(), BoardView>),
 }
 
 /// What a bot sees when it asks for the board.
@@ -31,7 +31,13 @@ pub struct BoardView {
 pub enum Action {
     /// Place this bot's mark. Refused if the cell is taken or a mark was already
     /// placed this step.
-    Place { row: u32, col: u32 },
+    Place(Request<Spot, Placed>),
+}
+
+#[derive(Deserialize, JsonSchema)]
+pub struct Spot {
+    pub row: u32,
+    pub col: u32,
 }
 
 /// The mark that was placed.
@@ -50,9 +56,10 @@ enum State {
     Over(Outcome),
 }
 
-/// Two teams, one bot each (bot id equals team id). Every tick both bots step, the
-/// set's first team first, and that team plays X.
+/// Two teams, one bot each. Every tick both bots step, the set's first team first,
+/// and that team plays X.
 pub struct TicTacToe {
+    bots: BotManager<()>,
     board: Board,
     /// Step order; `marks[i]` is the mark of `order[i]`.
     order: [TeamId; 2],
@@ -61,10 +68,6 @@ pub struct TicTacToe {
 }
 
 impl TicTacToe {
-    fn bot_of(team: TeamId) -> BotRef {
-        BotRef::new(u64::from(team.0), team.0)
-    }
-
     fn opponent(team: TeamId) -> TeamId {
         TeamId(1 - team.0)
     }
@@ -89,71 +92,82 @@ impl Game for TicTacToe {
     const NAME: &'static str = "tictactoe";
     type Query = Queries;
     type Action = Action;
-    type ActionResponse = Placed;
     type Snapshot = Board;
+    type Bot = ();
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
-        if setup.teams != 2 {
+        let &[first, second] = setup.teams.as_slice() else {
             return Err(EngineError::Config(format!(
                 "tictactoe needs exactly 2 teams, got {}",
-                setup.teams
+                setup.teams.len()
             )));
-        }
-        let first = setup.first_team;
+        };
+        let mut bots = BotManager::new();
+        bots.schedule(first, ());
+        bots.schedule(second, ());
         Ok(TicTacToe {
+            bots,
             board: Board::new(),
-            order: [first, Self::opponent(first)],
+            order: [first, second],
             marks: [Cell::X, Cell::O],
             state: State::Playing { placed: false },
         })
     }
 
-    fn schedule(&mut self) -> Vec<BotRef> {
-        self.order.iter().map(|&t| Self::bot_of(t)).collect()
+    fn bots(&self) -> &BotManager<()> {
+        &self.bots
     }
 
-    fn handle_query(&self, bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
+    fn bots_mut(&mut self) -> &mut BotManager<()> {
+        &mut self.bots
+    }
+
+    fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         match query {
             Queries::Board(q) => Ok(q.reply(BoardView {
                 board: self.board,
-                you: self.mark(bot.team),
+                you: self.mark(self.bots[bot].team()),
                 to_move: self.marks[(self.turn() % 2) as usize],
                 turn: self.turn(),
             })),
         }
     }
 
-    fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Placed, ActionError> {
+    fn apply_action(&mut self, bot: BotId, action: Action) -> Result<Answer, ActionError> {
         if matches!(self.state, State::Playing { placed: true }) {
             return Err(ActionError::Invalid("already placed this turn".into()));
         }
-        let Action::Place { row, col } = action;
-        let mark = self.mark(bot.team);
+        let Action::Place(a) = action;
+        let (row, col) = (a.row, a.col);
+        let team = self.bots[bot].team();
+        let mark = self.mark(team);
         self.board
             .place(row, col, mark)
             .map_err(|e| ActionError::Invalid(e.to_string()))?;
         self.state = if self.board.winner() == Some(mark) {
-            State::Over(Outcome::win(bot.team))
+            State::Over(Outcome::win(team))
         } else if self.board.is_full() {
             State::Over(Outcome::draw("board full"))
         } else {
             State::Playing { placed: true }
         };
-        Ok(Placed { row, col, mark })
+        Ok(a.reply(Placed { row, col, mark }))
     }
 
-    fn end_step(&mut self, bot: BotRef) {
+    fn end_step(&mut self, bot: BotId) {
+        let team = self.bots[bot].team();
         match self.state {
             State::Playing { placed: true } => self.state = State::Playing { placed: false },
             State::Playing { placed: false } => {
-                self.forfeit(bot.team, format!("team {} did not place a mark", bot.team));
+                self.forfeit(team, format!("team {team} did not place a mark"));
             }
             State::Over(_) => {}
         }
     }
 
-    fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure) {
-        self.forfeit(bot.team, format!("team {}: {}", bot.team, failure.detail()));
+    fn bot_failed(&mut self, bot: BotId, failure: &BotFailure) {
+        let team = self.bots[bot].team();
+        self.forfeit(team, format!("team {team}: {}", failure.detail()));
     }
 
     fn end_tick(&mut self) {}

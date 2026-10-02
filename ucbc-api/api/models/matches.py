@@ -51,7 +51,7 @@ class MatchConfig(BaseModel):
 
     sets: int = Field(default=3, ge=1)
     seed: int = 0
-    step_ms: int = Field(default=500, ge=1)
+    step_ms: int = Field(default=3, ge=1)
     memory_bytes: int = Field(default=2**30, ge=1)
 
 

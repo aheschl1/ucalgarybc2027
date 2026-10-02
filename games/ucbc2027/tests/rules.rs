@@ -250,6 +250,9 @@ fn a_fossil_dropped_on_your_lab_raises_income() {
     walk(g.as_mut(), dino, &[(4, 6), (3, 7)]);
     let deposited = put(g.as_mut(), dino, 2, 7).unwrap();
     assert_eq!(deposited, json!({"type": "deposited", "fossils": 1}));
+    let fossils = |g: &dyn DynGame, bot| g.handle_query(bot, &json!({"type": "fossils"})).unwrap();
+    assert_eq!(fossils(g.as_ref(), LAB0), json!(1));
+    assert_eq!(fossils(g.as_ref(), LAB1), json!(0));
     assert_eq!(held(g.as_ref(), dino), Value::Null);
     let before = bones(g.as_ref(), LAB0);
     g.end_tick();

@@ -33,6 +33,11 @@ impl TeamState {
             fossils: 0,
         }
     }
+
+    /// Bones the team earns per tick.
+    pub fn income(&self) -> u32 {
+        rules::BASE_INCOME + rules::INCOME_PER_FOSSIL * self.fossils
+    }
 }
 
 /// Everything about a set except the bots' own data, which is in the `BotManager`.

@@ -1,5 +1,8 @@
 """The lab spawns a few dinos. Each dino wanders until it sees a fossil, then carries
-it home."""
+it home.
+
+Every lab and dino runs its own copy of this file, so the module global `bot` holds
+that one unit's controller from step to step."""
 
 import random
 
@@ -20,65 +23,72 @@ LOOK = 3
 and queries are what a step's time goes on."""
 
 
+bot: "Lab | Dino | None" = None
+
+
 def step(handle: Ucbc2027Handle) -> None:
-    me = handle.me()
-    if isinstance(me, UnitViewLab):
-        lab(handle, me)
-    elif isinstance(me, UnitViewDino):
-        dino(handle, me)
+    global bot
+    if bot is None:
+        me = handle.me()
+        bot = Lab(me) if isinstance(me, UnitViewLab) else Dino(handle, me)
+    bot.step(handle)
 
 
-def lab(handle: Ucbc2027Handle, me: UnitViewLab) -> None:
-    spawned = handle.memory.get("spawned", 0)
-    if spawned >= DINOS:
-        return
-    x0, y0 = me.origin.x, me.origin.y
-    for y in range(y0 - 1, y0 + 3):
-        for x in range(x0 - 1, x0 + 3):
-            try:
-                handle.spawn(x, y)
-            except ActionError:
-                continue
-            handle.memory["spawned"] = spawned + 1
+class Lab:
+    def __init__(self, me: UnitViewLab) -> None:
+        self.origin = me.origin
+        self.spawned = 0
+
+    def step(self, handle: Ucbc2027Handle) -> None:
+        if self.spawned >= DINOS:
             return
+        for y in range(self.origin.y - 1, self.origin.y + 3):
+            for x in range(self.origin.x - 1, self.origin.x + 3):
+                try:
+                    handle.spawn(x, y)
+                except ActionError:
+                    continue
+                self.spawned += 1
+                return
 
 
-def dino(handle: Ucbc2027Handle, me: UnitViewDino) -> None:
-    if "home" not in handle.memory:
-        handle.memory["home"] = home_tile(handle, me.pos)
-        handle.memory["rng"] = random.Random(handle.seed)
-    home: Coord = handle.memory["home"]
-    if me.held is not None:
-        if dist(home, me.pos) <= 1:
-            handle.drop(home.x, home.y)
+class Dino:
+    def __init__(self, handle: Ucbc2027Handle, me: UnitViewDino) -> None:
+        self.home = home_tile(handle, me.pos)
+        self.rng = random.Random(handle.seed)
+        self.heading: Direction | None = None
+
+    def step(self, handle: Ucbc2027Handle) -> None:
+        me = handle.me()
+        assert isinstance(me, UnitViewDino)  # For the type checker: a dino stays a dino.
+        if me.held is not None:
+            if dist(self.home, me.pos) <= 1:
+                handle.drop(self.home.x, self.home.y)
+            else:
+                self.go(handle, self.home)
+            return
+        fossil = nearest_fossil(handle, me.pos)
+        if fossil is None:
+            self.wander(handle)
+        elif dist(fossil, me.pos) <= 1:
+            handle.grab(fossil.x, fossil.y)
         else:
-            go(handle, home)
-        return
-    fossil = nearest_fossil(handle, me.pos)
-    if fossil is None:
-        wander(handle)
-    elif dist(fossil, me.pos) <= 1:
-        handle.grab(fossil.x, fossil.y)
-    else:
-        go(handle, fossil)
+            self.go(handle, fossil)
 
+    def go(self, handle: Ucbc2027Handle, target: Coord) -> None:
+        try:
+            handle.step_toward(target.x, target.y)
+        except ActionError:
+            self.wander(handle)  # Blocked: sidestep and try again next turn.
 
-def go(handle: Ucbc2027Handle, target: Coord) -> None:
-    try:
-        handle.step_toward(target.x, target.y)
-    except ActionError:
-        wander(handle)  # Blocked: sidestep and try again next turn.
-
-
-def wander(handle: Ucbc2027Handle) -> None:
-    """Keep going one way; pick a new random way when blocked."""
-    rng: random.Random = handle.memory["rng"]
-    heading = handle.memory.get("heading") or rng.choice(list(Direction))
-    try:
-        handle.move_dir(heading)
-    except ActionError:
-        heading = None
-    handle.memory["heading"] = heading
+    def wander(self, handle: Ucbc2027Handle) -> None:
+        """Keep going one way; pick a new random way when blocked."""
+        heading = self.heading or self.rng.choice(list(Direction))
+        try:
+            handle.move_dir(heading)
+            self.heading = heading
+        except ActionError:
+            self.heading = None
 
 
 def home_tile(handle: Ucbc2027Handle, pos: Coord) -> Coord:

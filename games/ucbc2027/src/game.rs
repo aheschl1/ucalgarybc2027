@@ -7,7 +7,6 @@ use ucbc_engine::{
 
 use crate::coord::Coord;
 use crate::map::{Environment, Map};
-use crate::rules;
 use crate::state::{Item, State};
 use crate::unit::{Lab, Unit};
 use crate::view::{Dropped, ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};
@@ -19,6 +18,8 @@ pub enum Queries {
     Me(Request<(), UnitView>),
     /// Your team's bones.
     Bones(Request<(), u32>),
+    /// Fossils your team has deposited at its lab.
+    Fossils(Request<(), u32>),
     /// What is on a tile; None if nothing.
     Item(Request<Coord, Option<ItemView>>),
     /// What a tile is made of.
@@ -134,6 +135,7 @@ impl Game for Ucbc2027 {
         match query {
             Queries::Me(q) => Ok(q.reply(self.unit_view(bot))),
             Queries::Bones(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).bones)),
+            Queries::Fossils(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).fossils)),
             Queries::Item(q) => {
                 let item = self.state.items.get(*q).ok_or_else(|| off_board(*q))?;
                 Ok(q.reply(item.map(|item| self.item_view(item))))
@@ -170,7 +172,7 @@ impl Game for Ucbc2027 {
 
     fn end_tick(&mut self) {
         for team in &mut self.state.teams {
-            team.bones += rules::income(team);
+            team.bones += team.income();
         }
         self.state.tick += 1;
     }

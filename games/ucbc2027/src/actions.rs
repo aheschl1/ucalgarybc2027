@@ -47,7 +47,7 @@ impl Ucbc2027 {
         if self.turn.moved {
             return Err(invalid("already moved this turn"));
         }
-        if dino.pos.dist(to) > rules::stats(dino).move_range {
+        if dino.pos.dist(to) > dino.stats().move_range {
             return Err(invalid("out of range"));
         }
         if self.state.map.env(to).is_none() {
@@ -69,7 +69,7 @@ impl Ucbc2027 {
         if dino.held.is_some() {
             return Err(invalid("already holding something"));
         }
-        if dino.pos.dist(at) > rules::stats(dino).action_range {
+        if dino.pos.dist(at) > dino.stats().action_range {
             return Err(invalid("out of range"));
         }
         let item = match self.state.items.get(at).copied() {
@@ -91,7 +91,7 @@ impl Ucbc2027 {
         let Some(item) = dino.held else {
             return Err(invalid("holding nothing"));
         };
-        if dino.pos.dist(at) > rules::stats(dino).action_range {
+        if dino.pos.dist(at) > dino.stats().action_range {
             return Err(invalid("out of range"));
         }
         let deposit = match self.state.map.env(at) {

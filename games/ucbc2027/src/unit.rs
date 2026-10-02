@@ -64,6 +64,22 @@ impl Dino {
             held: None,
         }
     }
+
+    /// The same for every dino until levels and artifacts change it.
+    pub fn stats(&self) -> Stats {
+        Stats {
+            move_range: rules::MOVE_RANGE,
+            action_range: rules::ACTION_RANGE,
+        }
+    }
+}
+
+/// What a dino can reach.
+pub struct Stats {
+    /// How far one move may go.
+    pub move_range: usize,
+    /// How far away a grab or drop may reach.
+    pub action_range: usize,
 }
 
 #[cfg(test)]

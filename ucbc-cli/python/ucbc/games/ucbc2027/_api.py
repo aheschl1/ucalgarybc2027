@@ -207,6 +207,11 @@ class Ucbc2027Api(Handle):
         reply: int = self._query({"type": "bones"})
         return reply
 
+    def fossils(self) -> int:
+        """Fossils your team has deposited at its lab."""
+        reply: int = self._query({"type": "fossils"})
+        return reply
+
     def item(self, x: int, y: int) -> ItemView | None:
         """What is on a tile; None if nothing."""
         reply = self._query({"type": "item", "x": x, "y": y})

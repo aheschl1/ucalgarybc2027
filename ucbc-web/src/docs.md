@@ -69,16 +69,29 @@ def step(handle: Ucbc2027Handle) -> None:
 The engine calls `step` each time it is your bot's turn to act. The handle is how the
 bot sees the game and acts on it; your editor will list what the game's handle offers.
 
-A match is a few sets. Module globals and the `handle.memory` dict persist from step to
-step within a set, and each set starts fresh. `handle.seed` differs per bot and per set
-but is fixed by the match's seed, so seeding from it keeps a match reproducible:
+A match is a few sets. Every unit the game gives you runs its own copy of `main.py`,
+with its own globals. Globals persist from step to step within a set, and each set
+starts fresh, so a bot keeps its state in a global; the class below is only a
+convention. `handle.seed` differs per bot and
+per set but is fixed by the match's seed, so seeding from it keeps a match reproducible:
 
 ```python
 import random
 
+class Bot:
+    def __init__(self, handle):
+        self.rng = random.Random(handle.seed)
+
+    def step(self, handle):
+        ...
+
+bot = None
+
 def step(handle):
-    rng = handle.memory.setdefault("rng", random.Random(handle.seed))
-    ...
+    global bot
+    if bot is None:
+        bot = Bot(handle)
+    bot.step(handle)
 ```
 
 ## run it locally

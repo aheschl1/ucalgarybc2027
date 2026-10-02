@@ -8,6 +8,5 @@ from ucbc.games.tictactoe import TicTacToeHandle
 def step(handle: TicTacToeHandle) -> None:
     for _ in range(2):
         junk = [bytes(470) for _ in range(300_000)]
-        handle.memory["count"] = len(junk)
         del junk
     handle.place(*handle.empty_cells()[0])

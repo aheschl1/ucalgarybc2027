@@ -1,3 +1,4 @@
+import gzip
 import threading
 import urllib.request
 from collections.abc import Callable, Iterator
@@ -45,6 +46,25 @@ def test_serves_the_page_and_the_replay(served: str) -> None:
     assert get(f"{served}/assets/app.js")[0] == "app"
     assert get(f"{served}/replay.json") == ('{"sets": []}', "no-cache")
     assert get(f"{served}/replay.json?v=1")[0] == '{"sets": []}'
+
+
+def test_serves_a_gzipped_replay_for_the_browser_to_decompress(
+    static: Path, tmp_path: Path
+) -> None:
+    replay = tmp_path / "r.json.gz"
+    replay.write_bytes(gzip.compress(b'{"sets": []}'))
+    server = viewer.make_server(replay)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/replay.json"
+        with urllib.request.urlopen(url) as r:
+            assert r.headers["Content-Encoding"] == "gzip"
+            assert r.headers["Content-Type"] == "application/json"
+            assert gzip.decompress(r.read()) == b'{"sets": []}'
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_refuses_an_unbuilt_viewer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

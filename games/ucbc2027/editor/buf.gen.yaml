@@ -1,0 +1,8 @@
+# `npm run gen`: the map file's TS types, from ../map.proto.
+version: v2
+inputs:
+  - proto_file: ../map.proto
+plugins:
+  - local: protoc-gen-es
+    out: src
+    opt: target=ts

@@ -8,7 +8,7 @@ Rust 1.96+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
 ```bash
 make setup      # once: env files, dependencies, then `make build`
-make build        # after any change: generated code, the viewer page, the bot runtime, the engine in .venv
+make build        # after any change: generated code, the viewer and editor pages, the bot runtime, the engine in .venv
 make test       # rust, python, api (needs Docker), viewer; `make test-api` for the API alone
 make lint
 make up         # the platform in compose
@@ -28,10 +28,12 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | `--seed N`, `--sets N` | |
 | `--step-ms`, `--memory-mb` | per bot; default 3 ms, 1 GiB ([limits](docs/resourcelimits.md)) |
 | `--show-bot-output` | bot stdout/stderr |
-| `--replay FILE`, `--summary FILE` | write JSON |
+| `--replay FILE`, `--summary FILE` | write JSON; a replay named `*.gz` is gzipped |
+| `--map FILE` | play on a map file, e.g. `games/ucbc2027/maps/standard.map` |
 | `--view` | open replay in browser |
 
-`uv run ucbc view r.json` replays a saved file.
+`uv run ucbc view r.json` replays a saved file. `uv run ucbc editor my.map` opens the
+map editor on a file (new if missing); Save writes it, and `--map my.map` plays on it.
 
 ## Write a bot
 

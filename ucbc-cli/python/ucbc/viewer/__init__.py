@@ -1,58 +1,50 @@
 """Serves the replay viewer page and one replay file on localhost."""
 
-import webbrowser
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import BinaryIO
 
-import click
+from ucbc import page
 
 # Built by `make viewer` from ucbc-viewer/.
 STATIC = Path(__file__).parent / "static"
+GZIP_MAGIC = b"\x1f\x8b"
 
 
 def check_built() -> None:
-    if not (STATIC / "index.html").is_file():
-        raise click.ClickException("the viewer is not built; run `make viewer`")
+    page.check_built(STATIC, "viewer")
 
 
 def make_server(replay: Path, port: int = 0) -> ThreadingHTTPServer:
-    """The page at `/`, and `replay` at `/replay.json`, which the page loads by default."""
+    """The page at `/`, and `replay` at `/replay.json`, which the page loads by default.
+    A gzipped replay is sent with `Content-Encoding: gzip`."""
     check_built()
-    static = STATIC
 
-    class Handler(SimpleHTTPRequestHandler):
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, directory=str(static), **kwargs)
+    class Handler(page.PageHandler):
+        static = STATIC
 
-        def translate_path(self, path: str) -> str:
-            if path.split("?", 1)[0] == "/replay.json":
-                return str(replay)
-            return super().translate_path(path)
-
-        def end_headers(self) -> None:
-            # A rebuilt page or rewritten replay must not come from the browser cache.
-            self.send_header("Cache-Control", "no-cache")
-            super().end_headers()
-
-        def log_message(self, format: str, *args: Any) -> None:
-            pass
+        def send_head(self) -> BinaryIO | None:
+            if self.path.split("?", 1)[0] != "/replay.json":
+                return super().send_head()
+            try:
+                f = replay.open("rb")
+            except OSError:
+                self.send_error(404)
+                return None
+            # A gzipped replay goes as it is; the browser decompresses it.
+            gzipped = f.read(2) == GZIP_MAGIC
+            f.seek(0)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            if gzipped:
+                self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(replay.stat().st_size))
+            self.end_headers()
+            return f
 
     return ThreadingHTTPServer(("127.0.0.1", port), Handler)
 
 
 def open_viewer(replay: Path, port: int = 0, browser: bool = True) -> None:
     """Serve `replay` until Ctrl-C, opening it in the default browser."""
-    try:
-        server = make_server(replay.resolve(), port)
-    except OSError as e:
-        raise click.ClickException(f"cannot serve on port {port}: {e}") from e
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
-    click.echo(f"Viewer: {url} (Ctrl-C to stop)")
-    if browser:
-        webbrowser.open(url)
-    with server:
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            pass
+    page.serve("Viewer", lambda p: make_server(replay.resolve(), p), port, browser)

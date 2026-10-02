@@ -29,6 +29,7 @@ jobs:
           python-version-file: .python-version
       - uses: astral-sh/setup-uv@v10.2.0
       - run: npm ci && npm run build -w @ucbc/viewer -- --outDir ../ucbc-cli/python/ucbc/viewer/static --emptyOutDir
+      - run: npm run build -w @ucbc/editor-ucbc2027 -- --outDir ../../../ucbc-cli/python/ucbc/editor/static --emptyOutDir
       # The pinned guest and stdlib, as make build fetches them.
       - run: |
           eval "$(sed -n 's/^\(GUEST_RELEASE\|GUEST_SHA256\|STDLIB_SHA256\) := /\1=/p' Makefile)"

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package ucbc2027;
+
+// 0, 0 is top left
+message Map {
+  uint32 width = 1;
+  uint32 height = 2;
+  // tile (x, y) is `tiles[y * width + x]`.
+  repeated Tile tiles = 3;
+}
+
+// what the tile is made of, and what lies on it when the set starts
+message Tile {
+  Environment environment = 1;
+  Item item = 2;
+}
+
+// fixed for the whole set
+enum Environment {
+  ENVIRONMENT_EMPTY = 0;
+  ENVIRONMENT_WALL = 1;
+  // a lab is a 2x2 square of these; the first in reading order is team 0's
+  ENVIRONMENT_LAB = 2;
+}
+
+enum Item {
+  ITEM_NONE = 0;
+  ITEM_FOSSIL = 1;
+}

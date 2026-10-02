@@ -1,4 +1,4 @@
-.PHONY: help setup build gen sdk viewer-types viewer web runtime guest cpython wheels test test-api lint clean up down db release-check tag
+.PHONY: help setup build gen sdk viewer-types editor-types viewer editor web runtime guest cpython wheels test test-api lint clean up down db release-check tag
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -17,7 +17,7 @@ help:
 setup: .env .env.local build  ## once: env files, then everything `make build` does
 
 # uv builds the engine, here and only here: a `uv run` afterwards leaves the build alone.
-build: gen viewer runtime  ## after any change: generated code, the viewer page, the bot runtime, dependencies and the engine in .venv
+build: gen viewer editor runtime  ## after any change: generated code, the viewer and editor pages, the bot runtime, dependencies and the engine in .venv
 	MATURIN_PEP517_ARGS="$(FEATURES)" uv sync --all-packages --reinstall-package ucbc
 
 test: build .env .env.local  ## rust, python, api (needs Docker), viewer
@@ -55,9 +55,10 @@ node_modules: package-lock.json
 	npm ci
 	touch $@
 
-# Code generated from the Rust types: the Python SDK and the viewer's TypeScript types.
-# Committed, so a fresh checkout works without cargo; regenerated before anything uses it.
-gen: sdk viewer-types
+# Code generated from the Rust types (the Python SDK and the viewer's TypeScript types)
+# and from map.proto (the map editor's). Committed, so a fresh checkout works without
+# cargo; regenerated before anything uses it.
+gen: sdk viewer-types editor-types
 
 sdk:
 	cargo run -q -p ucbc-dev -- gen-sdk ucbc-cli/python/ucbc/games
@@ -65,9 +66,16 @@ sdk:
 viewer-types: node_modules
 	node ucbc-viewer/scripts/gen-types.mjs
 
+editor-types: node_modules
+	npm run gen -w @ucbc/editor-ucbc2027 --silent
+
 # The viewer page, built into the ucbc package for `ucbc view`.
 viewer: viewer-types
 	npm run build -w @ucbc/viewer -- --outDir ../ucbc-cli/python/ucbc/viewer/static --emptyOutDir
+
+# The map editor page, built into the ucbc package for `ucbc editor`.
+editor: editor-types
+	npm run build -w @ucbc/editor-ucbc2027 -- --outDir ../../../ucbc-cli/python/ucbc/editor/static --emptyOutDir
 
 # The platform frontend, built into the API package so `ucbc-api` serves it at /.
 web: viewer-types

@@ -1,9 +1,12 @@
 //! The game's rules, driven directly: one set, both labs, no runtimes.
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use prost::Message;
 use serde_json::{Value, json};
-use ucbc_2027::Ucbc2027;
-use ucbc_2027::rules::{BASE_INCOME, INCOME_PER_FOSSIL, SPAWN_COST, START_BONES};
-use ucbc_engine::{ActionError, BotFailure, BotId, DynGame, Game, SetSetup, TeamId};
+use ucbc_2027::rules::{BASE_INCOME, INCOME_PER_FOSSIL, LAB_HEALTH, SPAWN_COST, START_BONES};
+use ucbc_2027::{Coord, Ucbc2027, UnitView, proto};
+use ucbc_engine::{ActionError, BotFailure, BotId, DynGame, EngineError, Game, SetSetup, TeamId};
 
 const LAB0: BotId = BotId(0);
 const LAB1: BotId = BotId(1);
@@ -293,4 +296,76 @@ fn a_failed_carrier_leaves_its_fossil_behind() {
     assert_eq!(item(g.as_ref(), 6, 7), Value::Null);
     let fossils = g.snapshot()["fossils"].as_array().unwrap().clone();
     assert!(fossils.contains(&json!({"x": 5, "y": 6})));
+}
+
+fn with_config(config: Value) -> Result<Ucbc2027, EngineError> {
+    Ucbc2027::create(&SetSetup::new(
+        0,
+        vec![TeamId(0), TeamId(1)],
+        0,
+        Some(config),
+    ))
+}
+
+#[test]
+fn a_set_plays_on_the_map_in_game_config() {
+    use proto::{Environment, Item};
+    let tiles = ["LL....", "LL..LL", "...fLL"]
+        .concat()
+        .chars()
+        .map(|ch| {
+            let (environment, item) = match ch {
+                'L' => (Environment::Lab, Item::None),
+                'f' => (Environment::Empty, Item::Fossil),
+                _ => (Environment::Empty, Item::None),
+            };
+            proto::Tile {
+                environment: environment as i32,
+                item: item as i32,
+            }
+        })
+        .collect();
+    let file = proto::Map {
+        width: 6,
+        height: 3,
+        tiles,
+    };
+    let map = BASE64.encode(file.encode_to_vec());
+    let g = with_config(json!({"map": map})).unwrap();
+    let state = Game::snapshot(&g);
+    assert_eq!(state.environment.len(), 3);
+    assert_eq!(state.environment[0].len(), 6);
+    assert_eq!(state.fossils, [Coord::new(3, 2)]);
+    let lab1 = &state.units[1].unit;
+    assert_eq!(
+        *lab1,
+        UnitView::Lab {
+            origin: Coord::new(4, 1),
+            health: LAB_HEALTH
+        }
+    );
+}
+
+#[test]
+fn a_bad_map_in_game_config_is_a_config_error() {
+    for (config, why) in [
+        (json!({"map": 3}), "expected a base64 string"),
+        (json!({"map": "not base64!"}), "Invalid"),
+        (
+            json!({"map": BASE64.encode([0xff, 0xff])}),
+            "not a map file",
+        ),
+    ] {
+        match with_config(config) {
+            Err(EngineError::Config(message)) => {
+                assert!(message.starts_with("game_config.map: "), "{message}");
+                assert!(message.contains(why), "{message:?} should say {why:?}");
+            }
+            Err(other) => panic!("expected a config error, got {other}"),
+            Ok(_) => panic!("expected {why:?}"),
+        }
+    }
+    // Without a map, the standard one.
+    let standard = with_config(json!({})).unwrap();
+    assert_eq!(Game::snapshot(&standard).environment.len(), 16);
 }

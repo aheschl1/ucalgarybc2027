@@ -34,6 +34,11 @@ wasmtime-wasi = "49"
 wasmtime-wizer = "49"
 pollster = "0.4"
 tempfile = "3"
+prost = "0.14"
+prost-build = "0.14"
+protox = "0.9"
+base64 = "0.22"
+flate2 = "1"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

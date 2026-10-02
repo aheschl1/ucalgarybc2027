@@ -4,8 +4,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, QueryError,
-    Request, SetSetup,
+    ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, Outcome,
+    QueryError, Request, SetSetup, TeamId,
 };
 
 use crate::coord::Coord;
@@ -56,6 +56,7 @@ pub struct Ucbc2027 {
     pub(crate) bots: BotManager<Unit>,
     pub(crate) state: State,
     pub(crate) turn: Turn,
+    seed: u64,
 }
 
 /// What the stepping bot has used of its turn. It belongs to the step, not the bot.
@@ -96,6 +97,28 @@ impl Ucbc2027 {
             },
         }
     }
+
+    /// The team's highest dino level, 0 with no dinos.
+    fn top_level(&self, team: TeamId) -> u32 {
+        self.bots
+            .ids()
+            .into_iter()
+            .map(|id| &self.bots[id])
+            .filter(|bot| bot.team() == team)
+            .filter_map(|bot| bot.as_dino())
+            .map(|dino| dino.level)
+            .max()
+            .unwrap_or(0)
+    }
+}
+
+/// The teams in `field` with the highest `score`.
+fn most(field: Vec<TeamId>, score: impl Fn(TeamId) -> u32) -> Vec<TeamId> {
+    let top = field.iter().map(|&team| score(team)).max();
+    field
+        .into_iter()
+        .filter(|&team| Some(score(team)) == top)
+        .collect()
 }
 
 /// The map in `game_config`, `{"map": "<a map file in base64>"}`, or the standard one.
@@ -135,6 +158,7 @@ impl Game for Ucbc2027 {
             bots,
             state: State::new(map),
             turn: Turn::default(),
+            seed: setup.seed,
         })
     }
 
@@ -195,6 +219,26 @@ impl Game for Ucbc2027 {
 
     fn status(&self) -> GameStatus {
         GameStatus::InProgress
+    }
+
+    /// Most points wins, then most fossils deposited, then the highest level dino,
+    /// then a coin toss.
+    fn tick_limit(&self, _max_ticks: u32) -> Outcome {
+        let field = self.state.team_ids();
+        let field = most(field, |team| self.state.team(team).points());
+        if let [winner] = field[..] {
+            return Outcome::win(winner).with_detail("most points");
+        }
+        let field = most(field, |team| self.state.team(team).fossils);
+        if let [winner] = field[..] {
+            return Outcome::win(winner).with_detail("most fossils");
+        }
+        let field = most(field, |team| self.top_level(team));
+        if let [winner] = field[..] {
+            return Outcome::win(winner).with_detail("highest level dino");
+        }
+        let winner = field[(self.seed % field.len() as u64) as usize];
+        Outcome::win(winner).with_detail("coin toss")
     }
 
     fn snapshot(&self) -> Snapshot {

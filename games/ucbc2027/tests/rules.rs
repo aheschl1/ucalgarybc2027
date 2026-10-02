@@ -369,3 +369,51 @@ fn a_bad_map_in_game_config_is_a_config_error() {
     let standard = with_config(json!({})).unwrap();
     assert_eq!(Game::snapshot(&standard).environment.len(), 16);
 }
+
+/// The set's outcome if it ended now: (winner, detail).
+fn verdict(game: &dyn DynGame) -> (Option<TeamId>, String) {
+    let outcome = game.tick_limit(1000);
+    (outcome.winner, outcome.detail)
+}
+
+#[test]
+fn the_most_points_win_at_the_tick_limit() {
+    let mut g = game();
+    dino_at(g.as_mut(), 0, 7);
+    assert_eq!(verdict(g.as_ref()), (Some(TeamId(1)), "most points".into()));
+}
+
+#[test]
+fn even_points_go_to_the_most_fossils() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    walk(g.as_mut(), dino, &[(4, 6), (3, 7)]);
+    put(g.as_mut(), dino, 2, 7).unwrap();
+    spawn(g.as_mut(), LAB1, 15, 7).unwrap();
+    assert_eq!(
+        verdict(g.as_ref()),
+        (Some(TeamId(0)), "most fossils".into())
+    );
+}
+
+#[test]
+fn then_to_the_highest_level_dino() {
+    let mut g = game();
+    dino_at(g.as_mut(), 0, 7);
+    let spawned = spawn(g.as_mut(), LAB1, 15, 7).unwrap();
+    let dino = BotId(spawned["bot_id"].as_u64().unwrap());
+    g.bot_failed(dino, &BotFailure::exception("RuntimeError", "boom"));
+    let detail = "highest level dino".to_string();
+    assert_eq!(verdict(g.as_ref()), (Some(TeamId(0)), detail));
+}
+
+#[test]
+fn a_full_tie_is_a_coin_toss_on_the_seed() {
+    let toss = |seed| {
+        let setup = SetSetup::new(0, vec![TeamId(0), TeamId(1)], seed, None);
+        verdict(&Ucbc2027::create(&setup).unwrap())
+    };
+    assert_eq!(toss(0), (Some(TeamId(0)), "coin toss".into()));
+    assert_eq!(toss(1), (Some(TeamId(1)), "coin toss".into()));
+}

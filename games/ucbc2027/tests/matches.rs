@@ -114,10 +114,11 @@ fn dinos(state: &Value) -> Vec<&Value> {
 }
 
 #[test]
-fn sets_run_to_the_tick_limit_and_draw() {
+fn sets_run_to_the_tick_limit_and_end_on_a_coin_toss_when_even() {
     let replay = run(vec![team::<Noop>("a"), team::<Noop>("b")], 2).unwrap();
     for set in &replay.sets {
-        assert_eq!(set.result.reason, Reason::Draw);
+        assert_eq!(set.result.reason, Reason::Win);
+        assert_eq!(set.result.detail, "coin toss");
         assert_eq!(set.result.ticks, TICKS);
         let ticks: Vec<u64> = set
             .ticks
@@ -128,7 +129,6 @@ fn sets_run_to_the_tick_limit_and_draw() {
     }
     assert_eq!(steppers(&replay, 0)[..2], [0, 1]);
     assert_eq!(steppers(&replay, 1)[..2], [1, 0]);
-    assert_eq!(replay.result.winner_team, None);
 }
 
 #[test]
@@ -152,7 +152,6 @@ fn the_initial_state_has_both_labs_and_the_fossils() {
 #[test]
 fn a_failed_bot_sits_out_the_set() {
     let replay = run(vec![team::<Failing>("a"), team::<Noop>("b")], 1).unwrap();
-    assert_eq!(replay.sets[0].result.reason, Reason::Draw);
     let steppers = steppers(&replay, 0);
     assert_eq!(steppers.iter().filter(|&&t| t == 0).count(), 1);
     assert_eq!(steppers.iter().filter(|&&t| t == 1).count(), TICKS as usize);

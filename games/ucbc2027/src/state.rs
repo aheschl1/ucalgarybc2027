@@ -34,6 +34,10 @@ impl TeamState {
         }
     }
 
+    pub fn points(&self) -> u32 {
+        self.bones
+    }
+
     /// Bones the team earns per tick.
     pub fn income(&self) -> u32 {
         rules::BASE_INCOME + rules::INCOME_PER_FOSSIL * self.fossils
@@ -74,6 +78,10 @@ impl State {
     /// the bot itself.
     pub fn clear_dino(&mut self, dino: &Dino) {
         self.items[dino.pos] = dino.held;
+    }
+
+    pub fn team_ids(&self) -> Vec<TeamId> {
+        (0..self.teams.len() as u32).map(TeamId).collect()
     }
 
     pub fn team(&self, team: TeamId) -> &TeamState {

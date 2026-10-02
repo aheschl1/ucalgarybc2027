@@ -110,3 +110,4 @@ same way, for the Makefile to pin.
 
 Engine internals and adding a game: [docs/engine.md](docs/engine.md). The bot runtime:
 [docs/wasm.md](docs/wasm.md). The API, queue, and worker: [docs/platform.md](docs/platform.md).
+The replay viewer: [docs/viewer.md](docs/viewer.md).

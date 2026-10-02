@@ -1,5 +1,8 @@
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use serde_json::Value;
 use ucbc_engine::{
     ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, QueryError,
     Request, SetSetup,
@@ -95,6 +98,19 @@ impl Ucbc2027 {
     }
 }
 
+/// The map in `game_config`, `{"map": "<a map file in base64>"}`, or the standard one.
+fn map_from(config: Option<&Value>) -> Result<Map, EngineError> {
+    let Some(map) = config.and_then(|c| c.get("map")) else {
+        return Ok(Map::standard());
+    };
+    let bad = |why: String| EngineError::Config(format!("game_config.map: {why}"));
+    let bytes = map
+        .as_str()
+        .ok_or_else(|| bad("expected a base64 string".into()))
+        .and_then(|s| BASE64.decode(s).map_err(|e| bad(e.to_string())))?;
+    Map::decode(&bytes).map_err(|e| bad(e.to_string()))
+}
+
 impl Game for Ucbc2027 {
     const NAME: &'static str = "ucbc2027";
     type Query = Queries;
@@ -109,7 +125,7 @@ impl Game for Ucbc2027 {
                 setup.teams.len()
             )));
         }
-        let map = Map::standard();
+        let map = map_from(setup.game_config.as_ref())?;
         let mut bots = BotManager::new();
         // In step order, so the first team's lab steps first.
         for &team in &setup.teams {

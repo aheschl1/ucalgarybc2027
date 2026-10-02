@@ -29,6 +29,7 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | `--step-ms`, `--memory-mb` | per bot; default 3 ms, 1 GiB ([limits](docs/resourcelimits.md)) |
 | `--show-bot-output` | bot stdout/stderr |
 | `--replay FILE`, `--summary FILE` | write JSON |
+| `--map FILE` | play on a map file, e.g. `games/ucbc2027/maps/standard.map` |
 | `--view` | open replay in browser |
 
 `uv run ucbc view r.json` replays a saved file.

@@ -1,3 +1,5 @@
+import base64
+import json
 from collections.abc import Callable
 from pathlib import Path
 
@@ -35,3 +37,23 @@ def test_run_reports_engine_errors(bot: BotPath, tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "unknown game" in result.output
+
+
+UCBC2027 = Path(__file__).resolve().parents[1] / "games" / "ucbc2027"
+
+
+def test_run_plays_on_a_map_file(tmp_path: Path) -> None:
+    noop = str(UCBC2027.parents[1] / "bots" / "ucbc2027" / "noop")
+    standard = UCBC2027 / "maps" / "standard.map"
+    replay = tmp_path / "replay.json"
+    args = ["run", noop, noop, "--game", "ucbc2027", "--sets", "1", "--replay", str(replay)]
+    result = CliRunner().invoke(main, [*args, "--map", str(standard)])
+    assert result.exit_code == 0, result.output
+    recorded = json.loads(replay.read_text())["config"]["game_config"]["map"]
+    assert base64.b64decode(recorded) == standard.read_bytes()
+
+    broken = tmp_path / "broken.map"
+    broken.write_bytes(b"\xff\xff")
+    result = CliRunner().invoke(main, [*args, "--map", str(broken)])
+    assert result.exit_code != 0
+    assert "game_config.map: not a map file" in result.output

@@ -31,9 +31,11 @@ def run_match(
     echo_bot_output: bool = False,
     step_ms: int = DEFAULT_STEP_MS,
     memory_bytes: int = DEFAULT_MEMORY_BYTES,
+    game_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Play a match between the given bot directories and return the match result.
-    ``step_ms`` and ``memory_bytes`` are each bot's budget."""
+    ``step_ms`` and ``memory_bytes`` are each bot's budget; ``game_config`` goes to the
+    game as is."""
     game = game or default_game()
     names = names or [Path(d).name for d in bot_dirs]
     result = _engine.run_match(
@@ -48,6 +50,7 @@ def run_match(
         echo_bot_output=echo_bot_output,
         step_ms=step_ms,
         memory_bytes=memory_bytes,
+        game_config=None if game_config is None else json.dumps(game_config),
     )
     match_result: dict[str, Any] = json.loads(result)
     return match_result

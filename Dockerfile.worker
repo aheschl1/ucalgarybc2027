@@ -4,7 +4,7 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS engine
 
 ENV PATH="/root/.cargo/bin:$PATH"
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential curl ca-certificates \
-    && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal \
+    && curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --target wasm32-wasip1 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 

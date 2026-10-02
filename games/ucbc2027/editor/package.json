@@ -1,0 +1,16 @@
+{
+  "name": "@ucbc/editor-ucbc2027",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "gen": "buf generate",
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.16.0"
+  }
+}

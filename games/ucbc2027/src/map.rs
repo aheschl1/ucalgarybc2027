@@ -11,7 +11,7 @@ pub mod proto {
 }
 
 const STANDARD: &[u8] = include_bytes!("../maps/standard.map");
-pub const MAX_SIDE: u32 = 100;
+pub const MAX_SIDE: u32 = 64;
 
 /// What a tile is made of. Fixed for the whole set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
@@ -298,8 +298,8 @@ mod tests {
     fn a_map_file_must_have_a_size_and_known_tiles_and_fossils_on_empty_tiles() {
         type Break = fn(&mut proto::Map);
         let cases: Vec<(Break, &str)> = vec![
-            (|m| m.width = 0, "each side must be 1 to 100"),
-            (|m| m.height = 101, "each side must be 1 to 100"),
+            (|m| m.width = 0, "each side must be 1 to 64"),
+            (|m| m.height = 65, "each side must be 1 to 64"),
             (|m| m.tiles.truncate(17), "needs 18 tiles, got 17"),
             (
                 |m| m.tiles[8].environment = 7,

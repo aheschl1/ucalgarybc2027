@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use crate::bot::TeamSpec;
 use crate::bot::registry::{BotHandle, BotLookupError, BotRegistry};
 use crate::error::{BotFailure, EngineError};
-use crate::game::{GameFactory, GameRegistry, GameStatus, SetSetup};
-use crate::ids::{BotRef, TeamId};
+use crate::game::{DynGame, GameFactory, GameRegistry, GameStatus, SetSetup};
+use crate::ids::{BotId, TeamId};
 use crate::replay::{MatchConfig, Replay, SetReplay, SetResult, Step, Tick, Usage, write_replay};
 use crate::rng::set_seed;
 use crate::step::{StepCtx, StepResult};
@@ -161,13 +161,10 @@ fn run_set(
     let first_team = TeamId(set_index % teams);
     let seed = set_seed(config.seed, set_index);
     bots.begin_set(seed);
-    let setup = SetSetup::new(
-        set_index,
-        teams,
-        first_team,
-        seed,
-        config.game_config.clone(),
-    );
+    let order = (0..teams)
+        .map(|i| TeamId((first_team.0 + i) % teams))
+        .collect();
+    let setup = SetSetup::new(set_index, order, seed, config.game_config.clone());
     let mut game = factory(&setup)?;
     let initial_state = game.snapshot();
     let mut ticks: Vec<Tick> = Vec::new();
@@ -182,20 +179,21 @@ fn run_set(
         }
 
         let schedule = game.schedule();
-        check_schedule(&schedule, bots)?;
+        check_schedule(&schedule, game.as_ref())?;
         let mut steps = Vec::new();
-        for bot_ref in schedule {
+        for bot_id in schedule {
             if matches!(game.status(), GameStatus::Complete(_)) {
                 break;
             }
-            if bots.is_dead(bot_ref.id) {
+            // Removed earlier this tick.
+            let Some(team_id) = game.team_of(bot_id) else {
                 continue;
-            }
+            };
             let mut actions = Vec::new();
-            let (result, team) = match bots.bot_mut(bot_ref) {
+            let (result, team) = match bots.bot_mut(bot_id, team_id) {
                 Ok(BotHandle { bot, team, seed }) => {
                     let mut ctx = StepCtx::new(
-                        bot_ref,
+                        bot_id,
                         team,
                         set_index,
                         tick,
@@ -207,7 +205,7 @@ fn run_set(
                 }
                 Err(BotLookupError::Game(error)) => return Err(error),
                 Err(BotLookupError::Bot(failure)) => {
-                    (StepResult::failed(failure), bots.team_info(bot_ref.team))
+                    (StepResult::failed(failure), bots.team_info(team_id))
                 }
             };
             let usage = Usage::new(result.time, result.memory);
@@ -216,7 +214,7 @@ fn run_set(
                 for line in result.stdout.lines() {
                     eprintln!(
                         "[set {set_index} tick {tick} team {} bot {}] {line}",
-                        team.name, bot_ref.id
+                        team.name, bot_id
                     );
                 }
             }
@@ -224,12 +222,11 @@ fn run_set(
             let before = game.status();
             let failure = match result.outcome {
                 Ok(()) => {
-                    game.end_step(bot_ref);
+                    game.end_step(bot_id);
                     None
                 }
                 Err(failure) => {
-                    bots.despawn(bot_ref.id);
-                    game.bot_failed(bot_ref, &failure);
+                    game.bot_failed(bot_id, &failure);
                     Some(failure)
                 }
             };
@@ -241,11 +238,16 @@ fn run_set(
                 )));
             }
 
-            for id in game.despawned() {
-                bots.despawn(id);
-            }
+            bots.retain(|id| game.team_of(id).is_some());
             let failure = failure.as_ref().map(BotFailure::record);
-            steps.push(Step::new(bot_ref, actions, result.stdout, failure, usage));
+            steps.push(Step::new(
+                bot_id,
+                team_id,
+                actions,
+                result.stdout,
+                failure,
+                usage,
+            ));
         }
 
         if !matches!(game.status(), GameStatus::Complete(_)) {
@@ -258,13 +260,15 @@ fn run_set(
     Ok(SetReplay::new(initial_state, ticks, result))
 }
 
-/// A schedule naming an unknown team, a dead bot, or the same bot twice is a game bug.
-fn check_schedule(schedule: &[BotRef], bots: &BotRegistry) -> Result<(), EngineError> {
+/// A schedule naming a bot the game does not have, or the same bot twice, is a game bug.
+fn check_schedule(schedule: &[BotId], game: &dyn DynGame) -> Result<(), EngineError> {
     let mut seen = HashSet::with_capacity(schedule.len());
-    for bot in schedule {
-        bots.validate_ref(*bot)?;
-        if !seen.insert(bot.id) {
-            return Err(EngineError::Game(format!("scheduled bot {} twice", bot.id)));
+    for &bot in schedule {
+        if game.team_of(bot).is_none() {
+            return Err(EngineError::Game(format!("scheduled unknown bot {bot}")));
+        }
+        if !seen.insert(bot) {
+            return Err(EngineError::Game(format!("scheduled bot {bot} twice")));
         }
     }
     Ok(())

@@ -1,69 +1,53 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotRef, EngineError, Game, GameStatus, QueryError, Request,
-    SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, QueryError,
+    Request, SetSetup,
 };
 
-const WIDTH: usize = 16;
-const HEIGHT: usize = 16;
+use crate::{
+    BotType,
+    state::{Board, Environment, Item, State},
+};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub enum Environment {
-    Empty,
-    Wall,
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Coord {
+    pub x: usize,
+    pub y: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum Item {
-    Player { team: u32 },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct Tile {
-    pub environment: Environment,
-    pub item: Option<Item>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-pub struct State {
-    pub tick: u32,
-    pub board: Vec<Vec<Tile>>,
-}
-
-impl State {
-    /// An empty board, team 0's player top-left and team 1's bottom-right.
-    fn new() -> Self {
-        let empty = Tile {
-            environment: Environment::Empty,
-            item: None,
-        };
-        let mut board = vec![vec![empty; WIDTH]; HEIGHT];
-        board[0][0].item = Some(Item::Player { team: 0 });
-        board[HEIGHT - 1][WIDTH - 1].item = Some(Item::Player { team: 1 });
-        Self { tick: 0, board }
+impl Coord {
+    pub fn new(x: usize, y: usize) -> Self {
+        Self { x, y }
     }
 
-    fn tile(&self, at: &At) -> Result<&Tile, QueryError> {
-        self.board
-            .get(at.y)
-            .and_then(|row| row.get(at.x))
-            .ok_or_else(|| QueryError::Rejected(format!("({}, {}) is off the board", at.x, at.y)))
+    /// The up to eight neighbours, skipping any that would go below zero. No upper bound check.
+    pub fn around(&self) -> impl Iterator<Item = Coord> {
+        let Coord { x, y } = *self;
+        (-1..=1)
+            .flat_map(|dy| (-1..=1).map(move |dx| (dx, dy)))
+            .filter(|&d| d != (0, 0))
+            .filter_map(move |(dx, dy)| {
+                Some(Coord::new(
+                    x.checked_add_signed(dx)?,
+                    y.checked_add_signed(dy)?,
+                ))
+            })
     }
 }
 
 #[derive(Deserialize, JsonSchema)]
-pub struct At {
+pub struct SpawnRequest {
     pub x: usize,
     pub y: usize,
+    pub bot_type: BotType,
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    Item(Request<At, Option<Item>>),
-    Environment(Request<At, Environment>),
+    Item(Request<Coord, Option<Item>>),
+    Environment(Request<Coord, Environment>),
     Width(Request<(), usize>),
     Height(Request<(), usize>),
 }
@@ -72,12 +56,12 @@ pub enum Queries {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
     Noop(Request<(), ()>),
+    Spawn(Request<SpawnRequest, ()>),
 }
 
 pub struct Ucbc2027 {
-    /// Step order of the bots still in the set.
-    order: Vec<TeamId>,
-    state: State,
+    bots: BotManager<BotType>,
+    board: Board,
 }
 
 impl Game for Ucbc2027 {
@@ -85,51 +69,70 @@ impl Game for Ucbc2027 {
     type Query = Queries;
     type Action = Action;
     type Snapshot = State;
+    type Bot = BotType;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
-        if setup.teams != 2 {
+        if setup.teams.len() != 2 {
             return Err(EngineError::Config(format!(
                 "ucbc2027 needs exactly 2 teams, got {}",
-                setup.teams
+                setup.teams.len()
             )));
         }
-        let first = setup.first_team;
-        Ok(Self {
-            order: vec![first, TeamId(1 - first.0)],
-            state: State::new(),
-        })
+        let mut bots = BotManager::new();
+        let mut board = Board::new();
+        for &team in &setup.teams {
+            let base = bots.schedule(team, BotType::Base);
+            board.place(&board.base_location(team), base);
+        }
+        Ok(Self { bots, board })
     }
 
-    fn schedule(&mut self) -> Vec<BotRef> {
-        self.order
-            .iter()
-            .map(|t| BotRef::new(u64::from(t.0), t.0))
-            .collect()
+    fn bots(&self) -> &BotManager<BotType> {
+        &self.bots
     }
 
-    fn handle_query(&self, _bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
+    fn bots_mut(&mut self) -> &mut BotManager<BotType> {
+        &mut self.bots
+    }
+
+    fn handle_query(&self, _bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         match query {
-            Queries::Item(q) => Ok(q.reply(self.state.tile(&q)?.item)),
-            Queries::Environment(q) => Ok(q.reply(self.state.tile(&q)?.environment)),
-            Queries::Width(q) => Ok(q.reply(WIDTH)),
-            Queries::Height(q) => Ok(q.reply(HEIGHT)),
+            Queries::Item(q) => Ok(q.reply(self.board.tile(&q, &self.bots)?.item)),
+            Queries::Environment(q) => Ok(q.reply(self.board.tile(&q, &self.bots)?.environment)),
+            Queries::Width(q) => Ok(q.reply(self.board.width())),
+            Queries::Height(q) => Ok(q.reply(self.board.height())),
         }
     }
 
-    fn apply_action(&mut self, _bot: BotRef, action: Action) -> Result<Answer, ActionError> {
+    fn apply_action(&mut self, bot: BotId, action: Action) -> Result<Answer, ActionError> {
         match action {
             Action::Noop(a) => Ok(a.reply(())),
+            Action::Spawn(req) => {
+                let spawner = &self.bots[bot];
+                if **spawner != BotType::Base {
+                    return Err(ActionError::Invalid("Cannot spawn from this bot.".into()));
+                }
+                if req.bot_type == BotType::Base {
+                    return Err(ActionError::Invalid("A base spawns dinos only.".into()));
+                }
+                let team = spawner.team();
+                let at = Coord::new(req.x, req.y);
+                self.board.check_spawn(&at, team)?;
+                let spawned = self.bots.schedule(team, req.bot_type);
+                self.board.place(&at, spawned);
+                Ok(req.reply(()))
+            }
         }
     }
 
-    fn end_step(&mut self, _bot: BotRef) {}
+    fn end_step(&mut self, _bot: BotId) {}
 
-    fn bot_failed(&mut self, bot: BotRef, _failure: &BotFailure) {
-        self.order.retain(|t| *t != bot.team);
+    fn bot_failed(&mut self, bot: BotId, _failure: &BotFailure) {
+        self.board.remove(bot);
     }
 
     fn end_tick(&mut self) {
-        self.state.tick += 1;
+        self.board.tick += 1;
     }
 
     fn status(&self) -> GameStatus {
@@ -137,6 +140,6 @@ impl Game for Ucbc2027 {
     }
 
     fn snapshot(&self) -> State {
-        self.state.clone()
+        self.board.snapshot(&self.bots)
     }
 }

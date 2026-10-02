@@ -9,29 +9,68 @@ from typing import Any, Self
 from ucbc.handle import Handle
 
 
+@dataclass(frozen=True)
+class BotTypeBase:
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+    def _to(self) -> dict[str, Any]:
+        return {"type": "base"}
+
+
+@dataclass(frozen=True)
+class BotTypeDino:
+    level: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            level=d["level"],
+        )
+
+    def _to(self) -> dict[str, Any]:
+        return {"type": "dino", "level": self.level}
+
+
 class Environment(str, Enum):
     EMPTY = "Empty"
     WALL = "Wall"
 
 
 @dataclass(frozen=True)
-class ItemPlayer:
+class ItemBot:
     team: int
+    bot_type: BotType
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
             team=d["team"],
+            bot_type=_from_BotType(d["bot_type"]),
         )
 
 
-Item = ItemPlayer
+BotType = BotTypeBase | BotTypeDino
+
+
+def _from_BotType(d: dict[str, Any]) -> BotType:
+    match d["type"]:
+        case "base":
+            return BotTypeBase._from(d)
+        case "dino":
+            return BotTypeDino._from(d)
+    raise ValueError(f"unknown BotType type {d['type']!r}")
+
+
+Item = ItemBot
 
 
 def _from_Item(d: dict[str, Any]) -> Item:
     match d["type"]:
-        case "player":
-            return ItemPlayer._from(d)
+        case "bot":
+            return ItemBot._from(d)
     raise ValueError(f"unknown Item type {d['type']!r}")
 
 
@@ -55,3 +94,6 @@ class Ucbc2027Api(Handle):
 
     def noop(self) -> None:
         self._act({"type": "noop"})
+
+    def spawn(self, x: int, y: int, bot_type: BotType) -> None:
+        self._act({"type": "spawn", "x": x, "y": y, "bot_type": bot_type._to()})

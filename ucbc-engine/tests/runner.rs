@@ -77,7 +77,7 @@ fn teams_own_several_bots_and_the_game_interleaves_them() {
             support::ScriptedBotWith::new(move |ctx| {
                 seen.lock()
                     .unwrap()
-                    .push((ctx.tick, ctx.bot.id.0, ctx.bot.team.0));
+                    .push((ctx.tick, ctx.bot.0, ctx.team.id.0));
                 ctx.act(&json!({"type": "increment", "by": 1})).unwrap();
                 StepResult::ok()
             })
@@ -111,8 +111,8 @@ fn queries_see_state_and_identity() {
     let reg = registry();
     let asker = scripted("asker", |ctx| {
         let v = ctx.query(&json!({"type": "counts"})).unwrap();
-        assert_eq!(v["you"], json!(ctx.bot.team.0));
-        assert_eq!(v["bot"], json!(ctx.bot.id.0));
+        assert_eq!(v["you"], json!(ctx.team.id.0));
+        assert_eq!(v["bot"], json!(ctx.bot.0));
         assert_eq!(ctx.team.name, "asker");
         assert!(matches!(
             ctx.query(&json!({"type": "nope"})),
@@ -226,7 +226,7 @@ fn a_failed_bot_is_removed_but_its_team_plays_on() {
     let reg = registry();
     // Bot id 0 of team 0 crashes on its first step; bot id 2 keeps going.
     let flaky = scripted("flaky", |ctx| {
-        if ctx.bot.id == BotId(0) {
+        if ctx.bot == BotId(0) {
             StepResult::failed(BotFailure::Crash("segfault".into()))
         } else {
             ctx.act(&json!({"type": "increment", "by": 2})).unwrap();
@@ -301,7 +301,7 @@ fn game_decides_the_outcome_at_the_tick_limit() {
 }
 
 #[test]
-fn a_bot_id_cannot_be_reused_under_another_team() {
+fn scheduling_a_bot_the_game_does_not_have_is_an_error() {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -316,7 +316,7 @@ fn a_bot_id_cannot_be_reused_under_another_team() {
     };
     let cfg = config(1, 1)
         .max_ticks(2)
-        .game_config(json!({"misattribute_after_first_tick": true}));
+        .game_config(json!({"schedule_unknown_after_first_tick": true}));
     let match_spec = MatchSpec::new("test", cfg, vec![make_team("a"), make_team("b")]);
     let error = MatchRunner::new(&reg, match_spec)
         .unwrap()
@@ -324,9 +324,9 @@ fn a_bot_id_cannot_be_reused_under_another_team() {
         .err()
         .unwrap();
     assert!(
-        matches!(error, EngineError::Game(message) if message.contains("bot 0 belongs to team 0, not team 1"))
+        matches!(error, EngineError::Game(message) if message.contains("scheduled unknown bot 999"))
     );
-    // Both bots acted in the first tick; neither acted after the bad ref was scheduled.
+    // Both bots acted in the first tick; neither acted after the bad id was scheduled.
     assert_eq!(steps.load(Ordering::SeqCst), 2);
 }
 

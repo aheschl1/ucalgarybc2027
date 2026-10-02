@@ -2,21 +2,43 @@
 
 export type Environment = "Empty" | "Wall";
 export type Item = {
+  bot_type: BotType;
   team: number;
-  type: "player";
+  type: "bot";
 };
-export type Action = {
-  type: "noop";
-};
+export type BotType =
+  | {
+      type: "base";
+    }
+  | {
+      level: number;
+      type: "dino";
+    };
+export type Action =
+  | {
+      type: "noop";
+    }
+  | {
+      bot_type: BotType;
+      type: "spawn";
+      x: number;
+      y: number;
+    };
 
 export interface Ucbc2027Api {
   snapshot: State;
   action: Action;
 }
+/**
+ * The snapshot: the tick and every tile.
+ */
 export interface State {
   board: Tile[][];
   tick: number;
 }
+/**
+ * A square as bots and the replay see it.
+ */
 export interface Tile {
   environment: Environment;
   item?: Item | null;

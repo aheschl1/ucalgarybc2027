@@ -2,7 +2,7 @@
 //! bot sees, one method per query and action. The hand-written handle subclasses
 //! the generated `<Game>Api`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use serde_json::{Map, Value};
@@ -133,6 +133,42 @@ impl Types {
         &self.0.get(name).expect("named types are defined").def
     }
 
+    /// The `type` tag of a union's variant class.
+    fn tag_of(&self, class: &str) -> Option<&str> {
+        self.0.values().find_map(|t| match &t.def {
+            Def::Union(tags) => tags
+                .iter()
+                .find(|(_, c)| c == class)
+                .map(|(tag, _)| tag.as_str()),
+            _ => None,
+        })
+    }
+
+    /// Classes a method argument can hold, at any depth: the ones that need `_to`.
+    fn encoded(&self, methods: &[Method]) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        let mut todo: Vec<Ty> = methods
+            .iter()
+            .flat_map(|m| m.params.iter().map(|p| p.ty.clone()))
+            .collect();
+        while let Some(ty) = todo.pop() {
+            match ty {
+                Ty::List(inner) | Ty::Optional(inner) => todo.push(*inner),
+                Ty::Named(name) => match self.kind(&name) {
+                    Def::Class(fields) if out.insert(name.clone()) => {
+                        todo.extend(fields.iter().map(|f| f.ty.clone()));
+                    }
+                    Def::Union(tags) => {
+                        todo.extend(tags.iter().map(|(_, c)| Ty::Named(c.clone())));
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        out
+    }
+
     /// Python that turns JSON `value` into `ty`.
     fn decode(&self, ty: &Ty, value: &str) -> String {
         match ty {
@@ -167,7 +203,7 @@ impl Types {
             }
             Ty::Named(name) => match self.kind(name) {
                 Def::Enum(_) => value.to_string(),
-                Def::Class(_) | Def::Union(_) => format!("asdict({value})"),
+                Def::Class(_) | Def::Union(_) => format!("{value}._to()"),
             },
         }
     }
@@ -386,10 +422,7 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
     let mut methods = types.methods(obj(&api.query)?, "_query")?;
     methods.extend(types.methods(obj(&api.action)?, "_act")?);
 
-    let uses_asdict = methods
-        .iter()
-        .flat_map(|m| &m.params)
-        .any(|p| types.encode(&p.ty, &p.name).contains("asdict"));
+    let encoded = types.encoded(&methods);
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -402,9 +435,7 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
     let unions = has(|d| matches!(d, Def::Union(_)));
     let enums = has(|d| matches!(d, Def::Enum(_)));
     out.push_str("from __future__ import annotations\n\n");
-    if uses_asdict {
-        out.push_str("from dataclasses import asdict, dataclass\n");
-    } else if classes {
+    if classes {
         out.push_str("from dataclasses import dataclass\n");
     }
     if enums {
@@ -471,6 +502,19 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
                         );
                     }
                     out.push_str("        )\n");
+                }
+                if encoded.contains(name) {
+                    out.push_str("\n    def _to(self) -> dict[str, Any]:\n");
+                    let mut entries: Vec<String> = types
+                        .tag_of(name)
+                        .map(|tag| format!("\"type\": \"{tag}\""))
+                        .into_iter()
+                        .collect();
+                    for f in fields {
+                        let value = types.encode(&f.ty, &format!("self.{}", f.name));
+                        entries.push(format!("\"{}\": {value}", f.name));
+                    }
+                    let _ = writeln!(out, "        return {{{}}}", entries.join(", "));
                 }
             }
             Def::Union(tags) => {
@@ -601,12 +645,12 @@ mod tests {
             "        \"\"\"Look around.\"\"\"",
             "        return Seen._from(self._query({\"type\": \"look\"}))",
             "    def peek(self, at: Spot) -> Kind | None:",
-            "        reply = self._query({\"type\": \"peek\", \"at\": asdict(at)})\n        return None if reply is None else Kind(reply)",
+            "        reply = self._query({\"type\": \"peek\", \"at\": at._to()})\n        return None if reply is None else Kind(reply)",
+            "    def _to(self) -> dict[str, Any]:\n        return {\"x\": self.x, \"y\": self.y}",
             "    def count(self) -> int:",
             "        reply: int = self._query({\"type\": \"count\"})\n        return reply",
             "    def go(self, how: Kind) -> Went:",
             "        return _from_Went(self._act({\"type\": \"go\", \"how\": how}))",
-            "from dataclasses import asdict, dataclass",
         ] {
             assert!(py.contains(line), "missing {line:?} in:\n{py}");
         }
@@ -615,6 +659,23 @@ mod tests {
             at("Went = ") > at("class WentOk:"),
             "union before its classes:\n{py}"
         );
+        // Only argument types are encoded.
+        assert_eq!(py.matches("def _to(").count(), 1, "{py}");
+    }
+
+    #[test]
+    fn union_arguments_carry_their_tag() {
+        let mut api = api();
+        api.action["oneOf"][0]["properties"]["how"] = json!({"$ref": "#/$defs/Went"});
+        let py = generate(&api).unwrap();
+        for line in [
+            "    def go(self, how: Went) -> Went:",
+            "        return _from_Went(self._act({\"type\": \"go\", \"how\": how._to()}))",
+            "    def _to(self) -> dict[str, Any]:\n        return {\"type\": \"ok\"}",
+            "    def _to(self) -> dict[str, Any]:\n        return {\"type\": \"blocked\", \"why\": self.why}",
+        ] {
+            assert!(py.contains(line), "missing {line:?} in:\n{py}");
+        }
     }
 
     #[test]

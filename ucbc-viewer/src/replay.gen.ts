@@ -9,7 +9,8 @@ export type TeamId = number;
  */
 export type Reason = "win" | "draw" | "forfeit";
 /**
- * One unit the game asks to step. Ids are assigned by the game, unique within a set.
+ * One unit the game asks to step. Handed out by the game's `BotManager`, unique
+ * within a set.
  */
 export type BotId = number;
 

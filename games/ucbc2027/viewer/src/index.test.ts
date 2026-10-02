@@ -23,7 +23,7 @@ it("draws the tick, the board, and the set's step order", () => {
     tick: 3,
     board: [
       [
-        { environment: "Empty", item: { type: "player", team: 1 } },
+        { environment: "Empty", item: { type: "bot", team: 1, bot_type: { type: "base" } } },
         { environment: "Wall", item: null },
       ],
     ],

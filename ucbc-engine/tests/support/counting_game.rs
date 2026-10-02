@@ -2,9 +2,11 @@
 //! its team's counter by 1 to 3. A team with no bots left is out; the last team
 //! standing wins by forfeit.
 //!
-//! `game_config`: `{"bots_per_team": n, "target": t}` (defaults 1 and 5). Bot ids are
-//! `team + teams * k` for the k-th bot of a team. With `"leader_wins_at_limit": true`,
-//! a set at the tick limit goes to the highest count instead of a draw.
+//! `game_config`: `{"bots_per_team": n, "target": t}` (defaults 1 and 5). Bots spawn
+//! one per team in step order, `bots_per_team` times, so ids interleave the teams. With
+//! `"leader_wins_at_limit": true`, a set at the tick limit goes to the highest count
+//! instead of a draw. With `"schedule_unknown_after_first_tick": true`, the game
+//! schedules a bot it does not have from tick 1.
 
 use std::collections::BTreeSet;
 
@@ -12,7 +14,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotId, BotRef, EngineError, Game, GameStatus, Outcome,
+    ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, Outcome,
     QueryError, Request, SetSetup, TeamId,
 };
 
@@ -48,18 +50,17 @@ pub struct Counts {
 #[derive(Serialize, JsonSchema)]
 pub struct Snapshot {
     pub counts: Vec<u32>,
-    pub bots: Vec<BotRef>,
+    pub bots: Vec<BotId>,
 }
 
 pub struct CountingGame {
+    bots: BotManager<()>,
     target: u32,
     counts: Vec<u32>,
-    /// Live bots in step order.
-    order: Vec<BotRef>,
     acted: bool,
-    misattribute_after_first_tick: bool,
+    schedule_unknown_after_first_tick: bool,
+    ticks: u32,
     leader_wins_at_limit: bool,
-    dead: Vec<BotId>,
     status: GameStatus,
 }
 
@@ -68,46 +69,58 @@ impl Game for CountingGame {
     type Query = Queries;
     type Action = Action;
     type Snapshot = Snapshot;
+    type Bot = ();
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError> {
         let cfg = setup.game_config.clone().unwrap_or(json!({}));
         let bots_per_team = cfg["bots_per_team"].as_u64().unwrap_or(1) as u32;
         let target = cfg["target"].as_u64().unwrap_or(5) as u32;
-        let teams = setup.teams;
-        let mut order = Vec::new();
-        for k in 0..bots_per_team {
-            for i in 0..teams {
-                let team = (setup.first_team.0 + i) % teams;
-                order.push(BotRef::new(u64::from(team + teams * k), team));
+        let teams = setup.teams.len() as u32;
+        let mut bots = BotManager::new();
+        for _ in 0..bots_per_team {
+            for &team in &setup.teams {
+                bots.schedule(team, ());
             }
         }
         Ok(CountingGame {
+            bots,
             target,
             counts: vec![0; teams as usize],
-            order,
             acted: false,
-            misattribute_after_first_tick: cfg["misattribute_after_first_tick"] == true,
+            schedule_unknown_after_first_tick: cfg["schedule_unknown_after_first_tick"] == true,
+            ticks: 0,
             leader_wins_at_limit: cfg["leader_wins_at_limit"] == true,
-            dead: Vec::new(),
             status: GameStatus::InProgress,
         })
     }
 
-    fn schedule(&mut self) -> Vec<BotRef> {
-        self.order.clone()
+    fn bots(&self) -> &BotManager<()> {
+        &self.bots
     }
 
-    fn handle_query(&self, bot: BotRef, query: Queries) -> Result<Answer, QueryError> {
+    fn bots_mut(&mut self) -> &mut BotManager<()> {
+        &mut self.bots
+    }
+
+    fn schedule(&mut self) -> Vec<BotId> {
+        let mut ids = self.bots.ids();
+        if self.schedule_unknown_after_first_tick && self.ticks > 0 {
+            ids.push(BotId(999));
+        }
+        ids
+    }
+
+    fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         let counts = Counts {
             counts: self.counts.clone(),
-            you: bot.team,
-            bot: bot.id,
+            you: self.bots[bot].team(),
+            bot,
         };
         let Queries::Counts(q) = query;
         Ok(q.reply(counts))
     }
 
-    fn apply_action(&mut self, bot: BotRef, action: Action) -> Result<Answer, ActionError> {
+    fn apply_action(&mut self, bot: BotId, action: Action) -> Result<Answer, ActionError> {
         if self.acted {
             return Err(ActionError::Invalid("already acted this step".into()));
         }
@@ -118,27 +131,34 @@ impl Game for CountingGame {
                 "increment must be 1..=3, got {by}"
             )));
         }
-        let team = bot.team.0 as usize;
+        let team_id = self.bots[bot].team();
+        let team = team_id.0 as usize;
         self.counts[team] += by;
         self.acted = true;
         if self.counts[team] >= self.target {
-            self.status = GameStatus::Complete(Outcome::win(bot.team));
+            self.status = GameStatus::Complete(Outcome::win(team_id));
         }
         Ok(a.reply(Incremented {
             count: self.counts[team],
         }))
     }
 
-    fn end_step(&mut self, _bot: BotRef) {
+    fn end_step(&mut self, _bot: BotId) {
         self.acted = false;
     }
 
-    fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure) {
+    /// The engine removes the bot after this, so it does not count as alive.
+    fn bot_failed(&mut self, bot: BotId, failure: &BotFailure) {
         self.acted = false;
-        self.order.retain(|b| *b != bot);
-        self.dead.push(bot.id);
-        let alive: BTreeSet<TeamId> = self.order.iter().map(|b| b.team).collect();
-        let detail = format!("team {} has no bots left: {}", bot.team, failure.detail());
+        let alive: BTreeSet<TeamId> = self
+            .bots
+            .ids()
+            .into_iter()
+            .filter(|&id| id != bot)
+            .map(|id| self.bots[id].team())
+            .collect();
+        let team = self.bots[bot].team();
+        let detail = format!("team {team} has no bots left: {}", failure.detail());
         match alive.iter().next() {
             Some(&winner) if alive.len() == 1 => {
                 self.status = GameStatus::Complete(Outcome::forfeit(winner, detail));
@@ -149,14 +169,7 @@ impl Game for CountingGame {
     }
 
     fn end_tick(&mut self) {
-        if self.misattribute_after_first_tick {
-            self.order[0].team = TeamId((self.order[0].team.0 + 1) % self.counts.len() as u32);
-            self.misattribute_after_first_tick = false;
-        }
-    }
-
-    fn despawned(&mut self) -> Vec<BotId> {
-        std::mem::take(&mut self.dead)
+        self.ticks += 1;
     }
 
     fn status(&self) -> GameStatus {
@@ -177,7 +190,7 @@ impl Game for CountingGame {
     fn snapshot(&self) -> Snapshot {
         Snapshot {
             counts: self.counts.clone(),
-            bots: self.order.clone(),
+            bots: self.bots.ids(),
         }
     }
 }

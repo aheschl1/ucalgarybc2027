@@ -73,7 +73,7 @@ def test_ucbc2027_runs_to_the_tick_limit(tmp_path: Path) -> None:
     result = run_match(noop, noop, game="ucbc2027", sets=1, replay_path=replay)
     assert result["sets"][0]["reason"] == "draw"
     ticks = json.loads(replay.read_text())["sets"][0]["ticks"]
-    assert ticks[-1]["state_after"] == {"tick": len(ticks)}
+    assert ticks[-1]["state_after"]["tick"] == len(ticks)
     assert not any("failure" in s for t in ticks for s in t["steps"])
 
 

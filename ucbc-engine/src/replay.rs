@@ -12,7 +12,7 @@ use serde_json::Value;
 use crate::bot::BotResourceLimit;
 use crate::error::EngineError;
 use crate::game::Outcome;
-use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
+use crate::ids::{BotId, TeamId, TeamInfo};
 
 pub const DEFAULT_MAX_TICKS: u32 = 1000;
 
@@ -146,15 +146,16 @@ pub struct Step {
 
 impl Step {
     pub fn new(
-        bot: BotRef,
+        bot: BotId,
+        team: TeamId,
         actions: Vec<Value>,
         stdout: String,
         failure: Option<FailureRecord>,
         usage: Usage,
     ) -> Self {
         Self {
-            bot: bot.id,
-            team: bot.team,
+            bot,
+            team,
             actions,
             stdout,
             failure,

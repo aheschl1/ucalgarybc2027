@@ -6,7 +6,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::error::{ActionError, BotFailure, EngineError, QueryError};
-use crate::ids::{BotId, BotRef, TeamId};
+use crate::ids::{BotId, TeamId};
+use crate::manager::BotManager;
 use crate::payload::{decode, encode};
 use crate::replay::Reason;
 use crate::request::Answer;
@@ -14,25 +15,17 @@ use crate::request::Answer;
 #[derive(Clone, Debug)]
 pub struct SetSetup {
     pub set_index: u32,
-    pub teams: u32,
-    /// Rotates each set.
-    pub first_team: TeamId,
+    /// Step order: rotates each set, so the first team moves first.
+    pub teams: Vec<TeamId>,
     pub seed: u64,
     pub game_config: Option<Value>,
 }
 
 impl SetSetup {
-    pub fn new(
-        set_index: u32,
-        teams: u32,
-        first_team: TeamId,
-        seed: u64,
-        game_config: Option<Value>,
-    ) -> Self {
+    pub fn new(set_index: u32, teams: Vec<TeamId>, seed: u64, game_config: Option<Value>) -> Self {
         Self {
             set_index,
             teams,
-            first_team,
             seed,
             game_config,
         }
@@ -86,10 +79,11 @@ pub enum GameStatus {
 ///
 /// A tick is one run of [`schedule`](Self::schedule); a step is one scheduled bot's
 /// turn within it. Per step the engine forwards the bot's queries and actions, then
-/// calls [`end_step`](Self::end_step) or [`bot_failed`](Self::bot_failed), and drains
-/// [`despawned`](Self::despawned). After the last step it calls
-/// [`end_tick`](Self::end_tick), unless the set completed during the tick. The game
-/// decides which bots exist, which team owns each, and the step order. A set ends
+/// calls [`end_step`](Self::end_step) or [`bot_failed`](Self::bot_failed), and drops
+/// the runtime of every bot no longer in [`bots`](Self::bots). After the last step it
+/// calls [`end_tick`](Self::end_tick), unless the set completed during the tick. The
+/// game spawns and removes bots through its [`BotManager`], which hands out ids and
+/// records each bot's team. A set ends
 /// when the game reports a completed status, or at the tick limit with the outcome
 /// from [`tick_limit`](Self::tick_limit).
 pub trait Game: Send + 'static {
@@ -102,32 +96,37 @@ pub trait Game: Send + 'static {
     /// [`Request`](crate::Request) that names its reply type.
     type Action: DeserializeOwned + JsonSchema;
     type Snapshot: Serialize + JsonSchema;
+    /// What the game keeps per bot in its [`BotManager`].
+    type Bot;
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError>
     where
         Self: Sized;
 
-    /// Live bots to step this tick, in order. A dead or duplicated bot is a game bug.
-    fn schedule(&mut self) -> Vec<BotRef>;
+    fn bots(&self) -> &BotManager<Self::Bot>;
 
-    fn handle_query(&self, bot: BotRef, query: Self::Query) -> Result<Answer, QueryError>;
+    fn bots_mut(&mut self) -> &mut BotManager<Self::Bot>;
+
+    /// Bots to step this tick, in order: every live bot in spawn order unless
+    /// overridden. A bot not in [`bots`](Self::bots), or named twice, is a game bug.
+    fn schedule(&mut self) -> Vec<BotId> {
+        self.bots().ids()
+    }
+
+    fn handle_query(&self, bot: BotId, query: Self::Query) -> Result<Answer, QueryError>;
 
     /// Only the stepping bot ever calls this. On `Err` the state is untouched and the
     /// bot may try again. `Ok` carries what the action produced for the bot to see.
-    fn apply_action(&mut self, bot: BotRef, action: Self::Action) -> Result<Answer, ActionError>;
+    fn apply_action(&mut self, bot: BotId, action: Self::Action) -> Result<Answer, ActionError>;
 
     /// The bot's step returned normally.
-    fn end_step(&mut self, bot: BotRef);
+    fn end_step(&mut self, bot: BotId);
 
-    /// The bot's runtime failed and has been dropped. Its actions so far stand.
-    fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure);
+    /// The bot's runtime failed. Its actions so far stand. The engine removes it from
+    /// [`bots`](Self::bots) after this returns.
+    fn bot_failed(&mut self, _bot: BotId, _failure: &BotFailure) {}
 
     fn end_tick(&mut self);
-
-    /// Bots whose runtimes the engine should release. Drained after every step.
-    fn despawned(&mut self) -> Vec<BotId> {
-        Vec::new()
-    }
 
     fn status(&self) -> GameStatus;
 
@@ -143,45 +142,48 @@ pub trait Game: Send + 'static {
 /// [`Game`] over JSON payloads: the calling convention between engine and bots.
 /// Implemented for every `Game`; the engine only ever holds `Box<dyn DynGame>`.
 pub trait DynGame: Send {
-    fn schedule(&mut self) -> Vec<BotRef>;
-    fn handle_query(&self, bot: BotRef, query: &Value) -> Result<Value, QueryError>;
-    fn apply_action(&mut self, bot: BotRef, action: &Value) -> Result<Value, ActionError>;
-    fn end_step(&mut self, bot: BotRef);
-    fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure);
+    fn schedule(&mut self) -> Vec<BotId>;
+    /// `None` once the bot has been removed.
+    fn team_of(&self, bot: BotId) -> Option<TeamId>;
+    fn handle_query(&self, bot: BotId, query: &Value) -> Result<Value, QueryError>;
+    fn apply_action(&mut self, bot: BotId, action: &Value) -> Result<Value, ActionError>;
+    fn end_step(&mut self, bot: BotId);
+    /// Tells the game, then removes the bot.
+    fn bot_failed(&mut self, bot: BotId, failure: &BotFailure);
     fn end_tick(&mut self);
-    fn despawned(&mut self) -> Vec<BotId>;
     fn status(&self) -> GameStatus;
     fn tick_limit(&self, max_ticks: u32) -> Outcome;
     fn snapshot(&self) -> Value;
 }
 
 impl<G: Game> DynGame for G {
-    fn schedule(&mut self) -> Vec<BotRef> {
+    fn schedule(&mut self) -> Vec<BotId> {
         Game::schedule(self)
     }
 
-    fn handle_query(&self, bot: BotRef, query: &Value) -> Result<Value, QueryError> {
+    fn team_of(&self, bot: BotId) -> Option<TeamId> {
+        self.bots().get(bot).map(|b| b.team())
+    }
+
+    fn handle_query(&self, bot: BotId, query: &Value) -> Result<Value, QueryError> {
         Ok(Game::handle_query(self, bot, decode(query)?)?.into_value())
     }
 
-    fn apply_action(&mut self, bot: BotRef, action: &Value) -> Result<Value, ActionError> {
+    fn apply_action(&mut self, bot: BotId, action: &Value) -> Result<Value, ActionError> {
         Ok(Game::apply_action(self, bot, decode(action)?)?.into_value())
     }
 
-    fn end_step(&mut self, bot: BotRef) {
+    fn end_step(&mut self, bot: BotId) {
         Game::end_step(self, bot)
     }
 
-    fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure) {
-        Game::bot_failed(self, bot, failure)
+    fn bot_failed(&mut self, bot: BotId, failure: &BotFailure) {
+        Game::bot_failed(self, bot, failure);
+        self.bots_mut().remove(bot);
     }
 
     fn end_tick(&mut self) {
         Game::end_tick(self)
-    }
-
-    fn despawned(&mut self) -> Vec<BotId> {
-        Game::despawned(self)
     }
 
     fn status(&self) -> GameStatus {

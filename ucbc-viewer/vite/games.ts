@@ -1,17 +1,25 @@
 // The game renderers a build bundles. `src/games.ts` is replaced at build time with an
-// import of every game's renderer.
+// import of the renderer of each game ucbc-games builds by default.
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 
 const PREFIX = "@ucbc/viewer-";
 const GAMES = new URL("../../games/", import.meta.url);
+const FEATURES = new URL("../../ucbc-games/Cargo.toml", import.meta.url);
 const TARGET = fileURLToPath(new URL("../src/games.ts", import.meta.url));
 
-/** Every game with a renderer: `games/<game>/viewer`, the package `@ucbc/viewer-<game>`. */
+/** The games in `default` in ucbc-games' Cargo.toml. */
+export function defaultGames(manifest: string): string[] {
+  const list = manifest.match(/^default = \[(.*)\]$/m)?.[1];
+  if (list === undefined) throw new Error("no `default` feature in ucbc-games/Cargo.toml");
+  return [...list.matchAll(/"([^"]+)"/g)].map(([, game]) => game as string);
+}
+
+/** Every default game with a renderer: `games/<game>/viewer`, the package `@ucbc/viewer-<game>`. */
 export function gamePackages(): string[] {
-  return readdirSync(GAMES)
+  return defaultGames(readFileSync(FEATURES, "utf8"))
     .filter((game) => existsSync(new URL(`${game}/viewer/package.json`, GAMES)))
     .sort();
 }
@@ -23,7 +31,7 @@ export function gamesSource(games: string[]): string {
   return `${imports.join("\n")}\nexport const renderers = [${names.join(", ")}];\n`;
 }
 
-/** Bundles every game's renderer. */
+/** Bundles the default games' renderers. */
 export function games(): Plugin {
   const list = gamePackages();
   return {

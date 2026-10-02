@@ -65,6 +65,11 @@ impl Outcome {
             detail: detail.into(),
         }
     }
+
+    pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = detail.into();
+        self
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

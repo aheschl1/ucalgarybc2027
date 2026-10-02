@@ -17,6 +17,13 @@ impl Unit {
         }
     }
 
+    pub fn as_dino(&self) -> Option<&Dino> {
+        match self {
+            Unit::Dino(dino) => Some(dino),
+            Unit::Lab(_) => None,
+        }
+    }
+
     pub fn as_dino_mut(&mut self) -> Option<&mut Dino> {
         match self {
             Unit::Dino(dino) => Some(dino),

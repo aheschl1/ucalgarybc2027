@@ -79,7 +79,7 @@ impl Game for CountingGame {
         let mut bots = BotManager::new();
         for _ in 0..bots_per_team {
             for &team in &setup.teams {
-                bots.schedule(team, ());
+                bots.spawn(team, ());
             }
         }
         Ok(CountingGame {

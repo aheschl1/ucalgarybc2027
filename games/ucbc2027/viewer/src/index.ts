@@ -2,9 +2,9 @@ import "./state.css";
 
 import type { GameRenderer } from "@ucbc/viewer";
 
-import type { State } from "./api.gen.ts";
+import type { Snapshot } from "./api.gen.ts";
 
-/** Draws the tick count, the board, and the set's step order.
+/** Draws the tick, each team's bones and fossils, the board, and the set's step order.
  * Every game package exports its renderer under this name; the viewer's build finds it. */
 export const renderer: GameRenderer = {
   game: "ucbc2027",
@@ -19,23 +19,39 @@ export const renderer: GameRenderer = {
 
     return {
       draw({ state: s, set, teams }) {
-        const current = s as State;
-        if (typeof current?.tick !== "number" || !Array.isArray(current.board)) {
+        const current = s as Snapshot;
+        if (typeof current?.tick !== "number" || !Array.isArray(current.environment)) {
           throw new Error(`not a ucbc2027 state: ${JSON.stringify(s)}`);
         }
-        state.textContent = `tick ${current.tick}`;
-        board.style.gridTemplateColumns = `repeat(${current.board[0]?.length ?? 0}, auto)`;
-        board.replaceChildren(
-          ...current.board.flat().map((tile) => {
-            const cell = document.createElement("span");
-            cell.className = `u27-tile u27-${tile.environment.toLowerCase()}`;
-            if (tile.item) {
-              cell.textContent = String(tile.item.team);
-              cell.classList.add(`u27-team-${tile.item.team}`);
-            }
-            return cell;
-          }),
-        );
+        const scores = current.teams.map((t, i) => `${teams[i]?.name ?? i} ${t.bones} bones ${t.fossils} fossils`);
+        state.textContent = [`tick ${current.tick}`, ...scores].join(" · ");
+
+        const width = current.environment[0]?.length ?? 0;
+        board.style.gridTemplateColumns = `repeat(${width}, auto)`;
+        const tiles = current.environment.flat().map((env) => {
+          const tile = document.createElement("span");
+          tile.className = `u27-tile u27-${env.type}`;
+          if (env.type === "lab") tile.classList.add(`u27-team-${env.team}`);
+          return tile;
+        });
+        const at = ({ x, y }: { x: number; y: number }) => tiles[y * width + x];
+        for (const fossil of current.fossils) {
+          const tile = at(fossil);
+          if (tile) {
+            tile.classList.add("u27-fossil");
+            tile.textContent = "◆";
+          }
+        }
+        for (const unit of current.units) {
+          if (unit.type !== "dino") continue;
+          const tile = at(unit.pos);
+          if (!tile) continue;
+          tile.classList.add("u27-dino", `u27-team-${unit.team}`);
+          if (unit.held) tile.classList.add("u27-held");
+          tile.textContent = String(unit.level);
+        }
+        board.replaceChildren(...tiles);
+
         const first = teams[set.first_team]?.name ?? "";
         const second = teams.find((t) => t.id !== set.first_team)?.name ?? "";
         legend.textContent = `${first} steps first, then ${second}`;

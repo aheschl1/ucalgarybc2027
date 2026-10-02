@@ -103,8 +103,8 @@ impl Game for TicTacToe {
             )));
         };
         let mut bots = BotManager::new();
-        bots.schedule(first, ());
-        bots.schedule(second, ());
+        bots.spawn(first, ());
+        bots.spawn(second, ());
         Ok(TicTacToe {
             bots,
             board: Board::new(),

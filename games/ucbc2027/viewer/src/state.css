@@ -1,5 +1,5 @@
 .u27-state {
-  font: 600 2.5rem/1 system-ui, sans-serif;
+  font: 600 1.5rem/1 system-ui, sans-serif;
 }
 
 .u27-board {
@@ -20,12 +20,29 @@
   background: #57534e;
 }
 
+.u27-fossil {
+  color: #a16207;
+}
+
 .u27-team-0 {
   background: #f97316;
 }
 
 .u27-team-1 {
   background: #3b82f6;
+}
+
+.u27-lab {
+  opacity: 0.6;
+}
+
+.u27-dino {
+  border-radius: 50%;
+  color: #fff;
+}
+
+.u27-held {
+  outline: 2px solid #a16207;
 }
 
 .u27-legend {

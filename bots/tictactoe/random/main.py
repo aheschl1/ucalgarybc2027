@@ -4,8 +4,12 @@ import random
 
 from ucbc.games.tictactoe import TicTacToeHandle
 
+rng: random.Random | None = None
+
 
 def step(handle: TicTacToeHandle) -> None:
-    rng: random.Random = handle.memory.setdefault("rng", random.Random(handle.seed))
+    global rng
+    if rng is None:
+        rng = random.Random(handle.seed)
     row, col = rng.choice(handle.empty_cells())
     handle.place(row, col)

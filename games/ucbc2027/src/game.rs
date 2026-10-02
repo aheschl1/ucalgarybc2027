@@ -7,6 +7,7 @@ use ucbc_engine::{
 
 use crate::coord::Coord;
 use crate::map::{Environment, Map};
+use crate::rules;
 use crate::state::{Item, State};
 use crate::unit::{Lab, Unit};
 use crate::view::{ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};
@@ -28,14 +29,21 @@ pub enum Queries {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
     Noop(Request<(), ()>),
-    /// Lab only: a level 1 dino on a free tile next to the lab. It steps from the
-    /// next tick.
+    /// Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
+    /// lab. It steps from the next tick.
     Spawn(Request<Coord, Spawned>),
 }
 
 pub struct Ucbc2027 {
     pub(crate) bots: BotManager<Unit>,
     pub(crate) state: State,
+    pub(crate) turn: Turn,
+}
+
+/// What the stepping bot has used of its turn. It belongs to the step, not the bot.
+#[derive(Default)]
+pub(crate) struct Turn {
+    pub spawned: bool,
 }
 
 impl Ucbc2027 {
@@ -94,6 +102,7 @@ impl Game for Ucbc2027 {
         Ok(Self {
             bots,
             state: State::new(map),
+            turn: Turn::default(),
         })
     }
 
@@ -131,15 +140,21 @@ impl Game for Ucbc2027 {
         }
     }
 
-    fn end_step(&mut self, _bot: BotId) {}
+    fn end_step(&mut self, _bot: BotId) {
+        self.turn = Turn::default();
+    }
 
     fn bot_failed(&mut self, bot: BotId, _failure: &BotFailure) {
+        self.turn = Turn::default();
         if let Unit::Dino(dino) = &*self.bots[bot] {
             self.state.clear_dino(dino);
         }
     }
 
     fn end_tick(&mut self) {
+        for team in &mut self.state.teams {
+            team.bones += rules::BASE_INCOME;
+        }
         self.state.tick += 1;
     }
 

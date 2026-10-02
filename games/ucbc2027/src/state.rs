@@ -64,4 +64,8 @@ impl State {
     pub fn team(&self, team: TeamId) -> &TeamState {
         &self.teams[team.0 as usize]
     }
+
+    pub fn team_mut(&mut self, team: TeamId) -> &mut TeamState {
+        &mut self.teams[team.0 as usize]
+    }
 }

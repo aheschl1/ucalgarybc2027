@@ -191,6 +191,6 @@ class Ucbc2027Api(Handle):
         self._act({"type": "noop"})
 
     def spawn(self, x: int, y: int) -> Spawned:
-        """Lab only: a level 1 dino on a free tile next to the lab. It steps from the
-        next tick."""
+        """Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
+        lab. It steps from the next tick."""
         return Spawned._from(self._act({"type": "spawn", "x": x, "y": y}))

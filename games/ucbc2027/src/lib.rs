@@ -5,7 +5,7 @@ mod coord;
 mod game;
 mod grid;
 mod map;
-mod rules;
+pub mod rules;
 mod state;
 mod unit;
 mod view;

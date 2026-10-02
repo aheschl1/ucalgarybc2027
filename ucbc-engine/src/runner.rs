@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use crate::bot::TeamSpec;
 use crate::bot::registry::{BotHandle, BotLookupError, BotRegistry};
@@ -23,6 +24,7 @@ pub struct MatchSpec {
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    verbose: bool,
     on_set: Option<SetHook>,
 }
 
@@ -35,6 +37,7 @@ impl MatchSpec {
             replay_path: None,
             summary_path: None,
             echo_bot_output: false,
+            verbose: false,
             on_set: None,
         }
     }
@@ -54,6 +57,12 @@ impl MatchSpec {
     /// Echo captured bot output to stderr as it happens.
     pub fn echo_bot_output(mut self, echo: bool) -> Self {
         self.echo_bot_output = echo;
+        self
+    }
+
+    /// Print tick progress with a time estimate to stderr.
+    pub fn verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
         self
     }
 
@@ -83,6 +92,7 @@ pub struct MatchRunner<'r> {
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    verbose: bool,
     on_set: Option<SetHook>,
 }
 
@@ -119,6 +129,7 @@ impl<'r> MatchRunner<'r> {
             replay_path: spec.replay_path,
             summary_path: spec.summary_path,
             echo_bot_output: spec.echo_bot_output,
+            verbose: spec.verbose,
             on_set: spec.on_set,
         })
     }
@@ -131,6 +142,7 @@ impl<'r> MatchRunner<'r> {
                 &self.config,
                 &mut self.bots,
                 self.echo_bot_output,
+                self.verbose,
                 set_index,
             )?;
             if let Some(hook) = &mut self.on_set {
@@ -155,8 +167,10 @@ fn run_set(
     config: &MatchConfig,
     bots: &mut BotRegistry,
     echo: bool,
+    verbose: bool,
     set_index: u32,
 ) -> Result<SetReplay, EngineError> {
+    let started = Instant::now();
     let teams = config.teams;
     let first_team = TeamId(set_index % teams);
     let seed = set_seed(config.seed, set_index);
@@ -254,7 +268,27 @@ fn run_set(
             game.end_tick();
         }
         ticks.push(Tick::new(tick, steps, game.snapshot()));
+        if verbose
+            && let Some(line) = progress_line(
+                set_index,
+                config.sets,
+                tick + 1,
+                config.max_ticks,
+                started.elapsed(),
+            )
+        {
+            eprintln!("{line}");
+        }
     };
+    if verbose {
+        eprintln!(
+            "set {}/{}: done after {} ticks in {}",
+            set_index + 1,
+            config.sets,
+            ticks.len(),
+            format_duration(started.elapsed())
+        );
+    }
 
     let result = SetResult::new(set_index, first_team, outcome, ticks.len() as u32);
     Ok(SetReplay::new(initial_state, ticks, result))
@@ -272,4 +306,61 @@ fn check_schedule(schedule: &[BotId], game: &dyn DynGame) -> Result<(), EngineEr
         }
     }
     Ok(())
+}
+
+/// Progress after `done` ticks of a set: at the first tick and every tenth of the limit.
+/// The estimate assumes the set runs to the limit.
+fn progress_line(
+    set_index: u32,
+    sets: u32,
+    done: u32,
+    max_ticks: u32,
+    elapsed: Duration,
+) -> Option<String> {
+    let every = (max_ticks / 10).max(1);
+    if done != 1 && !done.is_multiple_of(every) {
+        return None;
+    }
+    let left = elapsed.mul_f64(f64::from(max_ticks - done) / f64::from(done));
+    Some(format!(
+        "set {}/{sets}: done tick {done}/{max_ticks} ({} elapsed, ~{} left)",
+        set_index + 1,
+        format_duration(elapsed),
+        format_duration(left)
+    ))
+}
+
+fn format_duration(d: Duration) -> String {
+    let secs = d.as_secs_f64();
+    if secs < 60.0 {
+        format!("{secs:.1}s")
+    } else {
+        let secs = d.as_secs();
+        format!("{}m{:02}s", secs / 60, secs % 60)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_at_first_tick_and_every_tenth() {
+        let printed: Vec<u32> = (1..=1000)
+            .filter(|&done| progress_line(0, 3, done, 1000, Duration::from_secs(1)).is_some())
+            .collect();
+        assert_eq!(
+            printed,
+            [1, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+        );
+    }
+
+    #[test]
+    fn progress_estimates_the_rest_of_the_set() {
+        let line = progress_line(1, 3, 100, 1000, Duration::from_secs(10)).unwrap();
+        assert_eq!(
+            line,
+            "set 2/3: done tick 100/1000 (10.0s elapsed, ~1m30s left)"
+        );
+    }
 }

@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 from ucbc.cli import main
 
@@ -66,3 +67,16 @@ def test_run_plays_on_a_map_file(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, [*args, "--map", str(broken)])
     assert result.exit_code != 0
     assert "game_config.map: not a map file" in result.output
+
+
+def test_run_prints_progress_unless_no_verbose(
+    bot: BotPath, capfd: pytest.CaptureFixture[str]
+) -> None:
+    args = ["run", str(bot("first_empty")), str(bot("random")), "--game", "tictactoe"]
+    result = CliRunner().invoke(main, [*args, "--sets", "1"])
+    assert result.exit_code == 0, result.output
+    assert "set 1/1: done tick 1/" in capfd.readouterr().err
+
+    result = CliRunner().invoke(main, [*args, "--sets", "1", "--no-verbose"])
+    assert result.exit_code == 0, result.output
+    assert "done tick" not in capfd.readouterr().err

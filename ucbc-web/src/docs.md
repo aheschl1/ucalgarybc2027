@@ -105,7 +105,7 @@ prints each set's result. `--view` then opens the replay in your browser, the sa
 viewer the site uses.
 
 - `--seed N` changes the match's seed (default 0)
-- `--sets N` changes how many sets are played (default 3)
+- `--sets N` changes how many sets are played (default 1)
 - `--replay FILE` saves the replay; `ucbc view FILE` opens it later
 
 ## debugging with print

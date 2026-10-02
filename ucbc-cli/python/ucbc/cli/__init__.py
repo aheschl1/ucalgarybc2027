@@ -1,8 +1,9 @@
 import click
 
 from ucbc.cli.run import run
-from ucbc.cli.view import view
 from ucbc.cli.submit import submit
+from ucbc.cli.view import view
+
 
 @click.group()
 def main() -> None:

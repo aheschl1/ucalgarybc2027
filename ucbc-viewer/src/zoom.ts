@@ -1,19 +1,26 @@
 /** Zoom and pan for the board: `content` is drawn scaled and translated inside the fixed
- * `view`. Wheel zooms about the cursor, dragging pans. */
+ * `view`. Wheel zooms about the cursor, dragging pans; a press that does not move is a
+ * click on the content. */
 export interface Zoom {
   /** Scale `content` to fill the view, centred. */
   fit(): void;
   /** Zoom by `factor` about the view's centre. */
   zoomBy(factor: number): void;
+  /** Removes the listeners from `view`. */
+  destroy(): void;
 }
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 40;
+/** How far a press moves before it pans instead of clicking. */
+const DRAG_PX = 4;
 
 export function createZoom(view: HTMLElement, content: HTMLElement): Zoom {
   let scale = 1;
   let x = 0;
   let y = 0;
+  const listeners = new AbortController();
+  const { signal } = listeners;
 
   function apply() {
     content.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
@@ -50,40 +57,72 @@ export function createZoom(view: HTMLElement, content: HTMLElement): Zoom {
       const r = view.getBoundingClientRect();
       zoomAt(Math.exp(-e.deltaY / 500), e.clientX - r.left, e.clientY - r.top);
     },
-    { passive: false },
+    { passive: false, signal },
   );
 
   // Buttons overlaid on the view keep their clicks.
   const onButton = (e: Event) => (e.target as Element).closest("button") !== null;
-  let drag: { id: number; x: number; y: number } | null = null;
-  view.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || onButton(e)) return;
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
-    view.setPointerCapture(e.pointerId);
-    view.classList.add("ucbc-dragging");
-  });
-  view.addEventListener("pointermove", (e) => {
-    if (drag?.id !== e.pointerId) return;
-    x += e.clientX - drag.x;
-    y += e.clientY - drag.y;
-    drag.x = e.clientX;
-    drag.y = e.clientY;
-    apply();
-  });
+  // A press becomes a drag once it moves; until then it may still be a click on the content.
+  let press: { id: number; x: number; y: number; dragging: boolean } | null = null;
+  let dragged = false;
+  view.addEventListener(
+    "pointerdown",
+    (e) => {
+      dragged = false;
+      if (e.button !== 0 || onButton(e)) return;
+      press = { id: e.pointerId, x: e.clientX, y: e.clientY, dragging: false };
+    },
+    { signal },
+  );
+  view.addEventListener(
+    "pointermove",
+    (e) => {
+      if (press?.id !== e.pointerId) return;
+      const dx = e.clientX - press.x;
+      const dy = e.clientY - press.y;
+      if (!press.dragging) {
+        if (Math.hypot(dx, dy) < DRAG_PX) return;
+        press.dragging = true;
+        view.setPointerCapture(e.pointerId);
+        view.classList.add("ucbc-dragging");
+      }
+      x += dx;
+      y += dy;
+      press.x = e.clientX;
+      press.y = e.clientY;
+      apply();
+    },
+    { signal },
+  );
   const end = (e: PointerEvent) => {
-    if (drag?.id !== e.pointerId) return;
-    drag = null;
+    if (press?.id !== e.pointerId) return;
+    dragged = press.dragging;
+    press = null;
     view.classList.remove("ucbc-dragging");
   };
-  view.addEventListener("pointerup", end);
-  view.addEventListener("pointercancel", end);
-  view.addEventListener("dblclick", (e) => {
-    if (!onButton(e)) fit();
-  });
+  view.addEventListener("pointerup", end, { signal });
+  view.addEventListener("pointercancel", end, { signal });
+  // The click that ends a drag does not reach the content.
+  view.addEventListener(
+    "click",
+    (e) => {
+      if (dragged) e.stopPropagation();
+      dragged = false;
+    },
+    { capture: true, signal },
+  );
+  view.addEventListener(
+    "dblclick",
+    (e) => {
+      if (!onButton(e)) fit();
+    },
+    { signal },
+  );
 
   apply();
   return {
     fit,
     zoomBy: (factor) => zoomAt(factor, view.clientWidth / 2, view.clientHeight / 2),
+    destroy: () => listeners.abort(),
   };
 }

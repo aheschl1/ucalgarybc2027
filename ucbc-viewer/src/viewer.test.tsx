@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Frame, GameRenderer } from "./renderer.ts";
+import type { BoardProps, Frame, GameRenderer } from "./renderer.ts";
 import type { Replay } from "./replay.gen.ts";
-import { createViewer, formatAction } from "./shell.ts";
+import { formatAction, Viewer } from "./viewer.tsx";
 
 const replay: Replay = {
   match_id: "m",
@@ -49,19 +50,30 @@ const replay: Replay = {
   result: { sets: [], set_wins: [0, 2], winner_team: 1 },
 };
 
-function mount(renderers: GameRenderer[]) {
-  const el = document.createElement("div");
-  document.body.append(el);
+afterEach(cleanup);
+
+function mount(renderers: GameRenderer[], game = replay.config.game) {
   const frames: Frame[] = [];
+  let board: BoardProps | undefined;
   const counter: GameRenderer = {
     game: "counter",
-    mount: () => ({ draw: (f) => frames.push(f), destroy: () => {} }),
+    Board: (props) => {
+      frames.push(props.frame);
+      board = props;
+      return null;
+    },
+    Info: () => null,
   };
-  const viewer = createViewer(el, { renderers: [...renderers, counter], replay });
-  const root = el.querySelector<HTMLElement>(".ucbc-viewer")!;
-  const key = (k: string) => root.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+  const { container } = render(
+    <Viewer renderers={[...renderers, counter]} replay={{ ...replay, config: { ...replay.config, game } }} />,
+  );
+  const root = container.querySelector<HTMLElement>(".ucbc-viewer")!;
+  const key = (k: string) => fireEvent.keyDown(root, { key: k });
   const text = (selector: string) => root.querySelector(selector)?.textContent;
-  return { el, root, viewer, frames, key, text };
+  // What the board shows selected, and clicking a bot on it.
+  const selected = () => board?.selected;
+  const select = (bot: number | null) => act(() => board?.onSelect(bot));
+  return { root, frames, key, text, selected, select };
 }
 
 describe("formatAction", () => {
@@ -73,7 +85,7 @@ describe("formatAction", () => {
   });
 });
 
-describe("createViewer", () => {
+describe("Viewer", () => {
   it("shows the match result and starts at the first frame", () => {
     const { frames, text } = mount([]);
     expect(text(".ucbc-title")).toBe("alpha vs beta");
@@ -104,30 +116,30 @@ describe("createViewer", () => {
   it("switches sets from the start", () => {
     const { root, frames, key, text } = mount([]);
     key("End");
-    root.querySelectorAll<HTMLButtonElement>(".ucbc-sets button")[1]!.click();
+    fireEvent.click(root.querySelectorAll(".ucbc-sets button")[1]!);
     expect(frames.at(-1)?.set.index).toBe(1);
     expect(frames.at(-1)?.tick).toBeNull();
     expect(text(".ucbc-set-result")).toBe("Set 2: beta wins by win after 2 ticks");
   });
 
   it("shows a renderer's error instead of a silently wrong board", () => {
+    // React logs what a component throws.
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const picky: GameRenderer = {
       game: "counter",
-      mount: () => ({
-        draw: (f) => {
-          if (f.state === 2) throw new Error("bad state");
-        },
-        destroy: () => {},
-      }),
+      Board: ({ frame }) => {
+        if (frame.state === 2) throw new Error("bad state");
+        return null;
+      },
+      Info: () => null,
     };
-    const { root, key } = mount([picky]);
-    const error = root.querySelector<HTMLElement>(".ucbc-draw-error")!;
-    expect(error.hidden).toBe(true);
+    const { key, text } = mount([picky]);
+    expect(text(".ucbc-draw-error")).toBeUndefined();
     key("End");
-    expect(error.hidden).toBe(false);
-    expect(error.textContent).toBe("Cannot draw this frame: bad state");
+    expect(text(".ucbc-draw-error")).toBe("Cannot draw this frame: bad state");
     key("Home");
-    expect(error.hidden).toBe(true);
+    expect(text(".ucbc-draw-error")).toBeUndefined();
+    vi.restoreAllMocks();
   });
 
   it("zooms the board with the keyboard", () => {
@@ -143,11 +155,41 @@ describe("createViewer", () => {
   });
 
   it("falls back to raw JSON for an unknown game", () => {
-    const { el, viewer, text } = mount([]);
-    viewer.load({ ...replay, config: { ...replay.config, game: "chess" } });
+    const { text } = mount([], "chess");
     expect(text(".ucbc-info .ucbc-error")).toBe('No renderer for game "chess".');
     expect(text(".ucbc-board .ucbc-raw")).toBe("0");
-    viewer.destroy();
-    expect(el.children).toHaveLength(0);
+  });
+
+  it("selects a bot from the steps table and logs its output over the set", () => {
+    const { root, key, text, selected } = mount([]);
+    key("ArrowRight");
+    fireEvent.click(root.querySelectorAll(".ucbc-step")[0]!);
+    expect(selected()).toBe(0);
+    expect(root.querySelector(".ucbc-step")?.classList).toContain("ucbc-selected");
+    expect(text(".ucbc-bot-header")).toBe("Bot 0 · alpha×");
+    const entries = () => [...root.querySelectorAll(".ucbc-entry")].map((e) => [e.className, e.textContent]);
+    expect(entries()).toEqual([
+      ["ucbc-entry ucbc-current", "tick 1hello"],
+      ["ucbc-entry ucbc-future", "tick 2hello"],
+    ]);
+    fireEvent.click(root.querySelectorAll(".ucbc-link")[1]!);
+    expect(text(".ucbc-position")).toBe("tick 2 / 2");
+    expect(entries().map(([c]) => c)).toEqual(["ucbc-entry", "ucbc-entry ucbc-current"]);
+    key("Escape");
+    expect(selected()).toBeNull();
+    expect(root.querySelector(".ucbc-bot")).toBeNull();
+  });
+
+  it("selects from the board, and a new set clears the selection", () => {
+    const { root, select, selected, text } = mount([]);
+    select(1);
+    expect(selected()).toBe(1);
+    expect(text(".ucbc-bot-header")).toBe("Bot 1 · beta×");
+    expect(text(".ucbc-entry .ucbc-error")).toBe("Exception: boom");
+    expect(text(".ucbc-entry .ucbc-traceback")).toBe("Traceback");
+    fireEvent.click(root.querySelectorAll(".ucbc-sets button")[1]!);
+    expect(selected()).toBeNull();
+    select(5);
+    expect(text(".ucbc-bot")).toBe("Bot 5×No output in this set.");
   });
 });

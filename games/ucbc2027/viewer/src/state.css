@@ -40,3 +40,18 @@
   outline: 2px solid #a16207;
   outline-offset: -2px;
 }
+
+.u27-tile[data-bot] {
+  cursor: pointer;
+}
+
+.u27-selected {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 2px var(--ucbc-fg, #1c1917);
+}
+
+.u27-unit th {
+  position: static;
+  width: 5rem;
+}

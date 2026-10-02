@@ -90,7 +90,7 @@ raw SQL in `op.execute`.
 | `ucbc-cli/` | pip dist `ucbc`: what bots import, the engine extension, bot process, CLI | `uv run ucbc`, `import ucbc` |
 | `ucbc-dev/` | cargo bin `ucbc-dev`: replays, schemas, SDK generation, the runtime snapshot | `cargo run -p ucbc-dev`, `make sdk` |
 | `ucbc-wasm/` | crate: Python bots in wasm; `guest/` is the interpreter they run | `ucbc-cli`, `make runtime`, `make guest` |
-| `ucbc-viewer/` | replay viewer (TS, Vite) | `ucbc view`, `make viewer` |
+| `ucbc-viewer/` | replay viewer (React, Vite) | `ucbc view`, `make viewer` |
 | `ucbc-api/` | pip dist `ucbc-api` (FastAPI, Postgres) | `uv run ucbc-api`, `uv run ucbc-api-cli` |
 | `ucbc-worker/` | pip dist `ucbc-worker` | `uv run ucbc-worker` |
 | `ucbc-web/` | platform frontend (React, Vite) | served by `ucbc-api` at `/`, `make web` |

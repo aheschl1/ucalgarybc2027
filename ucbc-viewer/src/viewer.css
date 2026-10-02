@@ -279,3 +279,71 @@
 .ucbc-step-output td {
   padding-top: 0;
 }
+
+.ucbc-step {
+  cursor: pointer;
+}
+
+.ucbc-steps .ucbc-selected {
+  background: color-mix(in srgb, var(--ucbc-accent) 12%, transparent);
+}
+
+/* The selected bot's output. */
+.ucbc-bot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 0.5rem;
+  background: var(--ucbc-panel);
+}
+
+.ucbc-bot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ucbc-bot-header .ucbc-team {
+  max-width: none;
+}
+
+/* Positioned, so entries' offsetTop is measured from the log. */
+.ucbc-bot-log {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.ucbc-entry {
+  padding-left: 0.5rem;
+  border-left: 2px solid transparent;
+}
+
+.ucbc-entry.ucbc-current {
+  border-left-color: var(--ucbc-accent);
+}
+
+.ucbc-entry.ucbc-future {
+  opacity: 0.45;
+}
+
+.ucbc-link {
+  padding: 0;
+  border: 0;
+  color: var(--ucbc-muted);
+  background: none;
+  font: 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.ucbc-link:hover,
+.ucbc-current .ucbc-link {
+  color: var(--ucbc-accent);
+}

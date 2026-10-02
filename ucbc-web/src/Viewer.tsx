@@ -1,5 +1,10 @@
-import { createViewer, renderers, type Replay, type SetReplay } from "@ucbc/viewer";
-import { useEffect, useRef, useState } from "react";
+import {
+  renderers,
+  Viewer as ReplayViewer,
+  type Replay,
+  type SetReplay,
+} from "@ucbc/viewer";
+import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { describe, type Api, type Match } from "./api";
 
@@ -29,7 +34,6 @@ function assemble(match: Match, sets: SetReplay[]): Replay {
 /** Plays one match. A match that is not done yet shows its status instead. */
 export default function Viewer({ api }: { api: Api }) {
   const { matchId = "" } = useParams();
-  const stage = useRef<HTMLDivElement>(null);
   const [replay, setReplay] = useState<Replay | null>(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState("");
@@ -64,12 +68,6 @@ export default function Viewer({ api }: { api: Api }) {
     };
   }, [matchId]);
 
-  useEffect(() => {
-    if (!replay || !stage.current) return;
-    const viewer = createViewer(stage.current, { renderers, replay });
-    return () => viewer.destroy();
-  }, [replay]);
-
   return (
     <main className="viewer">
       <p className="dim">
@@ -80,7 +78,7 @@ export default function Viewer({ api }: { api: Api }) {
       ) : (
         !replay && <p className="dim">{status}</p>
       )}
-      <div ref={stage} />
+      {replay && <ReplayViewer replay={replay} renderers={renderers} />}
     </main>
   );
 }

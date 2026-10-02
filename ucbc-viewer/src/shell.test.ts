@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Frame, GameRenderer } from "./renderer.ts";
 import type { Replay } from "./replay.gen.ts";
-import { createViewer } from "./shell.ts";
+import { createViewer, formatAction } from "./shell.ts";
 
 const replay: Replay = {
   match_id: "m",
@@ -64,6 +64,15 @@ function mount(renderers: GameRenderer[]) {
   return { el, root, viewer, frames, key, text };
 }
 
+describe("formatAction", () => {
+  it("puts the type first, then each other field", () => {
+    expect(formatAction({ x: 9, type: "move", y: 10 })).toBe("move x=9 y=10");
+    expect(formatAction({ row: 1, col: 2 })).toBe("row=1 col=2");
+    expect(formatAction({ type: "drop", at: { x: 1 } })).toBe('drop at={"x":1}');
+    expect(formatAction(3)).toBe("3");
+  });
+});
+
 describe("createViewer", () => {
   it("shows the match result and starts at the first frame", () => {
     const { frames, text } = mount([]);
@@ -81,7 +90,7 @@ describe("createViewer", () => {
     expect(text(".ucbc-position")).toBe("tick 1 / 2");
     const steps = root.querySelectorAll(".ucbc-step");
     expect(steps).toHaveLength(2);
-    expect(steps[0]!.textContent).toContain('{"type":"add"}');
+    expect(steps[0]!.querySelector(".ucbc-action")?.textContent).toBe("add");
     expect(steps[0]!.querySelector(".ucbc-stdout")?.textContent).toBe("hello");
     expect(steps[1]!.querySelector(".ucbc-error")?.textContent).toBe("Exception: boom");
     key("End");
@@ -121,11 +130,23 @@ describe("createViewer", () => {
     expect(error.hidden).toBe(true);
   });
 
+  it("zooms the board with the keyboard", () => {
+    const { root, key } = mount([]);
+    const board = root.querySelector<HTMLElement>(".ucbc-board")!;
+    key("+");
+    expect(board.style.transform).toBe("translate(0px, 0px) scale(1.25)");
+    key("-");
+    key("-");
+    expect(board.style.transform).toBe("translate(0px, 0px) scale(0.8)");
+    key("0");
+    expect(board.style.transform).toBe("translate(0px, 0px) scale(1)");
+  });
+
   it("falls back to raw JSON for an unknown game", () => {
     const { el, viewer, text } = mount([]);
     viewer.load({ ...replay, config: { ...replay.config, game: "chess" } });
-    expect(text(".ucbc-stage .ucbc-error")).toBe('No renderer for game "chess".');
-    expect(text(".ucbc-raw")).toBe("0");
+    expect(text(".ucbc-info .ucbc-error")).toBe('No renderer for game "chess".');
+    expect(text(".ucbc-board .ucbc-raw")).toBe("0");
     viewer.destroy();
     expect(el.children).toHaveLength(0);
   });

@@ -1,18 +1,13 @@
-.u27-state {
-  font: 600 1.5rem/1 system-ui, sans-serif;
-}
-
 .u27-board {
   display: grid;
   gap: 1px;
-  margin-left: 1.5rem;
 }
 
 .u27-tile {
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;
+  height: 1.25rem;
   background: #e7e5e4;
-  font: 0.7rem/1rem monospace;
+  font: 600 0.75rem/1.25rem system-ui, sans-serif;
   text-align: center;
 }
 
@@ -25,11 +20,11 @@
 }
 
 .u27-team-0 {
-  background: #f97316;
+  background: var(--ucbc-team-0, #f97316);
 }
 
 .u27-team-1 {
-  background: #3b82f6;
+  background: var(--ucbc-team-1, #3b82f6);
 }
 
 .u27-lab {
@@ -43,10 +38,5 @@
 
 .u27-held {
   outline: 2px solid #a16207;
-}
-
-.u27-legend {
-  align-self: center;
-  margin-left: 1.5rem;
-  color: var(--ucbc-muted, #78716c);
+  outline-offset: -2px;
 }

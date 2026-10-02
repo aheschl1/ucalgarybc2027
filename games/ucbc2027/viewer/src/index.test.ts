@@ -18,7 +18,7 @@ const teams = [
   { id: 1, name: "beta" },
 ];
 
-it("draws the tick, the board, and the set's step order", () => {
+it("draws the board, a table of team counts, and the set's step order", () => {
   const state: Snapshot = {
     tick: 3,
     environment: [
@@ -33,10 +33,16 @@ it("draws the tick, the board, and the set's step order", () => {
   };
   const tick: Tick = { number: 2, state_after: state, steps: [] };
   const el = document.createElement("div");
-  const instance = renderer.mount(el);
+  const info = document.createElement("div");
+  const instance = renderer.mount(el, info);
   instance.draw({ state, tick, set, teams });
 
-  expect(el.querySelector(".u27-state")?.textContent).toBe("tick 3 · alpha 50 bones 0 fossils · beta 40 bones 2 fossils");
+  const rows = [...info.querySelectorAll("tr")].map((r) => [...r.cells].map((c) => c.textContent));
+  expect(rows).toEqual([
+    ["Team", "Bones", "Fossils", "Dinos"],
+    ["alpha", "50", "0", "1"],
+    ["beta", "40", "2", "0"],
+  ]);
   const tiles = el.querySelectorAll(".u27-tile");
   expect(tiles).toHaveLength(4);
   expect(tiles[0]?.className).toBe("u27-tile u27-lab u27-team-1");
@@ -44,14 +50,15 @@ it("draws the tick, the board, and the set's step order", () => {
   expect(tiles[2]?.className).toBe("u27-tile u27-empty u27-dino u27-team-0 u27-held");
   expect(tiles[2]?.textContent).toBe("1");
   expect(tiles[3]?.className).toBe("u27-tile u27-empty u27-fossil");
-  expect(el.querySelector(".u27-legend")?.textContent).toBe("beta steps first, then alpha");
+  expect(info.querySelector(".ucbc-muted")?.textContent).toBe("beta steps first, then alpha");
 
   instance.destroy();
   expect(el.children).toHaveLength(0);
+  expect(info.children).toHaveLength(0);
 });
 
 it("rejects a state it does not recognise", () => {
-  const instance = renderer.mount(document.createElement("div"));
+  const instance = renderer.mount(document.createElement("div"), document.createElement("div"));
   expect(() => instance.draw({ state: null, tick: null, set, teams })).toThrow("not a ucbc2027 state");
   expect(() => instance.draw({ state: { tick: 1 }, tick: null, set, teams })).toThrow("not a ucbc2027 state");
 });

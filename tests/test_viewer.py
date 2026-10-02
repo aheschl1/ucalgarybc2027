@@ -1,4 +1,6 @@
+import base64
 import gzip
+import json
 import threading
 import urllib.request
 from collections.abc import Callable, Iterator
@@ -9,8 +11,11 @@ import pytest
 from click.testing import CliRunner
 from ucbc import viewer
 from ucbc.cli import main
+from ucbc.runner import run_match
 
 BotPath = Callable[[str], Path]
+ROOT = Path(__file__).resolve().parents[1]
+SAMPLES = ROOT / "games" / "ucbc2027" / "viewer" / "replays"
 
 
 @pytest.fixture
@@ -97,3 +102,35 @@ def test_run_view_fails_before_the_match_when_unbuilt(
     assert result.exit_code != 0
     assert "make viewer" in result.output
     assert "Set 1:" not in result.output
+
+
+def played(replay: Path) -> object:
+    """The replay without what may differ between machines or releases: the engine
+    version and each step's usage."""
+    data = json.loads(gzip.decompress(replay.read_bytes()))
+    del data["engine_version"]
+    for s in data["sets"]:
+        for tick in s["ticks"]:
+            for step in tick["steps"]:
+                del step["usage"]
+    return data
+
+
+@pytest.mark.parametrize("sample", sorted(SAMPLES.glob("*.json.gz")), ids=lambda p: p.name)
+def test_sample_replays_match_the_engine(sample: Path, tmp_path: Path) -> None:
+    """`make replays` plays each one: the example bot against itself on the map it is named
+    after."""
+    example = ROOT / "bots" / "ucbc2027" / "example"
+    game_map = ROOT / "games" / "ucbc2027" / "maps" / sample.name.replace(".json.gz", ".map")
+    fresh = tmp_path / "replay.json.gz"
+    run_match(
+        example,
+        example,
+        game="ucbc2027",
+        sets=1,
+        replay_path=fresh,
+        game_config={"map": base64.b64encode(game_map.read_bytes()).decode()},
+    )
+    # Not an assert: pytest would diff the whole replay.
+    if played(fresh) != played(sample):
+        pytest.fail(f"{sample.name} is stale; run `make replays`")

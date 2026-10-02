@@ -36,6 +36,11 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 `uv run ucbc view r.json` replays a saved file. `uv run ucbc editor my.map` opens the
 map editor on a file (new if missing); Save writes it, and `--map my.map` plays on it.
 
+### Develop Viewer Alone
+
+To work on the viewer or a game's look with Node alone, `npm ci && npm run dev -w @ucbc/viewer`
+opens it on the sample replays; [docs/viewer.md](docs/viewer.md) has more details
+
 ## Write a bot
 
 A directory with a `main.py` defining `step`.

@@ -1,5 +1,6 @@
 // The standalone page: loads `?replay=<url>` (default `replay.json`, which `ucbc view`
-// serves), or a replay file, gzipped or not, dropped onto the page.
+// serves), or a replay file, gzipped or not, dropped onto the page. With neither, it lists
+// the sample replays the dev server offers (vite/replays.ts).
 
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -16,8 +17,27 @@ function render(node: ReactNode) {
   root.render(<StrictMode>{node}</StrictMode>);
 }
 
-function show(text: string) {
-  render(<p className="ucbc-app-message">{text}</p>);
+function show(text: string, samples: string[] = []) {
+  render(
+    <div className="ucbc-app-message">
+      <p>{text}</p>
+      {samples.length ? (
+        <ul>
+          {samples.map((s) => (
+            <li key={s}>
+              <a href={`?replay=replays/${s}`}>{s}</a>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>,
+  );
+}
+
+/** The sample replays the dev server lists; none elsewhere. */
+async function samples(): Promise<string[]> {
+  const r = await fetch("replays/").catch(() => null);
+  return r?.ok ? r.json().catch(() => []) : [];
 }
 
 function open(text: string, source: string) {
@@ -37,7 +57,10 @@ const url = new URLSearchParams(location.search).get("replay") ?? "replay.json";
 fetch(url)
   .then((r) => (r.ok ? r.text() : Promise.reject()))
   .then((text) => open(text, url))
-  .catch(() => show("Drop a replay file here."));
+  .catch(async () => {
+    const list = await samples();
+    show(list.length ? "Drop a replay file here, or open a sample:" : "Drop a replay file here.", list);
+  });
 
 addEventListener("dragover", (e) => e.preventDefault());
 /** A replay file's text, decompressed if it is gzipped (`ucbc run --replay r.json.gz`). */

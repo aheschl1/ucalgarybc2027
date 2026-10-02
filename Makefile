@@ -1,4 +1,4 @@
-.PHONY: help setup build gen sdk viewer-types editor-types viewer editor web runtime guest cpython wheels test test-api lint clean up down db release-check tag
+.PHONY: help setup build gen sdk viewer-types editor-types viewer editor web replays runtime guest cpython wheels test test-api lint clean up down db release-check tag
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -76,6 +76,14 @@ viewer: viewer-types
 # The map editor page, built into the ucbc package for `ucbc editor`.
 editor: editor-types
 	npm run build -w @ucbc/editor-ucbc2027 -- --outDir ../../../ucbc-cli/python/ucbc/editor/static --emptyOutDir
+
+# Sample replays the viewer's dev server lists
+REPLAY_MAPS := standard medium
+replays: build  ## rewrite the viewer's sample replays, when tests say they are stale
+	for map in $(REPLAY_MAPS); do \
+		uv run ucbc run bots/ucbc2027/example bots/ucbc2027/example --no-verbose \
+			--map games/ucbc2027/maps/$$map.map --replay games/ucbc2027/viewer/replays/$$map.json.gz > /dev/null; \
+	done
 
 # The platform frontend, built into the API package so `ucbc-api` serves it at /.
 web: viewer-types

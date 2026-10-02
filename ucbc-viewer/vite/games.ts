@@ -38,5 +38,10 @@ export function games(): Plugin {
     name: "ucbc-games",
     enforce: "pre",
     load: (id) => (id === TARGET ? gamesSource(list) : null),
+    // The dev server watches its own root; this adds the renderers, so a changed picture
+    // in a game's assets/ reaches an open page.
+    configureServer: (server) => {
+      server.watcher.add(list.map((game) => fileURLToPath(new URL(`${game}/viewer`, GAMES))));
+    },
   };
 }

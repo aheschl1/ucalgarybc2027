@@ -14,8 +14,8 @@ make lint
 make up         # the platform in compose
 ```
 
-`default` in `ucbc-games/Cargo.toml` picks the games a build includes; `make test` builds
-every game.
+`default` in `ucbc-games/Cargo.toml` picks the games a build includes, engine and viewer
+renderers both; `make test` builds every game.
 
 ## Run a match
 

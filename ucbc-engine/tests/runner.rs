@@ -434,6 +434,15 @@ fn replay_and_summary_files_round_trip() {
 
     let read_back = read_replay(&replay_path).unwrap();
     assert_eq!(read_back, report.replay);
+    let text = std::fs::read_to_string(&replay_path).unwrap();
+    assert_eq!(text.lines().count(), 1, "compact JSON");
+
+    // The same, gzipped because of the name.
+    let gz_path = dir.join("replay.json.gz");
+    let s = spec(vec![plus_one("a"), plus_one("b")], 2, 5).replay_path(&gz_path);
+    let gz_report = MatchRunner::new(&reg, s).unwrap().run().unwrap();
+    assert_eq!(std::fs::read(&gz_path).unwrap()[..2], [0x1f, 0x8b]);
+    assert_eq!(read_replay(&gz_path).unwrap(), gz_report.replay);
     let text = std::fs::read_to_string(&summary_path).unwrap();
     let summary: ucbc_engine::Summary = serde_json::from_str(&text).unwrap();
     assert_eq!(summary.set_wins, vec![1, 1]);

@@ -13,7 +13,9 @@ from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 @click.option("--seed", default=0, show_default=True)
 @click.option("--match-id", default="local", show_default=True)
 @click.option(
-    "--replay", type=click.Path(dir_okay=False, path_type=Path), help="Write the replay here."
+    "--replay",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the replay here; .gz or .json",
 )
 @click.option(
     "--summary", type=click.Path(dir_okay=False, path_type=Path), help="Write the summary here."
@@ -65,7 +67,7 @@ def run(
         viewer.check_built()
     if view and replay is None:
         # Left behind: the process ends on Ctrl-C while serving it.
-        replay = Path(tempfile.mkdtemp(prefix="ucbc-")) / "replay.json"
+        replay = Path(tempfile.mkdtemp(prefix="ucbc-")) / "replay.json.gz"
 
     names = [bot_a.name, bot_b.name]
     game_config = None

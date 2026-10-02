@@ -1,4 +1,5 @@
 import base64
+import gzip
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -29,6 +30,14 @@ def test_run_prints_sets_and_writes_files(bot: BotPath, tmp_path: Path) -> None:
     assert "Set 1:" in result.output
     assert "Result:" in result.output
     assert replay.exists()
+
+
+def test_run_gzips_a_replay_named_gz(bot: BotPath, tmp_path: Path) -> None:
+    replay = tmp_path / "replay.json.gz"
+    args = ["run", str(bot("first_empty")), str(bot("random")), "--game", "tictactoe"]
+    result = CliRunner().invoke(main, [*args, "--sets", "1", "--replay", str(replay)])
+    assert result.exit_code == 0, result.output
+    assert json.loads(gzip.decompress(replay.read_bytes()))["config"]["game"] == "tictactoe"
 
 
 def test_run_reports_engine_errors(bot: BotPath, tmp_path: Path) -> None:

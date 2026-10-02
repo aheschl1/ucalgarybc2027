@@ -1,5 +1,5 @@
 // The standalone page: loads `?replay=<url>` (default `replay.json`, which `ucbc view`
-// serves), or a replay file dropped onto the page.
+// serves), or a replay file, gzipped or not, dropped onto the page.
 
 import { renderers } from "./games.ts";
 import type { Replay } from "./replay.gen.ts";
@@ -42,8 +42,15 @@ fetch(url)
   .catch(() => show("Drop a replay file here."));
 
 addEventListener("dragover", (e) => e.preventDefault());
+/** A replay file's text, decompressed if it is gzipped (`ucbc run --replay r.json.gz`). */
+async function readFile(file: File): Promise<string> {
+  const [a, b] = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+  if (a !== 0x1f || b !== 0x8b) return file.text();
+  return new Response(file.stream().pipeThrough(new DecompressionStream("gzip"))).text();
+}
+
 addEventListener("drop", async (e) => {
   e.preventDefault();
   const file = e.dataTransfer?.files[0];
-  if (file) open(await file.text(), file.name);
+  if (file) open(await readFile(file), file.name);
 });

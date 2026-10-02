@@ -18,5 +18,6 @@ export interface RendererInstance {
 export interface GameRenderer {
   /** Matches `replay.config.game`. */
   game: string;
-  mount(el: HTMLElement): RendererInstance;
+  /** `board` sits in the zoomable view; `info` is a panel beside it for text, such as scores. */
+  mount(board: HTMLElement, info: HTMLElement): RendererInstance;
 }

@@ -10,13 +10,14 @@ const SYMBOL = { empty: "", x: "X", o: "O" } as const;
  * Every game package exports its renderer under this name; the viewer's build finds it. */
 export const renderer: GameRenderer = {
   game: "tictactoe",
-  mount(el) {
+  mount(el, info) {
     const grid = document.createElement("div");
     grid.className = "ttt-board";
     const cells = Array.from({ length: 9 }, () => grid.appendChild(document.createElement("div")));
     const legend = document.createElement("div");
-    legend.className = "ttt-legend";
-    el.append(grid, legend);
+    legend.className = "ucbc-muted";
+    el.append(grid);
+    info.append(legend);
 
     return {
       draw({ state, tick, set, teams }) {

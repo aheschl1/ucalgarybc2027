@@ -29,19 +29,21 @@ it("draws marks, highlights this tick's placements, and names X and O", () => {
   ];
 
   const el = document.createElement("div");
-  const instance = renderer.mount(el);
+  const info = document.createElement("div");
+  const instance = renderer.mount(el, info);
   instance.draw({ state: board, tick, set, teams });
 
   const cells = [...el.querySelectorAll(".ttt-cell")];
   expect(cells.map((c) => c.textContent).join(",")).toBe("X,,,,,,,,O");
   expect(cells.map((c, i) => (c.classList.contains("ttt-placed") ? i : -1)).filter((i) => i >= 0)).toEqual([0, 8]);
-  expect(el.querySelector(".ttt-legend")?.textContent).toBe("X beta · O alpha");
+  expect(info.textContent).toBe("X beta · O alpha");
 
   instance.draw({ state: set.initial_state, tick: null, set, teams });
   expect(el.querySelectorAll(".ttt-placed")).toHaveLength(0);
 
   instance.destroy();
   expect(el.children).toHaveLength(0);
+  expect(info.children).toHaveLength(0);
 });
 
 it("rejects a board it does not recognise", () => {
@@ -52,7 +54,7 @@ it("rejects a board it does not recognise", () => {
     ticks: [],
     result: { index: 0, first_team: 0, reason: "draw", ticks: 0 },
   };
-  const instance = renderer.mount(document.createElement("div"));
+  const instance = renderer.mount(document.createElement("div"), document.createElement("div"));
   // Cells as integers: replays from before `Cell` serialized as strings.
   const old = { cells: [1, 0, 0, 0, 0, 0, 2, 0, 0] };
   expect(() => instance.draw({ state: old, tick: null, set, teams: [] })).toThrow("not a tic-tac-toe board");

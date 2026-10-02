@@ -6,11 +6,19 @@
   --ucbc-panel: #ffffff;
   --ucbc-accent: #2563eb;
   --ucbc-error: #b91c1c;
+  --ucbc-team-0: #f97316;
+  --ucbc-team-1: #3b82f6;
+  --ucbc-stage-height: min(36rem, 70vh);
 
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-width: 48rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26rem;
+  grid-template-areas:
+    "header header"
+    "bar bar"
+    "stage side"
+    "controls side";
+  gap: 0.75rem 1rem;
+  max-width: 84rem;
   margin: 0 auto;
   padding: 1rem;
   color: var(--ucbc-fg);
@@ -35,12 +43,24 @@
   }
 }
 
+@media (max-width: 60rem) {
+  .ucbc-viewer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "header" "bar" "stage" "controls" "side";
+  }
+
+  .ucbc-viewer .ucbc-side {
+    height: auto;
+  }
+}
+
 .ucbc-header {
+  grid-area: header;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.5rem 1rem;
 }
 
 .ucbc-title {
@@ -48,12 +68,29 @@
   font-weight: 600;
 }
 
-.ucbc-sets,
-.ucbc-controls {
+.ucbc-result,
+.ucbc-set-result {
+  color: var(--ucbc-muted);
+}
+
+.ucbc-bar {
+  grid-area: bar;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.ucbc-sets,
+.ucbc-controls,
+.ucbc-zoom {
+  display: flex;
+  align-items: center;
   gap: 0.25rem;
+}
+
+.ucbc-controls {
+  grid-area: controls;
 }
 
 .ucbc-button,
@@ -68,6 +105,11 @@
   cursor: pointer;
 }
 
+.ucbc-button:hover,
+.ucbc-speed:hover {
+  border-color: var(--ucbc-muted);
+}
+
 .ucbc-button.ucbc-active {
   border-color: var(--ucbc-accent);
   color: var(--ucbc-accent);
@@ -75,49 +117,135 @@
 
 .ucbc-slider {
   flex: 1 1 8rem;
+  min-width: 0;
   accent-color: var(--ucbc-accent);
 }
 
 .ucbc-position {
-  min-width: 7rem;
+  min-width: 8rem;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .ucbc-stage {
-  display: flex;
-  justify-content: center;
-  padding: 1rem;
+  grid-area: stage;
+  position: relative;
+  height: var(--ucbc-stage-height);
+  overflow: hidden;
   border: 1px solid var(--ucbc-line);
   border-radius: 0.5rem;
   background: var(--ucbc-panel);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
-.ucbc-steps {
+.ucbc-stage.ucbc-dragging {
+  cursor: grabbing;
+}
+
+.ucbc-board {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  transform-origin: 0 0;
+}
+
+.ucbc-zoom {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+}
+
+.ucbc-draw-error {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  background: var(--ucbc-panel);
+}
+
+/* The side column is as tall as the stage and controls; its content scrolls. */
+.ucbc-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 0;
+  min-height: 100%;
+  overflow-y: auto;
+}
+
+.ucbc-info {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.ucbc-step {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.25rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--ucbc-line);
-  border-radius: 0.375rem;
-  background: var(--ucbc-panel);
+.ucbc-info:empty {
+  display: none;
 }
 
-.ucbc-step-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+/* Tables for the step log and for renderers' info panels. */
+.ucbc-steps,
+.ucbc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.ucbc-steps th,
+.ucbc-table th {
+  position: sticky;
+  top: 0;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--ucbc-line);
+  color: var(--ucbc-muted);
+  background: var(--ucbc-bg);
+  font-weight: 500;
+  text-align: left;
+}
+
+.ucbc-steps td,
+.ucbc-table td {
+  padding: 0.25rem 0.5rem;
+  vertical-align: baseline;
+}
+
+.ucbc-steps tbody,
+.ucbc-table tbody tr {
+  border-bottom: 1px solid var(--ucbc-line);
+}
+
+.ucbc-viewer .ucbc-num {
+  text-align: right;
+  white-space: nowrap;
 }
 
 .ucbc-team {
+  max-width: 8rem;
+  overflow: hidden;
   font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ucbc-swatch {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+}
+
+.ucbc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
 }
 
 .ucbc-muted {
@@ -126,10 +254,6 @@
 
 .ucbc-error {
   color: var(--ucbc-error);
-}
-
-.ucbc-draw-error {
-  margin: 0;
 }
 
 .ucbc-action,
@@ -142,8 +266,16 @@
 .ucbc-stdout,
 .ucbc-traceback,
 .ucbc-raw {
-  width: 100%;
   margin: 0;
-  overflow-x: auto;
   white-space: pre;
+}
+
+.ucbc-stdout,
+.ucbc-traceback {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ucbc-step-output td {
+  padding-top: 0;
 }

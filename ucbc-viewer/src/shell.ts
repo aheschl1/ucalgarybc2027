@@ -3,6 +3,7 @@ import "./viewer.css";
 import type { Replay, Step, TeamId, TeamInfo } from "./replay.gen.ts";
 import type { GameRenderer, RendererInstance } from "./renderer.ts";
 import { frameAt, frameCount } from "./timeline.ts";
+import { createZoom } from "./zoom.ts";
 
 export interface ViewerOptions {
   renderers: GameRenderer[];
@@ -44,44 +45,79 @@ function teamName(teams: TeamInfo[], id: TeamId): string {
 function fallback(game: string): GameRenderer {
   return {
     game,
-    mount(el) {
+    mount(board, info) {
       const pre = h("pre", "ucbc-raw");
-      el.append(h("p", "ucbc-error", `No renderer for game "${game}".`), pre);
+      board.append(pre);
+      info.append(h("div", "ucbc-error", `No renderer for game "${game}".`));
       return {
         draw: (frame) => (pre.textContent = JSON.stringify(frame.state, null, 2)),
-        destroy: () => el.replaceChildren(),
+        destroy: () => {
+          board.replaceChildren();
+          info.replaceChildren();
+        },
       };
     },
   };
 }
 
+/** An action as its `type`, if it has one, then `key=value` for each other field. */
+export function formatAction(action: unknown): string {
+  if (typeof action !== "object" || action === null || Array.isArray(action)) return JSON.stringify(action);
+  const { type, ...fields } = action as Record<string, unknown>;
+  const parts = Object.entries(fields).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`);
+  return [...(type === undefined ? [] : [String(type)]), ...parts].join(" ");
+}
+
+/** The steps table's columns: heading and class. */
+const STEP_COLUMNS = [
+  ["Team", ""],
+  ["Bot", "ucbc-num"],
+  ["ms", "ucbc-num"],
+  ["MiB", "ucbc-num"],
+  ["Actions", ""],
+] as const;
+
+/** A cell spanning the whole steps table. */
+function wide(...children: (Node | string)[]): HTMLTableCellElement {
+  const td = h("td", "", ...children);
+  td.colSpan = STEP_COLUMNS.length;
+  return td;
+}
+
+/** One step as a table body: a row of numbers, then a row for any output. */
 function stepView(step: Step, teams: TeamInfo[]): HTMLElement {
-  const usage = [`${(step.usage.time_us / 1000).toFixed(2)} ms`];
-  if (step.usage.memory != null) usage.push(`${(step.usage.memory / 2 ** 20).toFixed(1)} MiB`);
+  const swatch = h("span", "ucbc-swatch");
+  swatch.style.background = `var(--ucbc-team-${step.team}, var(--ucbc-muted))`;
+  const memory = step.usage.memory;
+  const actions = step.actions.length
+    ? step.actions.map((a) => h("code", "ucbc-action", formatAction(a)))
+    : [h("span", "ucbc-muted", "none")];
   const el = h(
-    "div",
+    "tbody",
     "ucbc-step",
     h(
-      "div",
-      "ucbc-step-head",
-      h("span", "ucbc-team", teamName(teams, step.team)),
-      h("span", "ucbc-muted", `bot ${step.bot}`),
-      h("span", "ucbc-muted", usage.join(" · ")),
+      "tr",
+      "",
+      h("td", "ucbc-team", swatch, teamName(teams, step.team)),
+      h("td", "ucbc-num", String(step.bot)),
+      h("td", "ucbc-num", (step.usage.time_us / 1000).toFixed(2)),
+      h("td", "ucbc-num", memory == null ? "" : (memory / 2 ** 20).toFixed(1)),
+      h("td", "", h("div", "ucbc-actions", ...actions)),
     ),
   );
-  for (const action of step.actions) el.append(h("code", "ucbc-action", JSON.stringify(action)));
-  if (step.actions.length === 0) el.append(h("span", "ucbc-muted", "no actions"));
-  if (step.stdout) el.append(h("pre", "ucbc-stdout", step.stdout));
+  const output: HTMLElement[] = [];
+  if (step.stdout) output.push(h("pre", "ucbc-stdout", step.stdout));
   if (step.failure) {
     const f = step.failure;
-    el.append(h("div", "ucbc-error", `${f.kind}: ${f.message}`));
-    if (f.traceback) el.append(h("pre", "ucbc-traceback", f.traceback));
+    output.push(h("div", "ucbc-error", `${f.kind}: ${f.message}`));
+    if (f.traceback) output.push(h("pre", "ucbc-traceback", f.traceback));
   }
+  if (output.length) el.append(h("tr", "ucbc-step-output", wide(...output)));
   return el;
 }
 
-/** Mounts a replay viewer into `el`. The game's renderer draws the board; the viewer
- * owns sets, playback, and the per-tick step log. */
+/** Mounts a replay viewer into `el`. The game's renderer draws the board and its info
+ * panel; the viewer owns sets, playback, zoom, and the per-tick step table. */
 export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
   const root = h("div", "ucbc-viewer");
   root.tabIndex = 0;
@@ -90,9 +126,22 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
   const result = h("div", "ucbc-result");
   const sets = h("nav", "ucbc-sets");
   const setResult = h("div", "ucbc-set-result");
-  const drawError = h("p", "ucbc-error ucbc-draw-error");
+  const drawError = h("div", "ucbc-error ucbc-draw-error");
   drawError.hidden = true;
-  const stage = h("div", "ucbc-stage");
+  const board = h("div", "ucbc-board");
+  const stage = h("div", "ucbc-stage", board);
+  const zoom = createZoom(stage, board);
+  stage.append(
+    h(
+      "div",
+      "ucbc-zoom",
+      button("−", "Zoom out (-)", () => zoom.zoomBy(1 / 1.25)),
+      button("Fit", "Fit (0, double-click)", () => zoom.fit()),
+      button("+", "Zoom in (+)", () => zoom.zoomBy(1.25)),
+    ),
+    drawError,
+  );
+  const info = h("div", "ucbc-info");
   const slider = h("input", "ucbc-slider");
   slider.type = "range";
   slider.min = "0";
@@ -101,13 +150,12 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
   const speed = h("select", "ucbc-speed");
   for (const s of SPEEDS) speed.append(new Option(`${s}/s`, String(s)));
   speed.value = "5";
-  const steps = h("section", "ucbc-steps");
+  const steps = h("table", "ucbc-steps");
+  const stepsHead = h("thead", "", h("tr", "", ...STEP_COLUMNS.map(([c, cls]) => h("th", cls, c))));
 
   root.append(
     h("header", "ucbc-header", title, result),
-    sets,
-    setResult,
-    drawError,
+    h("div", "ucbc-bar", sets, setResult),
     stage,
     h(
       "div",
@@ -121,7 +169,7 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
       position,
       speed,
     ),
-    steps,
+    h("aside", "ucbc-side", info, steps),
   );
   el.append(root);
 
@@ -149,11 +197,10 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
     }
     slider.value = String(frame);
     position.textContent = f.tick ? `tick ${frame} / ${set.ticks.length}` : `start / ${set.ticks.length}`;
-    steps.replaceChildren(
-      ...(f.tick
-        ? f.tick.steps.map((s) => stepView(s, replay!.teams))
-        : [h("p", "ucbc-muted", "Before the first tick.")]),
-    );
+    const rows = f.tick
+      ? f.tick.steps.map((s) => stepView(s, replay!.teams))
+      : [h("tbody", "", h("tr", "", wide(h("span", "ucbc-muted", "Before the first tick."))))];
+    steps.replaceChildren(stepsHead, ...rows);
   }
 
   function seek(to: number) {
@@ -197,6 +244,7 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
     setResult.textContent = `Set ${index + 1}: ${verdict} after ${r.ticks} ticks${r.detail ? ` (${r.detail})` : ""}`;
     slider.max = String(frameCount(set) - 1);
     draw();
+    zoom.fit();
   }
 
   function load(next: Replay) {
@@ -204,7 +252,7 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
     renderer?.destroy();
     replay = next;
     const game = next.config.game;
-    renderer = (options.renderers.find((r) => r.game === game) ?? fallback(game)).mount(stage);
+    renderer = (options.renderers.find((r) => r.game === game) ?? fallback(game)).mount(board, info);
 
     title.textContent = next.teams.map((t) => t.name).join(" vs ");
     const score = next.teams.map((t) => `${t.name} ${next.result.set_wins[t.id] ?? 0}`).join(", ");
@@ -228,17 +276,24 @@ export function createViewer(el: HTMLElement, options: ViewerOptions): Viewer {
     if (target.tagName === "SELECT") return;
     if (target.tagName === "INPUT" && arrows) return;
     if (target.tagName === "BUTTON" && (e.key === " " || e.key === "Enter")) return;
-    const actions: Record<string, () => void> = {
+    // Stepping keys pause playback; space and the zoom keys do not.
+    const stepping: Record<string, () => void> = {
       ArrowLeft: () => seek(frame - 1),
       ArrowRight: () => seek(frame + 1),
       Home: () => seek(0),
       End: () => seek(Infinity),
-      " ": toggle,
     };
-    const action = actions[e.key];
+    const other: Record<string, () => void> = {
+      " ": toggle,
+      "+": () => zoom.zoomBy(1.25),
+      "=": () => zoom.zoomBy(1.25),
+      "-": () => zoom.zoomBy(1 / 1.25),
+      "0": () => zoom.fit(),
+    };
+    const action = stepping[e.key] ?? other[e.key];
     if (!action) return;
     e.preventDefault();
-    if (e.key !== " ") stop();
+    if (stepping[e.key]) stop();
     action();
   });
 

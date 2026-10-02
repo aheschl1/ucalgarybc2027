@@ -213,9 +213,9 @@ seeds (`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
 ## Games
 
 ```text
-ucbc2027    the competition game and the default build. Its rules are not written yet: one
-            query (state: ticks so far) and one action (noop), so every set draws at the
-            tick limit.
+ucbc2027    the competition game and the default build. Labs spawn dinos for bones; dinos
+            move and carry fossils home to raise income. No win condition yet, so every
+            set draws at the tick limit.
 tictactoe   the example game, and what the bot-runtime tests play.
 ```
 

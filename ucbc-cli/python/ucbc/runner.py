@@ -29,13 +29,14 @@ def run_match(
     replay_path: str | Path | None = None,
     summary_path: str | Path | None = None,
     echo_bot_output: bool = False,
+    verbose: bool = False,
     step_ms: int = DEFAULT_STEP_MS,
     memory_bytes: int = DEFAULT_MEMORY_BYTES,
     game_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Play a match between the given bot directories and return the match result.
     ``step_ms`` and ``memory_bytes`` are each bot's budget; ``game_config`` goes to the
-    game as is."""
+    game as is. ``verbose`` prints tick progress with a time estimate to stderr."""
     game = game or default_game()
     names = names or [Path(d).name for d in bot_dirs]
     result = _engine.run_match(
@@ -48,6 +49,7 @@ def run_match(
         replay_path=None if replay_path is None else str(replay_path),
         summary_path=None if summary_path is None else str(summary_path),
         echo_bot_output=echo_bot_output,
+        verbose=verbose,
         step_ms=step_ms,
         memory_bytes=memory_bytes,
         game_config=None if game_config is None else json.dumps(game_config),

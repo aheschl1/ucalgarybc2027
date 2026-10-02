@@ -29,14 +29,14 @@ it("draws the tick, the board, and the set's step order", () => {
       { id: 2, team: 0, type: "dino", pos: { x: 2, y: 0 }, level: 1, health: 10, held: { type: "fossil" } },
     ],
     fossils: [{ x: 3, y: 0 }],
-    teams: [{ bones: 50 }, { bones: 40 }],
+    teams: [{ bones: 50, fossils: 0 }, { bones: 40, fossils: 2 }],
   };
   const tick: Tick = { number: 2, state_after: state, steps: [] };
   const el = document.createElement("div");
   const instance = renderer.mount(el);
   instance.draw({ state, tick, set, teams });
 
-  expect(el.querySelector(".u27-state")?.textContent).toBe("tick 3 · bones alpha 50 · beta 40");
+  expect(el.querySelector(".u27-state")?.textContent).toBe("tick 3 · alpha 50 bones 0 fossils · beta 40 bones 2 fossils");
   const tiles = el.querySelectorAll(".u27-tile");
   expect(tiles).toHaveLength(4);
   expect(tiles[0]?.className).toBe("u27-tile u27-lab u27-team-1");

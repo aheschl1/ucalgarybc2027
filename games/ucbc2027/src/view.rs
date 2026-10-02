@@ -32,6 +32,16 @@ pub enum UnitView {
     },
 }
 
+/// Where a dropped item went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Dropped {
+    /// Left on the tile.
+    Placed,
+    /// Into your lab; your team's deposited fossils now.
+    Deposited { fossils: u32 },
+}
+
 /// The dino a spawn created.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct Spawned {
@@ -50,6 +60,8 @@ pub struct UnitEntry {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct TeamView {
     pub bones: u32,
+    /// Deposited at the lab.
+    pub fossils: u32,
 }
 
 /// The whole set after a tick.

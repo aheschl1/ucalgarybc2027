@@ -59,6 +59,16 @@ export type Action =
       type: "move";
       x: number;
       y: number;
+    }
+  | {
+      type: "grab";
+      x: number;
+      y: number;
+    }
+  | {
+      type: "drop";
+      x: number;
+      y: number;
     };
 
 export interface Ucbc2027Api {
@@ -96,6 +106,10 @@ export interface Coord {
 }
 export interface TeamView {
   bones: number;
+  /**
+   * Deposited at the lab.
+   */
+  fossils: number;
 }
 /**
  * A tile: `x` grows to the right, `y` downward.

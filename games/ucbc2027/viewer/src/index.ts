@@ -4,7 +4,7 @@ import type { GameRenderer } from "@ucbc/viewer";
 
 import type { Snapshot } from "./api.gen.ts";
 
-/** Draws the tick and each team's bones, the board, and the set's step order.
+/** Draws the tick, each team's bones and fossils, the board, and the set's step order.
  * Every game package exports its renderer under this name; the viewer's build finds it. */
 export const renderer: GameRenderer = {
   game: "ucbc2027",
@@ -23,8 +23,8 @@ export const renderer: GameRenderer = {
         if (typeof current?.tick !== "number" || !Array.isArray(current.environment)) {
           throw new Error(`not a ucbc2027 state: ${JSON.stringify(s)}`);
         }
-        const bones = current.teams.map((t, i) => `${teams[i]?.name ?? i} ${t.bones}`).join(" · ");
-        state.textContent = `tick ${current.tick} · bones ${bones}`;
+        const scores = current.teams.map((t, i) => `${teams[i]?.name ?? i} ${t.bones} bones ${t.fossils} fossils`);
+        state.textContent = [`tick ${current.tick}`, ...scores].join(" · ");
 
         const width = current.environment[0]?.length ?? 0;
         board.style.gridTemplateColumns = `repeat(${width}, auto)`;

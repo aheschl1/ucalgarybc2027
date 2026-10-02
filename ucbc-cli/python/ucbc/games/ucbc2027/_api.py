@@ -24,6 +24,28 @@ class Coord:
 
 
 @dataclass(frozen=True)
+class DroppedDeposited:
+    """Into your lab; your team's deposited fossils now."""
+
+    fossils: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            fossils=d["fossils"],
+        )
+
+
+@dataclass(frozen=True)
+class DroppedPlaced:
+    """Left on the tile."""
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
 class EnvironmentEmpty:
 
     @classmethod
@@ -119,6 +141,19 @@ class UnitViewLab:
         )
 
 
+Dropped = DroppedPlaced | DroppedDeposited
+"""Where a dropped item went."""
+
+
+def _from_Dropped(d: dict[str, Any]) -> Dropped:
+    match d["type"]:
+        case "placed":
+            return DroppedPlaced._from(d)
+        case "deposited":
+            return DroppedDeposited._from(d)
+    raise ValueError(f"unknown Dropped type {d['type']!r}")
+
+
 Environment = EnvironmentEmpty | EnvironmentWall | EnvironmentLab
 """What a tile is made of. Fixed for the whole set."""
 
@@ -199,3 +234,13 @@ class Ucbc2027Api(Handle):
         """Dino only, once per turn: to a free tile within move range. Replies with the
         new position."""
         return Coord._from(self._act({"type": "move", "x": x, "y": y}))
+
+    def grab(self, x: int, y: int) -> ItemView:
+        """Dino only: pick up the fossil on a tile within action range. A dino holds one
+        thing at a time. Free, as often as you like."""
+        return _from_ItemView(self._act({"type": "grab", "x": x, "y": y}))
+
+    def drop(self, x: int, y: int) -> Dropped:
+        """Dino only: put down what it holds, on a free tile within action range or on
+        your own lab to deposit it. Free, as often as you like."""
+        return _from_Dropped(self._act({"type": "drop", "x": x, "y": y}))

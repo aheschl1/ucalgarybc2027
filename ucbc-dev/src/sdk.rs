@@ -473,7 +473,9 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
                 let _ = writeln!(out, "@dataclass(frozen=True)\nclass {name}:");
                 if let Some(doc) = &named.doc {
                     docstring(&mut out, "    ", doc);
-                    out.push('\n');
+                    if !fields.is_empty() {
+                        out.push('\n');
+                    }
                 }
                 for f in fields {
                     let _ = writeln!(out, "    {}: {}", f.name, py_type(&f.ty));

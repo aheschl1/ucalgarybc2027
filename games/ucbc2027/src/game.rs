@@ -10,7 +10,7 @@ use crate::map::{Environment, Map};
 use crate::rules;
 use crate::state::{Item, State};
 use crate::unit::{Lab, Unit};
-use crate::view::{ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};
+use crate::view::{Dropped, ItemView, Snapshot, Spawned, TeamView, UnitEntry, UnitView};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -35,6 +35,12 @@ pub enum Action {
     /// Dino only, once per turn: to a free tile within move range. Replies with the
     /// new position.
     Move(Request<Coord, Coord>),
+    /// Dino only: pick up the fossil on a tile within action range. A dino holds one
+    /// thing at a time. Free, as often as you like.
+    Grab(Request<Coord, ItemView>),
+    /// Dino only: put down what it holds, on a free tile within action range or on
+    /// your own lab to deposit it. Free, as often as you like.
+    Drop(Request<Coord, Dropped>),
 }
 
 pub struct Ucbc2027 {
@@ -51,7 +57,7 @@ pub(crate) struct Turn {
 }
 
 impl Ucbc2027 {
-    fn item_view(&self, item: Item) -> ItemView {
+    pub(crate) fn item_view(&self, item: Item) -> ItemView {
         match item {
             Item::Dino(id) => {
                 let bot = &self.bots[id];
@@ -142,6 +148,8 @@ impl Game for Ucbc2027 {
             Action::Noop(a) => Ok(a.reply(())),
             Action::Spawn(a) => Ok(a.reply(self.spawn(bot, *a)?)),
             Action::Move(a) => Ok(a.reply(self.move_to(bot, *a)?)),
+            Action::Grab(a) => Ok(a.reply(self.grab(bot, *a)?)),
+            Action::Drop(a) => Ok(a.reply(self.drop(bot, *a)?)),
         }
     }
 
@@ -158,7 +166,7 @@ impl Game for Ucbc2027 {
 
     fn end_tick(&mut self) {
         for team in &mut self.state.teams {
-            team.bones += rules::BASE_INCOME;
+            team.bones += rules::income(team);
         }
         self.state.tick += 1;
     }
@@ -191,7 +199,10 @@ impl Game for Ucbc2027 {
             teams: state
                 .teams
                 .iter()
-                .map(|t| TeamView { bones: t.bones })
+                .map(|t| TeamView {
+                    bones: t.bones,
+                    fossils: t.fossils,
+                })
                 .collect(),
         }
     }

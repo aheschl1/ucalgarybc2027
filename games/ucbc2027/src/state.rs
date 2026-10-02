@@ -13,14 +13,24 @@ pub enum Item {
     Fossil,
 }
 
+impl Item {
+    /// Whether a dino can pick it up.
+    pub fn carriable(self) -> bool {
+        matches!(self, Item::Fossil)
+    }
+}
+
 pub struct TeamState {
     pub bones: u32,
+    /// Deposited at the lab.
+    pub fossils: u32,
 }
 
 impl TeamState {
     pub fn new() -> Self {
         Self {
             bones: rules::START_BONES,
+            fossils: 0,
         }
     }
 }

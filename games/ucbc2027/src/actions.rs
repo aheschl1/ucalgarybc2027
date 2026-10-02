@@ -5,10 +5,11 @@ use ucbc_engine::{ActionError, BotId};
 
 use crate::coord::Coord;
 use crate::game::Ucbc2027;
+use crate::map::Environment;
 use crate::rules;
 use crate::state::Item;
 use crate::unit::{Dino, Unit};
-use crate::view::Spawned;
+use crate::view::{Dropped, ItemView, Spawned};
 
 fn invalid(message: &str) -> ActionError {
     ActionError::Invalid(message.into())
@@ -59,5 +60,62 @@ impl Ucbc2027 {
         dino.pos = to;
         self.turn.moved = true;
         Ok(to)
+    }
+
+    pub(crate) fn grab(&mut self, bot: BotId, at: Coord) -> Result<ItemView, ActionError> {
+        let dino = self.bots[bot]
+            .as_dino_mut()
+            .ok_or_else(|| invalid("only a dino can grab"))?;
+        if dino.held.is_some() {
+            return Err(invalid("already holding something"));
+        }
+        if dino.pos.dist(at) > rules::stats(dino).action_range {
+            return Err(invalid("out of range"));
+        }
+        let item = match self.state.items.get(at).copied() {
+            None => return Err(invalid("off the board")),
+            Some(None) => return Err(invalid("nothing there")),
+            Some(Some(item)) if !item.carriable() => return Err(invalid("cannot carry that")),
+            Some(Some(item)) => item,
+        };
+        self.state.items[at] = None;
+        dino.held = Some(item);
+        Ok(self.item_view(item))
+    }
+
+    pub(crate) fn drop(&mut self, bot: BotId, at: Coord) -> Result<Dropped, ActionError> {
+        let team = self.bots[bot].team();
+        let dino = self.bots[bot]
+            .as_dino_mut()
+            .ok_or_else(|| invalid("only a dino can drop"))?;
+        let Some(item) = dino.held else {
+            return Err(invalid("holding nothing"));
+        };
+        if dino.pos.dist(at) > rules::stats(dino).action_range {
+            return Err(invalid("out of range"));
+        }
+        let deposit = match self.state.map.env(at) {
+            None => return Err(invalid("off the board")),
+            Some(Environment::Lab { team: owner }) if owner != team.0 => {
+                return Err(invalid("not your lab"));
+            }
+            Some(Environment::Lab { .. }) if item != Item::Fossil => {
+                return Err(invalid("only fossils go in the lab"));
+            }
+            Some(Environment::Lab { .. }) => true,
+            Some(_) if !self.state.is_free(at) => return Err(invalid("the tile is not free")),
+            Some(_) => false,
+        };
+        dino.held = None;
+        if deposit {
+            let team = self.state.team_mut(team);
+            team.fossils += 1;
+            Ok(Dropped::Deposited {
+                fossils: team.fossils,
+            })
+        } else {
+            self.state.items[at] = Some(item);
+            Ok(Dropped::Placed)
+        }
     }
 }

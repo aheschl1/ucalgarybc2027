@@ -2,7 +2,7 @@
 
 use serde_json::{Value, json};
 use ucbc_2027::Ucbc2027;
-use ucbc_2027::rules::{BASE_INCOME, SPAWN_COST, START_BONES};
+use ucbc_2027::rules::{BASE_INCOME, INCOME_PER_FOSSIL, SPAWN_COST, START_BONES};
 use ucbc_engine::{ActionError, BotFailure, BotId, DynGame, Game, SetSetup, TeamId};
 
 const LAB0: BotId = BotId(0);
@@ -20,6 +20,33 @@ fn spawn(game: &mut dyn DynGame, bot: BotId, x: u64, y: u64) -> Result<Value, Ac
 
 fn go(game: &mut dyn DynGame, bot: BotId, x: u64, y: u64) -> Result<Value, ActionError> {
     game.apply_action(bot, &json!({"type": "move", "x": x, "y": y}))
+}
+
+fn grab(game: &mut dyn DynGame, bot: BotId, x: u64, y: u64) -> Result<Value, ActionError> {
+    game.apply_action(bot, &json!({"type": "grab", "x": x, "y": y}))
+}
+
+fn put(game: &mut dyn DynGame, bot: BotId, x: u64, y: u64) -> Result<Value, ActionError> {
+    game.apply_action(bot, &json!({"type": "drop", "x": x, "y": y}))
+}
+
+/// One move per turn along `path`.
+fn walk(game: &mut dyn DynGame, bot: BotId, path: &[(u64, u64)]) {
+    for &(x, y) in path {
+        go(game, bot, x, y).unwrap();
+        game.end_step(bot);
+    }
+}
+
+fn held(game: &dyn DynGame, bot: BotId) -> Value {
+    game.handle_query(bot, &json!({"type": "me"})).unwrap()["held"].clone()
+}
+
+/// A team 0 dino at (5, 6), next to the fossil at (6, 7).
+fn by_fossil(game: &mut dyn DynGame) -> BotId {
+    let dino = dino_at(game, 3, 7);
+    walk(game, dino, &[(4, 6), (5, 6)]);
+    dino
 }
 
 fn item(game: &dyn DynGame, x: u64, y: u64) -> Value {
@@ -168,4 +195,99 @@ fn a_move_stays_on_the_board() {
     let spawned = spawn(g.as_mut(), LAB1, 15, 7).unwrap();
     let dino = BotId(spawned["bot_id"].as_u64().unwrap());
     refused(go(g.as_mut(), dino, 16, 7), "off the board");
+}
+
+#[test]
+fn grab_and_put_are_free_and_hold_one_thing() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    assert_eq!(
+        grab(g.as_mut(), dino, 6, 7).unwrap(),
+        json!({"type": "fossil"})
+    );
+    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), 6, 7), Value::Null);
+    refused(grab(g.as_mut(), dino, 6, 7), "already holding");
+    assert_eq!(
+        put(g.as_mut(), dino, 6, 6).unwrap(),
+        json!({"type": "placed"})
+    );
+    refused(put(g.as_mut(), dino, 6, 6), "holding nothing");
+    assert_eq!(item(g.as_ref(), 6, 6), json!({"type": "fossil"}));
+    // Again in the same turn, and the move is still unused.
+    grab(g.as_mut(), dino, 6, 6).unwrap();
+    put(g.as_mut(), dino, 6, 7).unwrap();
+    go(g.as_mut(), dino, 5, 7).unwrap();
+}
+
+#[test]
+fn grab_and_put_refuse_what_the_rules_forbid() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    let other = dino_at(g.as_mut(), 3, 7);
+    walk(g.as_mut(), other, &[(4, 7)]);
+    refused(grab(g.as_mut(), dino, 7, 7), "out of range");
+    refused(grab(g.as_mut(), dino, 6, 6), "nothing there");
+    refused(grab(g.as_mut(), dino, 4, 7), "cannot carry");
+    refused(grab(g.as_mut(), dino, 5, 6), "cannot carry"); // itself
+    refused(grab(g.as_mut(), LAB0, 0, 7), "only a dino");
+    assert_eq!(item(g.as_ref(), 4, 7)["type"], "dino");
+    assert_eq!(item(g.as_ref(), 6, 7), json!({"type": "fossil"}));
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    refused(put(g.as_mut(), dino, 4, 7), "not free");
+    refused(put(g.as_mut(), dino, 5, 5), "not free"); // a wall
+    refused(put(g.as_mut(), dino, 5, 6), "not free"); // itself
+    refused(put(g.as_mut(), dino, 7, 7), "out of range");
+    refused(put(g.as_mut(), LAB0, 0, 7), "only a dino");
+    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+}
+
+#[test]
+fn a_fossil_dropped_on_your_lab_raises_income() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    walk(g.as_mut(), dino, &[(4, 6), (3, 7)]);
+    let deposited = put(g.as_mut(), dino, 2, 7).unwrap();
+    assert_eq!(deposited, json!({"type": "deposited", "fossils": 1}));
+    assert_eq!(held(g.as_ref(), dino), Value::Null);
+    let before = bones(g.as_ref(), LAB0);
+    g.end_tick();
+    let earned = bones(g.as_ref(), LAB0) - before;
+    assert_eq!(earned, u64::from(BASE_INCOME + INCOME_PER_FOSSIL));
+    let teams = &g.snapshot()["teams"];
+    assert_eq!(teams[0]["fossils"], json!(1));
+    assert_eq!(teams[1]["fossils"], json!(0));
+}
+
+#[test]
+fn a_fossil_cannot_go_into_the_enemy_lab() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    let path: Vec<(u64, u64)> = (6..=12).map(|x| (x, 6)).collect();
+    walk(g.as_mut(), dino, &path);
+    refused(put(g.as_mut(), dino, 13, 7), "not your lab");
+    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(g.snapshot()["teams"][1]["fossils"], json!(0));
+}
+
+#[test]
+fn grab_stays_on_the_board() {
+    let mut g = game();
+    let spawned = spawn(g.as_mut(), LAB1, 15, 7).unwrap();
+    let dino = BotId(spawned["bot_id"].as_u64().unwrap());
+    refused(grab(g.as_mut(), dino, 16, 7), "off the board");
+}
+
+#[test]
+fn a_failed_carrier_leaves_its_fossil_behind() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    g.bot_failed(dino, &BotFailure::exception("RuntimeError", "boom"));
+    assert_eq!(item(g.as_ref(), 5, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), 6, 7), Value::Null);
+    let fossils = g.snapshot()["fossils"].as_array().unwrap().clone();
+    assert!(fossils.contains(&json!({"x": 5, "y": 6})));
 }

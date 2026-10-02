@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { cleanup, render } from "@testing-library/react";
-import type { SetReplay, Tick } from "@ucbc/viewer";
+import { ViewerContext, type Frame, type SetReplay, type Tick } from "@ucbc/viewer";
+import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import type { Board } from "./api.gen.ts";
@@ -9,6 +10,10 @@ import { renderer } from "./index.tsx";
 
 const { Board, Info } = renderer;
 afterEach(cleanup);
+
+function at(frame: Frame, node: ReactNode) {
+  return <ViewerContext value={{ frame, selected: null, select: () => {} }}>{node}</ViewerContext>;
+}
 
 it("draws marks, highlights this tick's placements, and names X and O", () => {
   const board: Board = { cells: ["x", "empty", "empty", "empty", "empty", "empty", "empty", "empty", "o"] };
@@ -32,17 +37,16 @@ it("draws marks, highlights this tick's placements, and names X and O", () => {
     { id: 1, name: "beta" },
   ];
 
-  const el = render(<Board frame={{ state: board, tick, set, teams }} selected={null} onSelect={() => {}} />);
-  const info = render(<Info frame={{ state: board, tick, set, teams }} selected={null} />).container;
+  const frame = { state: board, tick, set, teams };
+  const el = render(at(frame, <Board />));
+  const info = render(at(frame, <Info />)).container;
 
   const cells = [...el.container.querySelectorAll(".ttt-cell")];
   expect(cells.map((c) => c.textContent).join(",")).toBe("X,,,,,,,,O");
   expect(cells.map((c, i) => (c.classList.contains("ttt-placed") ? i : -1)).filter((i) => i >= 0)).toEqual([0, 8]);
   expect(info.textContent).toBe("X beta · O alpha");
 
-  el.rerender(
-    <Board frame={{ state: set.initial_state, tick: null, set, teams }} selected={null} onSelect={() => {}} />,
-  );
+  el.rerender(at({ state: set.initial_state, tick: null, set, teams }, <Board />));
   expect(el.container.querySelectorAll(".ttt-placed")).toHaveLength(0);
 });
 
@@ -59,9 +63,7 @@ it("rejects a board it does not recognise", () => {
   // Cells as integers: replays from before `Cell` serialized as strings.
   const old = { cells: [1, 0, 0, 0, 0, 0, 2, 0, 0] };
   for (const state of [old, null]) {
-    expect(() =>
-      render(<Board frame={{ state, tick: null, set, teams: [] }} selected={null} onSelect={() => {}} />),
-    ).toThrow("not a tic-tac-toe board");
+    expect(() => render(at({ state, tick: null, set, teams: [] }, <Board />))).toThrow("not a tic-tac-toe board");
   }
   vi.restoreAllMocks();
 });

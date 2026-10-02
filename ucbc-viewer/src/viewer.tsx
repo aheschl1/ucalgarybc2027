@@ -3,6 +3,7 @@ import "./viewer.css";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
+import { ViewerContext, type ViewerState } from "./hooks.ts";
 import type { GameRenderer } from "./renderer.ts";
 import type { BotId, Replay, SetReplay, Step, TeamId, TeamInfo, Tick } from "./replay.gen.ts";
 import { frameAt, frameCount } from "./timeline.ts";
@@ -241,9 +242,10 @@ function useZoom() {
   return { stage, board, zoom };
 }
 
-/** Plays a replay. The game's renderer draws the board and its info panel; the viewer owns
- * sets, playback, zoom, the per-tick step table, and the selected bot and its output. Give it a new `key` to start another
- * replay from the beginning. */
+/** Plays a replay. The game's renderer draws the board and its info panel, reading the frame
+ * and the selected bot from `ViewerContext`; the viewer owns sets, playback, zoom, the
+ * per-tick step table, and the selected bot and its output. Give it a new `key` to start
+ * another replay from the beginning. */
 export function Viewer({ replay, renderers }: ViewerProps) {
   const [setIndex, setSetIndex] = useState(0);
   const [frame, setFrame] = useState(0);
@@ -259,7 +261,9 @@ export function Viewer({ replay, renderers }: ViewerProps) {
   const renderer = renderers.find((r) => r.game === game);
   const set = replay.sets[setIndex]!;
   const last = frameCount(set) - 1;
-  const current = frameAt(set, teams, frame);
+  const current = useMemo(() => frameAt(set, teams, frame), [set, teams, frame]);
+  // What the game's components read through the hooks.
+  const shared = useMemo<ViewerState>(() => ({ frame: current, selected, select: setSelected }), [current, selected]);
   const byBot = useMemo(() => stepsByBot(set), [set]);
 
   function seek(to: number) {
@@ -341,109 +345,113 @@ export function Viewer({ replay, renderers }: ViewerProps) {
 
   return (
     <div className="ucbc-viewer" tabIndex={0} ref={root} onKeyDown={onKeyDown}>
-      <header className="ucbc-header">
-        <div className="ucbc-title">{teams.map((t) => t.name).join(" vs ")}</div>
-        <div className="ucbc-result">{`${winner == null ? "Tie" : `${teamName(teams, winner)} wins`} (${score})`}</div>
-      </header>
-      <div className="ucbc-bar">
-        <nav className="ucbc-sets">
-          {replay.sets.map((s, i) => (
-            <Button key={s.index} active={i === setIndex} onClick={() => selectSet(i)}>
-              {`Set ${s.index + 1}`}
-            </Button>
-          ))}
-        </nav>
-        <div className="ucbc-set-result">
-          {`Set ${setIndex + 1}: ${verdict} after ${r.ticks} ticks${r.detail ? ` (${r.detail})` : ""}`}
+      <ViewerContext value={shared}>
+        <header className="ucbc-header">
+          <div className="ucbc-title">{teams.map((t) => t.name).join(" vs ")}</div>
+          <div className="ucbc-result">
+            {`${winner == null ? "Tie" : `${teamName(teams, winner)} wins`} (${score})`}
+          </div>
+        </header>
+        <div className="ucbc-bar">
+          <nav className="ucbc-sets">
+            {replay.sets.map((s, i) => (
+              <Button key={s.index} active={i === setIndex} onClick={() => selectSet(i)}>
+                {`Set ${s.index + 1}`}
+              </Button>
+            ))}
+          </nav>
+          <div className="ucbc-set-result">
+            {`Set ${setIndex + 1}: ${verdict} after ${r.ticks} ticks${r.detail ? ` (${r.detail})` : ""}`}
+          </div>
         </div>
-      </div>
-      <div className="ucbc-stage" ref={stage}>
-        <div className="ucbc-board" ref={board}>
-          {/* A throwing renderer blanks the board and shows why, until the next frame. */}
-          <ErrorBoundary
-            fallback={null}
-            resetKeys={[current.state]}
-            onError={(e) => setDrawError(`Cannot draw this frame: ${e instanceof Error ? e.message : String(e)}`)}
-            onReset={() => setDrawError("")}
-          >
-            {renderer ? (
-              <renderer.Board frame={current} selected={selected} onSelect={setSelected} />
-            ) : (
-              <pre className="ucbc-raw">{JSON.stringify(current.state, null, 2)}</pre>
-            )}
-          </ErrorBoundary>
-        </div>
-        <div className="ucbc-zoom">
-          <Button title="Zoom out (-)" onClick={() => zoom.current?.zoomBy(1 / 1.25)}>
-            −
-          </Button>
-          <Button title="Fit (0, double-click)" onClick={() => zoom.current?.fit()}>
-            Fit
-          </Button>
-          <Button title="Zoom in (+)" onClick={() => zoom.current?.zoomBy(1.25)}>
-            +
-          </Button>
-        </div>
-        {drawError ? <div className="ucbc-error ucbc-draw-error">{drawError}</div> : null}
-      </div>
-      <div className="ucbc-controls">
-        <Button title="First (Home)" onClick={() => seek(0)}>
-          ⏮
-        </Button>
-        <Button title="Previous (←)" onClick={() => seek(frame - 1)}>
-          ‹
-        </Button>
-        <Button title="Play (space)" onClick={toggle}>
-          {playing ? "⏸" : "▶"}
-        </Button>
-        <Button title="Next (→)" onClick={() => seek(frame + 1)}>
-          ›
-        </Button>
-        <Button title="Last (End)" onClick={() => seek(Infinity)}>
-          ⏭
-        </Button>
-        <input
-          className="ucbc-slider"
-          type="range"
-          min={0}
-          max={last}
-          value={frame}
-          onChange={(e) => {
-            setPlaying(false);
-            seek(Number(e.target.value));
-          }}
-        />
-        <span className="ucbc-position">
-          {current.tick ? `tick ${frame} / ${set.ticks.length}` : `start / ${set.ticks.length}`}
-        </span>
-        <select className="ucbc-speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-          {SPEEDS.map((s) => (
-            <option key={s} value={s}>{`${s}/s`}</option>
-          ))}
-        </select>
-      </div>
-      <aside className="ucbc-side">
-        <div className="ucbc-info">
-          {renderer ? (
-            <ErrorBoundary fallback={null} resetKeys={[current.state]}>
-              <renderer.Info frame={current} selected={selected} />
+        <div className="ucbc-stage" ref={stage}>
+          <div className="ucbc-board" ref={board}>
+            {/* A throwing renderer blanks the board and shows why, until the next frame. */}
+            <ErrorBoundary
+              fallback={null}
+              resetKeys={[current.state]}
+              onError={(e) => setDrawError(`Cannot draw this frame: ${e instanceof Error ? e.message : String(e)}`)}
+              onReset={() => setDrawError("")}
+            >
+              {renderer ? (
+                <renderer.Board />
+              ) : (
+                <pre className="ucbc-raw">{JSON.stringify(current.state, null, 2)}</pre>
+              )}
             </ErrorBoundary>
-          ) : (
-            <div className="ucbc-error">{`No renderer for game "${game}".`}</div>
-          )}
+          </div>
+          <div className="ucbc-zoom">
+            <Button title="Zoom out (-)" onClick={() => zoom.current?.zoomBy(1 / 1.25)}>
+              −
+            </Button>
+            <Button title="Fit (0, double-click)" onClick={() => zoom.current?.fit()}>
+              Fit
+            </Button>
+            <Button title="Zoom in (+)" onClick={() => zoom.current?.zoomBy(1.25)}>
+              +
+            </Button>
+          </div>
+          {drawError ? <div className="ucbc-error ucbc-draw-error">{drawError}</div> : null}
         </div>
-        {selected == null ? null : (
-          <BotLog
-            bot={selected}
-            steps={byBot.get(selected) ?? []}
-            frame={frame}
-            teams={teams}
-            onSeek={seekPaused}
-            onClose={() => setSelected(null)}
+        <div className="ucbc-controls">
+          <Button title="First (Home)" onClick={() => seek(0)}>
+            ⏮
+          </Button>
+          <Button title="Previous (←)" onClick={() => seek(frame - 1)}>
+            ‹
+          </Button>
+          <Button title="Play (space)" onClick={toggle}>
+            {playing ? "⏸" : "▶"}
+          </Button>
+          <Button title="Next (→)" onClick={() => seek(frame + 1)}>
+            ›
+          </Button>
+          <Button title="Last (End)" onClick={() => seek(Infinity)}>
+            ⏭
+          </Button>
+          <input
+            className="ucbc-slider"
+            type="range"
+            min={0}
+            max={last}
+            value={frame}
+            onChange={(e) => {
+              setPlaying(false);
+              seek(Number(e.target.value));
+            }}
           />
-        )}
-        <Steps tick={current.tick} teams={teams} selected={selected} onSelect={setSelected} />
-      </aside>
+          <span className="ucbc-position">
+            {current.tick ? `tick ${frame} / ${set.ticks.length}` : `start / ${set.ticks.length}`}
+          </span>
+          <select className="ucbc-speed" value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+            {SPEEDS.map((s) => (
+              <option key={s} value={s}>{`${s}/s`}</option>
+            ))}
+          </select>
+        </div>
+        <aside className="ucbc-side">
+          <div className="ucbc-info">
+            {renderer ? (
+              <ErrorBoundary fallback={null} resetKeys={[current.state]}>
+                <renderer.Info />
+              </ErrorBoundary>
+            ) : (
+              <div className="ucbc-error">{`No renderer for game "${game}".`}</div>
+            )}
+          </div>
+          {selected == null ? null : (
+            <BotLog
+              bot={selected}
+              steps={byBot.get(selected) ?? []}
+              frame={frame}
+              teams={teams}
+              onSeek={seekPaused}
+              onClose={() => setSelected(null)}
+            />
+          )}
+          <Steps tick={current.tick} teams={teams} selected={selected} onSelect={setSelected} />
+        </aside>
+      </ViewerContext>
     </div>
   );
 }

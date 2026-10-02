@@ -1,12 +1,13 @@
 import "./board.css";
 
-import type { FrameProps, GameRenderer } from "@ucbc/viewer";
+import { useFrame, type GameRenderer } from "@ucbc/viewer";
 
 import type { Action, Board as State } from "./api.gen.ts";
 
 const SYMBOL = { empty: "", x: "X", o: "O" } as const;
 
-function Board({ frame: { state, tick } }: FrameProps) {
+function Board() {
+  const { state, tick } = useFrame();
   const board = state as State;
   if (board?.cells?.length !== 9 || !board.cells.every((c) => Object.hasOwn(SYMBOL, c))) {
     throw new Error(`not a tic-tac-toe board: ${JSON.stringify(state)}`);
@@ -23,7 +24,8 @@ function Board({ frame: { state, tick } }: FrameProps) {
   );
 }
 
-function Info({ frame: { set, teams } }: FrameProps) {
+function Info() {
+  const { set, teams } = useFrame();
   const x = teams[set.first_team]?.name ?? "";
   const o = teams.find((t) => t.id !== set.first_team)?.name ?? "";
   return <div className="ucbc-muted">{`X ${x} · O ${o}`}</div>;

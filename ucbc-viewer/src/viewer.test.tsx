@@ -3,7 +3,8 @@
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { BoardProps, Frame, GameRenderer } from "./renderer.ts";
+import { useFrame, useSelection, type ViewerState } from "./hooks.ts";
+import type { Frame, GameRenderer } from "./renderer.ts";
 import type { Replay } from "./replay.gen.ts";
 import { formatAction, Viewer } from "./viewer.tsx";
 
@@ -54,12 +55,12 @@ afterEach(cleanup);
 
 function mount(renderers: GameRenderer[], game = replay.config.game) {
   const frames: Frame[] = [];
-  let board: BoardProps | undefined;
+  let board: Pick<ViewerState, "selected" | "select"> | undefined;
   const counter: GameRenderer = {
     game: "counter",
-    Board: (props) => {
-      frames.push(props.frame);
-      board = props;
+    Board: () => {
+      frames.push(useFrame());
+      board = useSelection();
       return null;
     },
     Info: () => null,
@@ -72,7 +73,7 @@ function mount(renderers: GameRenderer[], game = replay.config.game) {
   const text = (selector: string) => root.querySelector(selector)?.textContent;
   // What the board shows selected, and clicking a bot on it.
   const selected = () => board?.selected;
-  const select = (bot: number | null) => act(() => board?.onSelect(bot));
+  const select = (bot: number | null) => act(() => board?.select(bot));
   return { root, frames, key, text, selected, select };
 }
 
@@ -127,8 +128,8 @@ describe("Viewer", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const picky: GameRenderer = {
       game: "counter",
-      Board: ({ frame }) => {
-        if (frame.state === 2) throw new Error("bad state");
+      Board: () => {
+        if (useFrame().state === 2) throw new Error("bad state");
         return null;
       },
       Info: () => null,

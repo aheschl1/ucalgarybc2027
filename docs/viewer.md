@@ -26,8 +26,9 @@ the web app.
 └────────────────────────────────────────┴─────────────────────────────┘
 ```
 
-Only `Board` and `Info` hold game code. `Board` gets `onSelect`; the core owns the
-selected bot. A renderer throws on state it does not recognise and the board blanks for
+Only `Board` and `Info` hold game code. They take no props: `useFrame()` gives the frame
+on show and `useSelection()` the selected bot and `select`, which the core owns. Tests
+render them inside a `ViewerContext`. A renderer throws on state it does not recognise and the board blanks for
 that frame. A game with no renderer shows its state as raw JSON.
 
 ## Where to change what
@@ -38,7 +39,7 @@ step table, bot log, selection         ucbc-viewer/src/viewer.tsx
 frame <-> tick mapping                 ucbc-viewer/src/timeline.ts   (frame 0 = initial_state)
 zoom, pan, click vs drag               ucbc-viewer/src/zoom.ts
 colours, team colours                  ucbc-viewer/src/viewer.css    (--ucbc-* on .ucbc-viewer)
-the renderer contract                  ucbc-viewer/src/renderer.ts
+the renderer contract, hooks           ucbc-viewer/src/renderer.ts, hooks.ts
 a game's board and info panel          games/<game>/viewer/src/index.tsx and its css
 loading a replay (fetch, file drop)    ucbc-viewer/src/app.tsx
 serving it for `ucbc view`             ucbc-cli/python/ucbc/viewer/__init__.py

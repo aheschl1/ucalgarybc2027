@@ -1,25 +1,15 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { get, logOut, makeApi, type User } from "./api";
+import Docs from "./Docs";
 import Login from "./Login";
 import Profile from "./Profile";
 import Register from "./Register";
 import Tree from "./Tree";
 import Viewer from "./Viewer";
 
-// Its markdown renderer is only fetched when the page is opened.
-const Docs = lazy(() => import("./Docs"));
 // Public: in both route tables below.
-const docs = (
-  <Route
-    path="/docs"
-    element={
-      <Suspense fallback={null}>
-        <Docs />
-      </Suspense>
-    }
-  />
-);
+const docs = <Route path="/docs" element={<Docs />} />;
 
 export default function App() {
   // undefined until the API says whether the session cookie is live.

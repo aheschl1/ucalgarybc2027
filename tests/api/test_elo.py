@@ -147,3 +147,21 @@ async def test_a_lost_lease_rates_nothing(
     # The holder's result counts once.
     await matches.finish_match(db, taken, replay(match_id, [1, 1, 1]))
     assert await ratings(db) == {ROOT: (784, 1), ALICE: (816, 1)}
+
+
+async def test_anyone_reads_ratings(
+    admin_client: AsyncClient, client: AsyncClient, db: DBConnection, bots: dict[int, str]
+) -> None:
+    await play(admin_client, db, [bots[ROOT], bots[ALICE]], [1, 1, 0])
+    alice, root = elo.step(800, 800, 2 / 3)
+
+    # `client` is signed out. Ratings are rounded; join codes stay hidden.
+    r = await client.get("/teams/elo")
+    assert r.status_code == 200, r.text
+    assert r.json() == [
+        {"id": ALICE, "name": "Alice", "elo": round(alice), "matches": 1},
+        {"id": ROOT, "name": "Root", "elo": round(root), "matches": 1},
+    ]
+    r = await client.get(f"/teams/{ROOT}/elo")
+    assert r.json() == {"id": ROOT, "name": "Root", "elo": round(root), "matches": 1}
+    assert (await client.get("/teams/99/elo")).status_code == 404

@@ -107,6 +107,18 @@ sets through these endpoints and hands the assembled replay to the viewer (`ucbc
 it shows exactly the matches the API shows the caller. It bundles every game's renderer
 (`ucbc-viewer/vite/games.ts`).
 
+## Elo
+
+Each participant team has a rating, `teams.elo`, starting at 800, and `teams.elo_matches`,
+the number of matches that moved it. When the worker finishes a match it steps both slots'
+teams in the transaction that marks the match done (`services/matches.py::finish_match`), so
+a lost lease rates nothing. The score is a team's share of the sets, a drawn set worth half;
+K is 32 (`services/elo.py`). Every done match counts, user matches included; a team in both
+slots is skipped. One rating covers every game.
+
+`GET /api/teams/elo` (every team, highest first) and `GET /api/teams/{id}/elo` need no login
+and show the rating rounded, with the match count.
+
 ## Settings
 
 `UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,

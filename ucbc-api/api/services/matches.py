@@ -7,10 +7,12 @@ from api.models.matches import (
     Match,
     MatchEnqueue,
     MatchReplay,
+    MatchResult,
     MatchRow,
     TeamInfo,
 )
 from api.models.users import User
+from api.services import elo
 from api.services.submissions import get_submission
 
 LIST_LIMIT = 50
@@ -87,8 +89,9 @@ async def claim_match(db: DBConnection, worker: str, lease: timedelta) -> MatchR
 
 
 async def finish_match(db: DBConnection, match: MatchRow, replay: MatchReplay) -> None:
-    """Records the replay and marks the match done. Sets from an earlier attempt are
-    replaced, so a rerun after a lost worker leaves one consistent replay."""
+    """Records the replay, marks the match done, and moves both teams' ratings. Sets from
+    an earlier attempt are replaced, so a rerun after a lost worker leaves one consistent
+    replay, and a lost lease writes nothing."""
     async with db.conn.transaction():
         await db.match_repo.delete_sets(match.id)
         for s in replay.sets:
@@ -102,6 +105,25 @@ async def finish_match(db: DBConnection, match: MatchRow, replay: MatchReplay) -
         )
         if not done:
             raise LostLease(match)
+        await _rate(db, match, replay.result)
+
+
+async def _rate(db: DBConnection, match: MatchRow, result: MatchResult) -> None:
+    """Steps both slots' teams by slot 0's share of the sets. A team in both slots plays
+    itself, which rates nothing."""
+    teams = []
+    for bot in match.bots:
+        submission = await db.submission_repo.get(bot)
+        if submission is None:
+            raise ValueError(f"match {match.id}: no submission {bot}")
+        teams.append(submission.team_id)
+    a, b = teams
+    if a == b:
+        return
+    elos = await db.team_repo.lock_elos([a, b])
+    new_a, new_b = elo.step(elos[a], elos[b], elo.score(result.set_wins, len(result.sets)))
+    await db.team_repo.record_elo(a, new_a)
+    await db.team_repo.record_elo(b, new_b)
 
 
 async def fail_match(db: DBConnection, match: MatchRow, error: str) -> None:

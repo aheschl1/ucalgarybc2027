@@ -22,6 +22,15 @@ class MyTeam(Team):
     members: list[str]
 
 
+class TeamElo(BaseModel):
+    """A team's rating, rounded, and how many matches moved it. Anyone may read it."""
+
+    id: int
+    name: str
+    elo: int
+    matches: int
+
+
 class TeamCreate(BaseModel):
     name: TeamName
 

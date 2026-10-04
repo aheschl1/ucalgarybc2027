@@ -43,7 +43,7 @@ export default function Tree({
       </section>
 
       <section>
-        <h2>Matches</h2>
+        <h2>Request Match</h2>
           <QueueForm
             api={api}
             user={user}
@@ -51,16 +51,16 @@ export default function Tree({
             onQueued={refresh}
           />
 
-        <h3>Your Matches</h3>
+        <h2>Your Matches</h2>
         <ul>
           <MatchList api={api} version={version} mine/>
         </ul>
       </section>
 
       <section>
-        <h2>Active Queue / Scoreboard</h2>
+        <h2>Match Queue</h2>
         <ul>
-          <MatchList api={api} version={version}/>
+          <MatchList api={api} version={version} activeOnly/>
         </ul>
       </section>
 

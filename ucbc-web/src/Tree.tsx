@@ -1,5 +1,4 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router";
 import {
   describe,
   type Api,
@@ -12,11 +11,9 @@ import { MatchBranch, MatchList } from "./matches";
 export default function Tree({
   user,
   api,
-  onLogOut,
 }: {
   user: User;
   api: Api;
-  onLogOut: () => void;
 }) {
   const [lookup, setLookup] = useState("");
   const [opened, setOpened] = useState<string[]>([]);
@@ -32,77 +29,58 @@ export default function Tree({
   };
 
   return (
+    
     <main className="tree">
-      <ul>
-        <li>
-          <details open>
-            <summary>ucbc</summary>
-            <ul>
-              <li>
-                <Link to="/profile">{user.display_name}</Link>{" "}
-                <span className="dim">{user.is_admin ? "admin" : "user"}</span>
-              </li>
-              <li>
-                <details open>
-                  <summary>submissions</summary>
-                  <SubmissionsBranch
-                    api={api}
-                    user={user}
-                    version={version}
-                    onChange={refresh}
-                  />
-                </details>
-              </li>
-              <li>
-                <details open>
-                  <summary>matches</summary>
-                  <ul>
-                    <li>
-                      <QueueForm
-                        api={api}
-                        user={user}
-                        version={version}
-                        onQueued={refresh}
-                      />
-                    </li>
-                    <li>
-                      <form className="lookup" onSubmit={open}>
-                        <input
-                          placeholder="match id"
-                          value={lookup}
-                          onChange={(e) => setLookup(e.target.value)}
-                        />
-                        <button disabled={!lookup.trim()}>open</button>
-                      </form>
-                    </li>
-                    {opened.map((id) => (
-                      <LookupBranch key={id} id={id} api={api} />
-                    ))}
-                    <MatchList api={api} version={version} />
-                  </ul>
-                </details>
-              </li>
-              <li>
-                <Link to="/leaderboard">leaderboard</Link>
-              </li>
-              <li>
-                <Link to="/docs">docs</Link>
-              </li>
-              <li>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onLogOut();
-                  }}
-                >
-                  log out
-                </a>
-              </li>
-            </ul>
-          </details>
-        </li>
-      </ul>
+
+      <section>
+        <h2>Submissions</h2>
+        <SubmissionsBranch
+          api={api}
+          user={user}
+          version={version}
+          onChange={refresh}
+        />
+      </section>
+
+      <section>
+        <h2>Matches</h2>
+          <QueueForm
+            api={api}
+            user={user}
+            version={version}
+            onQueued={refresh}
+          />
+
+        <h3>Your Matches</h3>
+        <ul>
+          <MatchList api={api} version={version} mine/>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Active Queue / Scoreboard</h2>
+        <ul>
+          <MatchList api={api} version={version}/>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Lookup Match</h2>
+        <form className="lookup" onSubmit={open}>
+          <input
+            placeholder="Search match ID"
+            value={lookup}
+            onChange={(e) => setLookup(e.target.value)}
+          />
+          <button disabled={!lookup.trim()}>open</button>
+        </form>
+
+        <ul>
+          {opened.map((id) => (
+            <LookupBranch key={id} id={id} api={api} />
+          ))}
+        </ul>
+      </section>
     </main>
   );
 }
@@ -194,21 +172,28 @@ function UploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }) {
   return (
     <form className="lookup" onSubmit={submit}>
       <input
+        id="file-upload"
+        className="file-input"
         type="file"
         accept=".zip"
         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
       />
+
+      <label htmlFor="file-upload" className="file-button">
+        Choose File
+      </label>
+
       <input
-        placeholder="name (file name)"
+        placeholder="Name (File name)"
         value={name}
         onChange={(e) => setName(e.target.value)}
       />
       <input
-        placeholder="game"
+        placeholder="Game"
         value={game}
         onChange={(e) => setGame(e.target.value)}
       />
-      <button disabled={!file || !game.trim() || busy}>upload zip</button>
+      <button disabled={!file || !game.trim() || busy}>Upload Zip</button>
       {error && <span className="error">{error}</span>}
     </form>
   );
@@ -267,11 +252,11 @@ function QueueForm({
   return (
     <form className="lookup" onSubmit={submit}>
       <select value={mine} onChange={(e) => setMine(e.target.value)}>
-        <option value="">our submission</option>
+        <option value="">Submission</option>
         {own.map(option)}
       </select>
       <select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
-        <option value="">opponent</option>
+        <option value="">Opponent</option>
         {all.map(option)}
       </select>
       <input
@@ -280,7 +265,7 @@ function QueueForm({
         value={seed}
         onChange={(e) => setSeed(Number(e.target.value))}
       />
-      <button disabled={!mine || !opponent || busy}>queue match</button>
+      <button disabled={!mine || !opponent || busy}>Queue match</button>
       {error && <span className="error">{error}</span>}
     </form>
   );

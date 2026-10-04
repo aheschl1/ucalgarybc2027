@@ -4,6 +4,7 @@ import { get, logOut, makeApi, type User } from "./api";
 import Docs from "./Docs";
 import Leaderboard from "./Leaderboard";
 import Login from "./Login";
+import NavBar from "./NavBar";
 import Profile from "./Profile";
 import Register from "./Register";
 import Tree from "./Tree";
@@ -40,10 +41,12 @@ export default function App() {
 
   const api = makeApi(leave);
   return (
+    <>
+    <NavBar onLogOut={leave} user={user} />
     <Routes>
       <Route
         path="/"
-        element={<Tree user={user} api={api} onLogOut={leave} />}
+        element={<Tree user={user} api={api} />}
       />
       <Route
         path="/profile"
@@ -65,5 +68,6 @@ export default function App() {
       <Route path="/register" element={<Navigate to="/profile" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

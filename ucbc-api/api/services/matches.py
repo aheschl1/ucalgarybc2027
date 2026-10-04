@@ -62,13 +62,7 @@ async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: in
     if replay is None:
         raise NotFound(f"no set {index} in match {match_id}")
 
-    # if the replay is stored in the blob store, fetch it from there
-    replay_key = replay
-    if replay_key is not None: # added a check here
-        return await blobs.get(replay_key)
-    
-    # otherwise decompress old bytes
-    return replay
+    return await blobs.get(replay)
 
 
 async def list_matches(

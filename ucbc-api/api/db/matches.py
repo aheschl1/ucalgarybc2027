@@ -1,4 +1,3 @@
-import gzip
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -210,14 +209,13 @@ class MatchRepo:
 
     async def get_set_replay(
         self, match_id: UUID, index: int
-    ) -> tuple[str | None, bytes | None] | None:
-        """Returns the blob key, or the old gzipped replay when there is no key."""
+    ) -> str | None:
+        """Returns the replay blob key."""
         cur = await self._conn.execute(
-            "select replay_key, replay from sets where match_id = %s and index = %s",
+            "select replay_key from sets where match_id = %s and index = %s",
             (match_id, index),
         )
-        row = await cur.fetchone() # cursor get single row (tuple)
+        row = await cur.fetchone()
         if row is None:
             return None
-        replay = row["replay"]
-        return row["replay_key"], None if replay is None else bytes(replay)
+        return row["replay_key"]

@@ -39,12 +39,12 @@ flowchart TD
     B --> C{status Complete<br/>or tick == max_ticks?}
     C -- yes --> Z[SetResult<br/>at max_ticks: game.tick_limit]
     C -- no --> D[schedule = game.schedule]
-    D --> E[for bot in schedule]
+    D --> E[for bot in schedule, skip if removed]
     E --> G[registry.bot_mut: spawn on first use]
     G --> H[bot.step&#40;StepCtx&#41;]
     H -- Ok --> I[game.end_step]
-    H -- Err --> J[registry.despawn<br/>game.bot_failed]
-    I --> K[drain game.despawned]
+    H -- Err --> J[game.bot_failed<br/>remove from game.bots]
+    I --> K[drop runtimes of bots<br/>no longer in game.bots]
     J --> K
     K --> L[record Step]
     L --> E
@@ -58,19 +58,20 @@ flowchart TD
 ```rust
 pub trait Game: Send + 'static {
     const NAME: &'static str;
-    type Query: DeserializeOwned + JsonSchema;       // #[serde(tag = "type")] enum of Query<Q, R>
-    type Action: DeserializeOwned + JsonSchema;      // #[serde(tag = "type")] enum
-    type ActionResponse: Serialize + JsonSchema;
+    type Query: DeserializeOwned + JsonSchema;       // #[serde(tag = "type")] enum of Request<P, R>
+    type Action: DeserializeOwned + JsonSchema;      // #[serde(tag = "type")] enum of Request<P, R>
     type Snapshot: Serialize + JsonSchema;
+    type Bot;                                        // per-bot data in the BotManager
 
     fn create(setup: &SetSetup) -> Result<Self, EngineError>;
-    fn schedule(&mut self) -> Vec<BotRef>;
-    fn handle_query(&self, bot: BotRef, query: Self::Query) -> Result<Answer, QueryError>;
-    fn apply_action(&mut self, bot: BotRef, action: Self::Action) -> Result<Self::ActionResponse, ActionError>;
-    fn end_step(&mut self, bot: BotRef);
-    fn bot_failed(&mut self, bot: BotRef, failure: &BotFailure);
+    fn bots(&self) -> &BotManager<Self::Bot>;
+    fn bots_mut(&mut self) -> &mut BotManager<Self::Bot>;
+    fn schedule(&mut self) -> Vec<BotId> { self.bots().ids() }
+    fn handle_query(&self, bot: BotId, query: Self::Query) -> Result<Answer, QueryError>;
+    fn apply_action(&mut self, bot: BotId, action: Self::Action) -> Result<Answer, ActionError>;
+    fn end_step(&mut self, bot: BotId);
+    fn bot_failed(&mut self, bot: BotId, failure: &BotFailure) {}
     fn end_tick(&mut self);
-    fn despawned(&mut self) -> Vec<BotId> { Vec::new() }
     fn status(&self) -> GameStatus;
     fn tick_limit(&self, max_ticks: u32) -> Outcome { Outcome::draw(..) }
     fn snapshot(&self) -> Self::Snapshot;
@@ -79,15 +80,26 @@ pub trait Game: Send + 'static {
 
 Games never see JSON. `DynGame` (blanket impl) decodes and encodes at the boundary.
 
-Each query variant holds a `Query<Q, R>`: parameters `Q` (derefs to them), reply `R`.
-`q.reply(r)` is the only way to build an `Answer`, so a query can only be answered with
-its own type, and `R` is the query method's return type in the generated Python.
+A game keeps its bots in a `BotManager<T>`: `spawn(team, data)` hands out the next id
+(never reused in a set) and the bot steps from the next tick; `remove(id)` takes it
+out; `manager[id]` is a `BotWrap<T>` that derefs to `T` and has `team()`. The default
+schedule is spawn order. After a failure the engine calls `bot_failed`, then removes the
+bot itself.
+
+Each query and action variant holds a `Request<P, R>`: parameters `P` (derefs to them),
+reply `R`. `reply(r)` is the only way to build an `Answer`, so each is answered with its
+own type, and `R` is the method's return type in the generated Python.
 
 ```rust
 enum Queries {
     /// What stands on a tile.
-    Item(Query<At, Option<Item>>),
-    Width(Query<(), usize>),
+    Item(Request<At, Option<Item>>),
+    Width(Request<(), usize>),
+}
+
+enum Action {
+    Place(Request<Spot, Placed>),
+    Noop(Request<(), ()>),
 }
 ```
 
@@ -124,14 +136,14 @@ TeamSpec::rust(name, |ctx: &SpawnCtx| MyBot)
 TeamSpec::unavailable(name, failure)   // every bot fails at its first step
 ```
 
-Bots are created lazily when the game first schedules them, and released on
-`despawned()` or at set end. A released id stays dead for the set.
+Bot runtimes are created lazily when the game first schedules them, and released once
+the bot leaves the game's `BotManager`, or at set end.
 
 ## StepCtx: the bot's only view of the game
 
 ```rust
 pub struct StepCtx<'a> {
-    pub bot: BotRef,
+    pub bot: BotId,
     pub team: &'a TeamInfo,
     pub set_index: u32,
     pub tick: u32,
@@ -201,9 +213,10 @@ seeds (`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
 ## Games
 
 ```text
-ucbc2027    the competition game and the default build. Its rules are not written yet: one
-            query (state: ticks so far) and one action (noop), so every set draws at the
-            tick limit.
+ucbc2027    the competition game and the default build. Labs spawn dinos for bones; dinos
+            move and carry fossils home to raise income. At the tick limit the most
+            points (bones held) win, then most fossils, then the highest level dino,
+            then a coin toss on the set's seed.
 tictactoe   the example game, and what the bot-runtime tests play.
 ```
 
@@ -211,13 +224,13 @@ tictactoe   the example game, and what the bot-runtime tests play.
 
 ```text
 games/foo/src/game.rs                       crate ucbc-foo: impl Game for Foo { const NAME = "foo"; ... }
-                                            every Query/Action/Response/Snapshot type derives JsonSchema
+                                            every query, action, reply, and snapshot type derives JsonSchema
 games/foo/viewer/                           package @ucbc/viewer-foo exporting `renderer`
 ucbc-games/Cargo.toml                       foo = ["dep:ucbc-foo"], its path dependency, foo in `all`,
                                             and foo in `default` for builds to include it
 ucbc-games/src/lib.rs                       #[cfg(feature = "foo")] registry.register::<ucbc_foo::Foo>();
 ucbc-cli/python/ucbc/games/foo/_api.py      generated by `make sdk` (ucbc-dev gen-sdk): FooApi(Handle)
-                                            with one method per query and action, one class per response type
+                                            with one method per query and action, one class per reply type
 ucbc-cli/python/ucbc/games/foo/__init__.py  class FooHandle(FooApi): conveniences; HANDLE = FooHandle
 bots/foo/<name>/main.py                     def step(handle: FooHandle) -> None: ...
 ```

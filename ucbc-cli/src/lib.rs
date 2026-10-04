@@ -18,8 +18,9 @@ fn to_pyerr(e: impl std::fmt::Display) -> PyErr {
 }
 
 /// Runs a match between Python teams and returns the match result as JSON.
+/// `game_config` is JSON for the game, recorded in the replay.
 #[pyfunction]
-#[pyo3(signature = (game, bot_dirs, *, step_ms, memory_bytes, sets = 3, seed = 0, match_id = "local", names = None, replay_path = None, summary_path = None, echo_bot_output = false))]
+#[pyo3(signature = (game, bot_dirs, *, step_ms, memory_bytes, sets = 3, seed = 0, match_id = "local", names = None, replay_path = None, summary_path = None, echo_bot_output = false, verbose = false, game_config = None))]
 #[allow(clippy::too_many_arguments)]
 fn run_match(
     py: Python<'_>,
@@ -34,6 +35,8 @@ fn run_match(
     replay_path: Option<PathBuf>,
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
+    verbose: bool,
+    game_config: Option<&str>,
 ) -> PyResult<String> {
     let names = names.unwrap_or_else(|| {
         bot_dirs
@@ -64,8 +67,13 @@ fn run_match(
         )
         .collect();
     let registry = ucbc_games::registry();
-    let config = MatchConfig::new(game, sets, seed, 0, limits);
-    let mut spec = MatchSpec::new(match_id, config, teams).echo_bot_output(echo_bot_output);
+    let mut config = MatchConfig::new(game, sets, seed, 0, limits);
+    if let Some(json) = game_config {
+        config = config.game_config(serde_json::from_str(json).map_err(to_pyerr)?);
+    }
+    let mut spec = MatchSpec::new(match_id, config, teams)
+        .echo_bot_output(echo_bot_output)
+        .verbose(verbose);
     if let Some(path) = replay_path {
         spec = spec.replay_path(path);
     }

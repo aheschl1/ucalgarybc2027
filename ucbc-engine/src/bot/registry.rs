@@ -1,9 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::bot::{Bot, BotFactory, BotResourceLimit, SpawnCtx, TeamSpec};
 use crate::error::{BotFailure, EngineError};
-use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
+use crate::ids::{BotId, TeamId, TeamInfo};
 use crate::rng::bot_seed;
 
 struct TeamEntry {
@@ -23,12 +23,11 @@ pub enum BotLookupError {
     Bot(BotFailure),
 }
 
-/// The teams of a match and every live bot. Ids released this set stay dead so a
-/// game cannot revive a bot by scheduling it again.
+/// The teams of a match and the runtime of every live bot. Which bots exist, and
+/// their teams, is the game's [`BotManager`](crate::BotManager); this follows it.
 pub struct BotRegistry {
     teams: Vec<TeamEntry>,
     bots: HashMap<BotId, BotHandle>,
-    dead: HashSet<BotId>,
     set_seed: u64,
     limits: BotResourceLimit,
 }
@@ -46,7 +45,6 @@ impl BotRegistry {
         Self {
             teams,
             bots: HashMap::new(),
-            dead: HashSet::new(),
             set_seed: 0,
             limits,
         }
@@ -56,7 +54,6 @@ impl BotRegistry {
     /// set derive from.
     pub fn begin_set(&mut self, set_seed: u64) {
         self.bots.clear();
-        self.dead.clear();
         self.set_seed = set_seed;
     }
 
@@ -72,42 +69,19 @@ impl BotRegistry {
         (id.0 as usize) < self.teams.len()
     }
 
-    pub fn is_dead(&self, id: BotId) -> bool {
-        self.dead.contains(&id)
-    }
-
-    /// Validate a ref before scheduling or acquiring its runtime. A bot ID is owned
-    /// by the team that first spawned it for the duration of this set.
-    pub fn validate_ref(&self, bot: BotRef) -> Result<(), EngineError> {
-        if !self.has_team(bot.team) {
-            return Err(EngineError::Game(format!(
-                "scheduled bot {} for unknown team {}",
-                bot.id, bot.team
-            )));
+    /// The runtime for `bot`, created from its team's spec on first use.
+    pub fn bot_mut(&mut self, bot: BotId, team: TeamId) -> Result<&mut BotHandle, BotLookupError> {
+        if !self.has_team(team) {
+            return Err(BotLookupError::Game(EngineError::Game(format!(
+                "bot {bot} belongs to unknown team {team}"
+            ))));
         }
-        if self.is_dead(bot.id) {
-            return Err(EngineError::Game(format!("scheduled dead bot {}", bot.id)));
-        }
-        if let Some(handle) = self.bots.get(&bot.id)
-            && handle.team.id != bot.team
-        {
-            return Err(EngineError::Game(format!(
-                "bot {} belongs to team {}, not team {}",
-                bot.id, handle.team.id, bot.team
-            )));
-        }
-        Ok(())
-    }
-
-    /// The bot for `bot`, created from its team's spec on first use.
-    pub fn bot_mut(&mut self, bot: BotRef) -> Result<&mut BotHandle, BotLookupError> {
-        self.validate_ref(bot).map_err(BotLookupError::Game)?;
-        if !self.bots.contains_key(&bot.id) {
-            let entry = &mut self.teams[bot.team.0 as usize];
+        if !self.bots.contains_key(&bot) {
+            let entry = &mut self.teams[team.0 as usize];
             let ctx = SpawnCtx::new(
                 bot,
                 entry.info.clone(),
-                bot_seed(self.set_seed, bot),
+                bot_seed(self.set_seed, team, bot),
                 self.limits,
             );
             let created = (entry.factory)(&ctx).map_err(BotLookupError::Bot)?;
@@ -116,13 +90,13 @@ impl BotRegistry {
                 team: ctx.team,
                 seed: ctx.seed,
             };
-            self.bots.insert(bot.id, handle);
+            self.bots.insert(bot, handle);
         }
-        Ok(self.bots.get_mut(&bot.id).expect("just inserted"))
+        Ok(self.bots.get_mut(&bot).expect("just inserted"))
     }
 
-    pub fn despawn(&mut self, id: BotId) {
-        self.bots.remove(&id);
-        self.dead.insert(id);
+    /// Drops the runtime of every bot `live` rejects.
+    pub fn retain(&mut self, live: impl Fn(BotId) -> bool) {
+        self.bots.retain(|&id, _| live(id));
     }
 }

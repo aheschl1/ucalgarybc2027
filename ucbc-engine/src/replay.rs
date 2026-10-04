@@ -1,10 +1,13 @@
-//! The replay format, written as JSON.
+//! The replay format, written as compact JSON, gzipped when the file name ends in `.gz`.
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 use std::time::Duration;
 
+use flate2::Compression;
+use flate2::bufread::GzDecoder;
+use flate2::write::GzEncoder;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -12,7 +15,7 @@ use serde_json::Value;
 use crate::bot::BotResourceLimit;
 use crate::error::EngineError;
 use crate::game::Outcome;
-use crate::ids::{BotId, BotRef, TeamId, TeamInfo};
+use crate::ids::{BotId, TeamId, TeamInfo};
 
 pub const DEFAULT_MAX_TICKS: u32 = 1000;
 
@@ -146,15 +149,16 @@ pub struct Step {
 
 impl Step {
     pub fn new(
-        bot: BotRef,
+        bot: BotId,
+        team: TeamId,
         actions: Vec<Value>,
         stdout: String,
         failure: Option<FailureRecord>,
         usage: Usage,
     ) -> Self {
         Self {
-            bot: bot.id,
-            team: bot.team,
+            bot,
+            team,
             actions,
             stdout,
             failure,
@@ -296,16 +300,34 @@ impl Replay {
 }
 
 /// Pretty JSON with a trailing newline; deterministic for equal input.
+/// The first bytes of every gzip file.
+const GZIP_MAGIC: [u8; 2] = [0x1f, 0x8b];
+
+/// Compact JSON, gzipped if `path` ends in `.gz`.
 pub fn write_replay(path: &Path, replay: &Replay) -> Result<(), EngineError> {
-    let mut w = BufWriter::new(File::create(path)?);
-    serde_json::to_writer_pretty(&mut w, replay)?;
-    w.write_all(b"\n")?;
-    w.flush()?;
+    let file = BufWriter::new(File::create(path)?);
+    if path.extension().is_some_and(|e| e == "gz") {
+        // Fast: a replay is large, and gzip's higher levels gain little on it.
+        let mut gz = GzEncoder::new(file, Compression::fast());
+        serde_json::to_writer(&mut gz, replay)?;
+        gz.finish()?.flush()?;
+    } else {
+        let mut w = file;
+        serde_json::to_writer(&mut w, replay)?;
+        w.write_all(b"\n")?;
+        w.flush()?;
+    }
     Ok(())
 }
 
+/// Reads a replay, gzipped or not, whatever the file is called.
 pub fn read_replay(path: &Path) -> Result<Replay, EngineError> {
-    Ok(serde_json::from_reader(BufReader::new(File::open(path)?))?)
+    let mut r = BufReader::new(File::open(path)?);
+    if r.fill_buf()?.starts_with(&GZIP_MAGIC) {
+        Ok(serde_json::from_reader(GzDecoder::new(r))?)
+    } else {
+        Ok(serde_json::from_reader(r)?)
+    }
 }
 
 #[cfg(test)]

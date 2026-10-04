@@ -9,17 +9,26 @@ from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 @click.argument("bot_a", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.argument("bot_b", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.option("--game", help="Defaults to the only compiled game.")
-@click.option("--sets", default=3, show_default=True)
+@click.option("--sets", default=1, show_default=True)
 @click.option("--seed", default=0, show_default=True)
 @click.option("--match-id", default="local", show_default=True)
 @click.option(
-    "--replay", type=click.Path(dir_okay=False, path_type=Path), help="Write the replay here."
+    "--replay",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Write the replay here; .gz or .json",
 )
 @click.option(
     "--summary", type=click.Path(dir_okay=False, path_type=Path), help="Write the summary here."
 )
+@click.option(
+    "--map",
+    "map_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Play on this map file instead of the game's standard one.",
+)
 @click.option("--view", is_flag=True, help="Open the replay in the viewer after the match.")
 @click.option("--show-bot-output", is_flag=True, help="Echo bot output as the match runs.")
+@click.option("--no-verbose", is_flag=True, help="Hide tick progress and time estimates.")
 @click.option(
     "--step-ms",
     default=DEFAULT_STEP_MS,
@@ -38,12 +47,15 @@ def run(
     match_id: str,
     replay: Path | None,
     summary: Path | None,
+    map_file: Path | None,
     view: bool,
     show_bot_output: bool,
+    no_verbose: bool,
     step_ms: int,
     memory_mb: int,
 ) -> None:
     """Play BOT_A against BOT_B. Each is a directory containing main.py."""
+    import base64
     import signal
     import tempfile
 
@@ -57,9 +69,12 @@ def run(
         viewer.check_built()
     if view and replay is None:
         # Left behind: the process ends on Ctrl-C while serving it.
-        replay = Path(tempfile.mkdtemp(prefix="ucbc-")) / "replay.json"
+        replay = Path(tempfile.mkdtemp(prefix="ucbc-")) / "replay.json.gz"
 
     names = [bot_a.name, bot_b.name]
+    game_config = None
+    if map_file is not None:
+        game_config = {"map": base64.b64encode(map_file.read_bytes()).decode()}
     try:
         result = run_match(
             bot_a,
@@ -72,8 +87,10 @@ def run(
             replay_path=replay,
             summary_path=summary,
             echo_bot_output=show_bot_output,
+            verbose=not no_verbose,
             step_ms=step_ms,
             memory_bytes=memory_mb * 2**20,
+            game_config=game_config,
         )
     except (RuntimeError, ValueError) as e:
         raise click.ClickException(str(e)) from e

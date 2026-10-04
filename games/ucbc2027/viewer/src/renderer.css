@@ -1,0 +1,22 @@
+.u27-board {
+  display: block;
+}
+
+/* A unit's whole footprint takes clicks, whatever its sprite draws. */
+.u27-hit {
+  fill: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.u27-selected {
+  fill: none;
+  stroke: var(--ucbc-fg, #1c1917);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.u27-unit th {
+  position: static;
+  width: 5rem;
+}

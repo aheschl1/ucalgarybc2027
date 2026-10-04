@@ -9,25 +9,248 @@ from ucbc.handle import Handle
 
 
 @dataclass(frozen=True)
-class State:
-    """How many ticks have ended this set."""
+class Coord:
+    """A tile: `x` grows to the right, `y` downward."""
 
-    tick: int
+    x: int
+    y: int
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
-            tick=d["tick"],
+            x=d["x"],
+            y=d["y"],
         )
+
+
+@dataclass(frozen=True)
+class DroppedDeposited:
+    """Into your lab; your team's deposited fossils now."""
+
+    fossils: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            fossils=d["fossils"],
+        )
+
+
+@dataclass(frozen=True)
+class DroppedPlaced:
+    """Left on the tile."""
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class EnvironmentEmpty:
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class EnvironmentLab:
+    """One of a team's four lab tiles."""
+
+    team: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            team=d["team"],
+        )
+
+
+@dataclass(frozen=True)
+class EnvironmentWall:
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class ItemViewDino:
+    team: int
+    level: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            team=d["team"],
+            level=d["level"],
+        )
+
+
+@dataclass(frozen=True)
+class ItemViewFossil:
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls()
+
+
+@dataclass(frozen=True)
+class Spawned:
+    """The dino a spawn created."""
+
+    bot_id: int
+    at: Coord
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            bot_id=d["bot_id"],
+            at=Coord._from(d["at"]),
+        )
+
+
+@dataclass(frozen=True)
+class UnitViewDino:
+    pos: Coord
+    level: int
+    health: int
+    held: ItemView | None
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            pos=Coord._from(d["pos"]),
+            level=d["level"],
+            health=d["health"],
+            held=None if (_held := d.get("held")) is None else _from_ItemView(_held),
+        )
+
+
+@dataclass(frozen=True)
+class UnitViewLab:
+    origin: Coord
+    """Top-left of its four tiles."""
+    health: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            origin=Coord._from(d["origin"]),
+            health=d["health"],
+        )
+
+
+Dropped = DroppedPlaced | DroppedDeposited
+"""Where a dropped item went."""
+
+
+def _from_Dropped(d: dict[str, Any]) -> Dropped:
+    match d["type"]:
+        case "placed":
+            return DroppedPlaced._from(d)
+        case "deposited":
+            return DroppedDeposited._from(d)
+    raise ValueError(f"unknown Dropped type {d['type']!r}")
+
+
+Environment = EnvironmentEmpty | EnvironmentWall | EnvironmentLab
+"""What a tile is made of. Fixed for the whole set."""
+
+
+def _from_Environment(d: dict[str, Any]) -> Environment:
+    match d["type"]:
+        case "empty":
+            return EnvironmentEmpty._from(d)
+        case "wall":
+            return EnvironmentWall._from(d)
+        case "lab":
+            return EnvironmentLab._from(d)
+    raise ValueError(f"unknown Environment type {d['type']!r}")
+
+
+ItemView = ItemViewDino | ItemViewFossil
+"""What is on a tile."""
+
+
+def _from_ItemView(d: dict[str, Any]) -> ItemView:
+    match d["type"]:
+        case "dino":
+            return ItemViewDino._from(d)
+        case "fossil":
+            return ItemViewFossil._from(d)
+    raise ValueError(f"unknown ItemView type {d['type']!r}")
+
+
+UnitView = UnitViewLab | UnitViewDino
+"""A bot: in `me` replies and the snapshot."""
+
+
+def _from_UnitView(d: dict[str, Any]) -> UnitView:
+    match d["type"]:
+        case "lab":
+            return UnitViewLab._from(d)
+        case "dino":
+            return UnitViewDino._from(d)
+    raise ValueError(f"unknown UnitView type {d['type']!r}")
 
 
 class Ucbc2027Api(Handle):
     """Queries and actions of the `ucbc2027` game, one method each."""
 
-    def state(self) -> State:
-        """The game state."""
-        return State._from(self._query({"type": "state"}))
+    def me(self) -> UnitView:
+        """This bot."""
+        return _from_UnitView(self._query({"type": "me"}))
+
+    def bones(self) -> int:
+        """Your team's bones."""
+        reply: int = self._query({"type": "bones"})
+        return reply
+
+    def fossils(self) -> int:
+        """Fossils your team has deposited at its lab."""
+        reply: int = self._query({"type": "fossils"})
+        return reply
+
+    def item(self, x: int, y: int) -> ItemView | None:
+        """What is on a tile; None if nothing."""
+        reply = self._query({"type": "item", "x": x, "y": y})
+        return None if reply is None else _from_ItemView(reply)
+
+    def environment(self, x: int, y: int) -> Environment:
+        """What a tile is made of."""
+        return _from_Environment(self._query({"type": "environment", "x": x, "y": y}))
+
+    def width(self) -> int:
+        """Tiles across the board."""
+        reply: int = self._query({"type": "width"})
+        return reply
+
+    def height(self) -> int:
+        """Tiles down the board."""
+        reply: int = self._query({"type": "height"})
+        return reply
 
     def noop(self) -> None:
         """Does nothing."""
         self._act({"type": "noop"})
+
+    def spawn(self, x: int, y: int) -> Spawned:
+        """Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
+        lab. It steps from the next tick."""
+        return Spawned._from(self._act({"type": "spawn", "x": x, "y": y}))
+
+    def move(self, x: int, y: int) -> Coord:
+        """Dino only, once per turn: to a free tile within move range. Replies with the
+        new position."""
+        return Coord._from(self._act({"type": "move", "x": x, "y": y}))
+
+    def grab(self, x: int, y: int) -> ItemView:
+        """Dino only: pick up the fossil on a tile within action range. A dino holds one
+        thing at a time. Free, as often as you like."""
+        return _from_ItemView(self._act({"type": "grab", "x": x, "y": y}))
+
+    def drop(self, x: int, y: int) -> Dropped:
+        """Dino only: put down what it holds, on a free tile within action range or on
+        your own lab to deposit it. Free, as often as you like."""
+        return _from_Dropped(self._act({"type": "drop", "x": x, "y": y}))

@@ -5,9 +5,13 @@
   "workspaces": [
     "ucbc-viewer",
     "games/*/viewer",
+    "games/*/editor",
     "ucbc-web"
   ],
   "devDependencies": {
+    "@bufbuild/buf": "^1.73.0",
+    "@bufbuild/protoc-gen-es": "^2.16.0",
+    "@testing-library/react": "^16.3.3",
     "jsdom": "^29.1.1",
     "json-schema-to-typescript": "^16.0.0",
     "typescript": "^7.0.2",

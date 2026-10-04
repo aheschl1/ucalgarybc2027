@@ -93,7 +93,7 @@ async def test_enqueue_and_get(admin_client: AsyncClient, body: dict[str, Any]) 
     assert match["engine_version"] is None
     assert match["bots"] == body["bots"]
     assert [t["name"] for t in match["teams"]] == ["random", "first_empty"]
-    assert match["config"] == {"sets": 3, "seed": 7, "step_ms": 500, "memory_bytes": 2**30}
+    assert match["config"] == {"sets": 3, "seed": 7, "step_ms": 3, "memory_bytes": 2**30}
     assert match["attempts"] == 0
     assert match["claimed_by"] is None
     assert match["sets"] == []

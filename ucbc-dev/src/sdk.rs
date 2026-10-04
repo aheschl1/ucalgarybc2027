@@ -2,7 +2,7 @@
 //! bot sees, one method per query and action. The hand-written handle subclasses
 //! the generated `<Game>Api`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use serde_json::{Map, Value};
@@ -33,7 +33,7 @@ struct Variant {
     tag: String,
     fields: Vec<Field>,
     doc: Option<String>,
-    /// A query's reply type, from its `x-returns`.
+    /// The variant's reply type, from its `x-returns`.
     returns: Option<Ty>,
 }
 
@@ -107,27 +107,9 @@ impl Types {
         self.add(name, doc, def)
     }
 
-    /// The type a response schema describes.
-    fn response(&mut self, root: &Schema) -> Result<Ty, String> {
-        self.collect(root)?;
-        if root.get("type") == Some(&Value::String("null".into())) {
-            return Ok(Ty::Unit);
-        }
-        let Some(Value::String(title)) = root.get("title") else {
-            return Err("a response type needs a name; use a struct or enum".into());
-        };
-        self.define(title, root)?;
-        Ok(Ty::Named(title.clone()))
-    }
-
-    /// Methods from a query or action schema: one per variant, returning the variant's
-    /// own reply type or else `shared`.
-    fn methods(
-        &mut self,
-        root: &Schema,
-        call: &'static str,
-        shared: Option<&Ty>,
-    ) -> Result<Vec<Method>, String> {
+    /// Methods from a query or action schema, one per variant, each returning its
+    /// variant's reply type.
+    fn methods(&mut self, root: &Schema, call: &'static str) -> Result<Vec<Method>, String> {
         self.collect(root)?;
         let variants = variants(root)?.ok_or("queries and actions must be tagged enums")?;
         variants
@@ -135,8 +117,7 @@ impl Types {
             .map(|v| {
                 let returns = v
                     .returns
-                    .or_else(|| shared.cloned())
-                    .ok_or_else(|| format!("query `{}` must hold a `Query<Q, R>`", v.tag))?;
+                    .ok_or_else(|| format!("`{}` must hold a `Request<P, R>`", v.tag))?;
                 Ok(Method {
                     name: v.tag,
                     doc: v.doc,
@@ -150,6 +131,42 @@ impl Types {
 
     fn kind(&self, name: &str) -> &Def {
         &self.0.get(name).expect("named types are defined").def
+    }
+
+    /// The `type` tag of a union's variant class.
+    fn tag_of(&self, class: &str) -> Option<&str> {
+        self.0.values().find_map(|t| match &t.def {
+            Def::Union(tags) => tags
+                .iter()
+                .find(|(_, c)| c == class)
+                .map(|(tag, _)| tag.as_str()),
+            _ => None,
+        })
+    }
+
+    /// Classes a method argument can hold, at any depth: the ones that need `_to`.
+    fn encoded(&self, methods: &[Method]) -> BTreeSet<String> {
+        let mut out = BTreeSet::new();
+        let mut todo: Vec<Ty> = methods
+            .iter()
+            .flat_map(|m| m.params.iter().map(|p| p.ty.clone()))
+            .collect();
+        while let Some(ty) = todo.pop() {
+            match ty {
+                Ty::List(inner) | Ty::Optional(inner) => todo.push(*inner),
+                Ty::Named(name) => match self.kind(&name) {
+                    Def::Class(fields) if out.insert(name.clone()) => {
+                        todo.extend(fields.iter().map(|f| f.ty.clone()));
+                    }
+                    Def::Union(tags) => {
+                        todo.extend(tags.iter().map(|(_, c)| Ty::Named(c.clone())));
+                    }
+                    _ => {}
+                },
+                _ => {}
+            }
+        }
+        out
     }
 
     /// Python that turns JSON `value` into `ty`.
@@ -186,7 +203,7 @@ impl Types {
             }
             Ty::Named(name) => match self.kind(name) {
                 Def::Enum(_) => value.to_string(),
-                Def::Class(_) | Def::Union(_) => format!("asdict({value})"),
+                Def::Class(_) | Def::Union(_) => format!("{value}._to()"),
             },
         }
     }
@@ -402,14 +419,10 @@ fn docstring(out: &mut String, indent: &str, doc: &str) {
 /// The Python module for `api`.
 pub fn generate(api: &GameApi) -> Result<String, String> {
     let mut types = Types::default();
-    let action_response = types.response(obj(&api.action_response)?)?;
-    let mut methods = types.methods(obj(&api.query)?, "_query", None)?;
-    methods.extend(types.methods(obj(&api.action)?, "_act", Some(&action_response))?);
+    let mut methods = types.methods(obj(&api.query)?, "_query")?;
+    methods.extend(types.methods(obj(&api.action)?, "_act")?);
 
-    let uses_asdict = methods
-        .iter()
-        .flat_map(|m| &m.params)
-        .any(|p| types.encode(&p.ty, &p.name).contains("asdict"));
+    let encoded = types.encoded(&methods);
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -422,9 +435,7 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
     let unions = has(|d| matches!(d, Def::Union(_)));
     let enums = has(|d| matches!(d, Def::Enum(_)));
     out.push_str("from __future__ import annotations\n\n");
-    if uses_asdict {
-        out.push_str("from dataclasses import asdict, dataclass\n");
-    } else if classes {
+    if classes {
         out.push_str("from dataclasses import dataclass\n");
     }
     if enums {
@@ -462,7 +473,9 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
                 let _ = writeln!(out, "@dataclass(frozen=True)\nclass {name}:");
                 if let Some(doc) = &named.doc {
                     docstring(&mut out, "    ", doc);
-                    out.push('\n');
+                    if !fields.is_empty() {
+                        out.push('\n');
+                    }
                 }
                 for f in fields {
                     let _ = writeln!(out, "    {}: {}", f.name, py_type(&f.ty));
@@ -478,19 +491,37 @@ pub fn generate(api: &GameApi) -> Result<String, String> {
                 } else {
                     out.push_str("        return cls(\n");
                     for f in fields {
-                        let value = if matches!(f.ty, Ty::Optional(_)) {
-                            format!("d.get(\"{}\")", f.name)
-                        } else {
-                            format!("d[\"{}\"]", f.name)
+                        // An optional field is read once, so the type checker can
+                        // narrow it.
+                        let value = match &f.ty {
+                            Ty::Optional(inner) => {
+                                let get = format!("d.get(\"{}\")", f.name);
+                                let bound = format!("_{}", f.name);
+                                match types.decode(inner, &bound) {
+                                    v if v == bound => get,
+                                    each => {
+                                        format!("None if ({bound} := {get}) is None else {each}")
+                                    }
+                                }
+                            }
+                            ty => types.decode(ty, &format!("d[\"{}\"]", f.name)),
                         };
-                        let _ = writeln!(
-                            out,
-                            "            {}={},",
-                            f.name,
-                            types.decode(&f.ty, &value)
-                        );
+                        let _ = writeln!(out, "            {}={value},", f.name);
                     }
                     out.push_str("        )\n");
+                }
+                if encoded.contains(name) {
+                    out.push_str("\n    def _to(self) -> dict[str, Any]:\n");
+                    let mut entries: Vec<String> = types
+                        .tag_of(name)
+                        .map(|tag| format!("\"type\": \"{tag}\""))
+                        .into_iter()
+                        .collect();
+                    for f in fields {
+                        let value = types.encode(&f.ty, &format!("self.{}", f.name));
+                        entries.push(format!("\"{}\": {value}", f.name));
+                    }
+                    let _ = writeln!(out, "        return {{{}}}", entries.join(", "));
                 }
             }
             Def::Union(tags) => {
@@ -590,16 +621,14 @@ mod tests {
             }),
             action: json!({
                 "oneOf": [{"type": "object", "required": ["type", "how"],
-                           "properties": {"type": {"const": "go"}, "how": {"$ref": "#/$defs/Kind"}}}],
-                "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]}},
-            }),
-            action_response: json!({
-                "title": "Went",
-                "oneOf": [
-                    {"type": "object", "required": ["type"], "properties": {"type": {"const": "ok"}}},
-                    {"type": "object", "required": ["type", "why"],
-                     "properties": {"type": {"const": "blocked"}, "why": {"type": "string"}}},
-                ],
+                           "properties": {"type": {"const": "go"}, "how": {"$ref": "#/$defs/Kind"}},
+                           "x-returns": {"$ref": "#/$defs/Went"}}],
+                "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]},
+                          "Went": {"oneOf": [
+                              {"type": "object", "required": ["type"], "properties": {"type": {"const": "ok"}}},
+                              {"type": "object", "required": ["type", "why"],
+                               "properties": {"type": {"const": "blocked"}, "why": {"type": "string"}}},
+                          ]}},
             }),
             snapshot: json!({"type": "null"}),
         }
@@ -613,7 +642,7 @@ mod tests {
             "    NEAR = \"near\"",
             "class Seen:",
             "    spots: list[Spot] | None",
-            "            spots=None if d.get(\"spots\") is None else [Spot._from(v) for v in d.get(\"spots\")],",
+            "            spots=None if (_spots := d.get(\"spots\")) is None else [Spot._from(v) for v in _spots],",
             "Went = WentOk | WentBlocked",
             "def _from_Went(d: dict[str, Any]) -> Went:",
             "        case \"blocked\":\n            return WentBlocked._from(d)",
@@ -623,12 +652,12 @@ mod tests {
             "        \"\"\"Look around.\"\"\"",
             "        return Seen._from(self._query({\"type\": \"look\"}))",
             "    def peek(self, at: Spot) -> Kind | None:",
-            "        reply = self._query({\"type\": \"peek\", \"at\": asdict(at)})\n        return None if reply is None else Kind(reply)",
+            "        reply = self._query({\"type\": \"peek\", \"at\": at._to()})\n        return None if reply is None else Kind(reply)",
+            "    def _to(self) -> dict[str, Any]:\n        return {\"x\": self.x, \"y\": self.y}",
             "    def count(self) -> int:",
             "        reply: int = self._query({\"type\": \"count\"})\n        return reply",
             "    def go(self, how: Kind) -> Went:",
             "        return _from_Went(self._act({\"type\": \"go\", \"how\": how}))",
-            "from dataclasses import asdict, dataclass",
         ] {
             assert!(py.contains(line), "missing {line:?} in:\n{py}");
         }
@@ -637,6 +666,23 @@ mod tests {
             at("Went = ") > at("class WentOk:"),
             "union before its classes:\n{py}"
         );
+        // Only argument types are encoded.
+        assert_eq!(py.matches("def _to(").count(), 1, "{py}");
+    }
+
+    #[test]
+    fn union_arguments_carry_their_tag() {
+        let mut api = api();
+        api.action["oneOf"][0]["properties"]["how"] = json!({"$ref": "#/$defs/Went"});
+        let py = generate(&api).unwrap();
+        for line in [
+            "    def go(self, how: Went) -> Went:",
+            "        return _from_Went(self._act({\"type\": \"go\", \"how\": how._to()}))",
+            "    def _to(self) -> dict[str, Any]:\n        return {\"type\": \"ok\"}",
+            "    def _to(self) -> dict[str, Any]:\n        return {\"type\": \"blocked\", \"why\": self.why}",
+        ] {
+            assert!(py.contains(line), "missing {line:?} in:\n{py}");
+        }
     }
 
     #[test]
@@ -648,8 +694,8 @@ mod tests {
             "$defs": {"Kind": {"type": "string", "enum": ["near", "far"]}},
         });
         api.action = json!({"oneOf": [{"type": "object", "required": ["type"],
-                                       "properties": {"type": {"const": "wait"}}}]});
-        api.action_response = json!({"type": "null"});
+                                       "properties": {"type": {"const": "wait"}},
+                                       "x-returns": {"type": "null"}}]});
         let py = generate(&api).unwrap();
         assert!(
             py.contains("from __future__ import annotations\n\nfrom enum import Enum\n\nfrom ucbc.handle import Handle\n"),
@@ -670,7 +716,17 @@ mod tests {
         assert!(
             generate(&bad)
                 .unwrap_err()
-                .contains("query `count` must hold")
+                .contains("`count` must hold a `Request<P, R>`")
+        );
+        let mut bad = api();
+        bad.action["oneOf"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("x-returns");
+        assert!(
+            generate(&bad)
+                .unwrap_err()
+                .contains("`go` must hold a `Request<P, R>`")
         );
     }
 }

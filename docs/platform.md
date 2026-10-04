@@ -48,7 +48,7 @@ as a non-admin, and the app logs in straight after. Admins are made only by
 The web app is a single page with client-side routes. `api/api.py::APP_ROUTES` lists the
 paths it owns, each served the app shell so a reload of one works; anything else under `/`
 is a built file or a 404. Signed out, every path is the login form except `/register` and
-`/docs`, the participant guide, which renders `ucbc-web/src/docs.md`.
+`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`.
 
 ## Teams
 

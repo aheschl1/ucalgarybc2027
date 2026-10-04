@@ -47,8 +47,6 @@ class Handle:
         self._bridge = bridge
         self.set_index = 0
         self.tick = 0
-        self.memory: dict[str, Any] = {}
-        """Persists across this bot's steps within a set."""
 
     @property
     def bot_id(self) -> int:

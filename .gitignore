@@ -17,6 +17,7 @@ dist/
 !tsconfig*.json
 node_modules/
 ucbc-cli/python/ucbc/viewer/static/
+ucbc-cli/python/ucbc/editor/static/
 ucbc-api/api/static/
 compose.override.yaml
 ucbc-cli/python/ucbc/runtime/

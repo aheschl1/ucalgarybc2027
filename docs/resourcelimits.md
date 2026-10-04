@@ -14,7 +14,7 @@ MatchConfig::new("tictactoe", 3, seed, 2, BotResourceLimit::new(50, 256 << 20))
 ```
 
 ```bash
-uv run ucbc run a/ b/ --step-ms 50 --memory-mb 256          # defaults: 500 ms, 1024 MiB
+uv run ucbc run a/ b/ --step-ms 50 --memory-mb 256          # defaults: 3 ms, 1024 MiB
 ```
 
 ```python
@@ -57,7 +57,7 @@ The limits that applied, under the replay's `config`:
 
 ```json
 "config": { "game": "tictactoe", "sets": 3, "seed": 0, "teams": 2, "max_ticks": 1000,
-            "limits": { "step_ms": 500, "memory_bytes": 1073741824 } }
+            "limits": { "step_ms": 3, "memory_bytes": 1073741824 } }
 ```
 
 Every step:

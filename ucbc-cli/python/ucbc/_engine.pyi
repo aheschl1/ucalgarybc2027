@@ -17,5 +17,7 @@ def run_match(
     replay_path: str | None = None,
     summary_path: str | None = None,
     echo_bot_output: bool = False,
+    verbose: bool = False,
+    game_config: str | None = None,
     on_set: Callable[[str], object] | None = None,
 ) -> str: ...

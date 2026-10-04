@@ -1,6 +1,6 @@
 //! A team is one code submission. The engine creates one [`Bot`] per bot id from the
 //! owning team's [`TeamSpec`] when the game first schedules it, and releases it when
-//! the game despawns it or the set ends.
+//! the game removes it or the set ends.
 
 pub mod registry;
 
@@ -10,10 +10,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::BotFailure;
-use crate::ids::{BotRef, TeamInfo};
+use crate::ids::{BotId, TeamInfo};
 use crate::step::{StepCtx, StepResult};
 
-/// Dropped when the bot is despawned; a runtime that must be told releases itself in
+/// Dropped when the game removes the bot; a runtime that must be told releases itself in
 /// `Drop`.
 pub trait Bot: Send {
     /// Run one step. Returning ends the step.
@@ -43,14 +43,14 @@ impl BotResourceLimit {
 
 /// What the engine knows about a bot when it creates it.
 pub struct SpawnCtx {
-    pub bot: BotRef,
+    pub bot: BotId,
     pub team: Arc<TeamInfo>,
     pub seed: u64,
     pub limits: BotResourceLimit,
 }
 
 impl SpawnCtx {
-    pub fn new(bot: BotRef, team: Arc<TeamInfo>, seed: u64, limits: BotResourceLimit) -> Self {
+    pub fn new(bot: BotId, team: Arc<TeamInfo>, seed: u64, limits: BotResourceLimit) -> Self {
         Self {
             bot,
             team,

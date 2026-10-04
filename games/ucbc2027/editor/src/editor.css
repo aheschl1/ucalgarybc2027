@@ -1,0 +1,116 @@
+.ed-editor {
+  --ed-bg: #fafaf9;
+  --ed-fg: #1c1917;
+  --ed-muted: #78716c;
+  --ed-line: #d6d3d1;
+  --ed-empty: #f5f5f4;
+  --ed-wall: #57534e;
+  --ed-lab: #a855f7;
+  --ed-fossil: #a16207;
+
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  padding: 1rem;
+  color: var(--ed-fg);
+  background: var(--ed-bg);
+  font: 14px/1.4 system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ed-editor {
+    --ed-bg: #1c1917;
+    --ed-fg: #f5f5f4;
+    --ed-muted: #a8a29e;
+    --ed-line: #44403c;
+    --ed-empty: #292524;
+    --ed-wall: #a8a29e;
+    --ed-fossil: #fbbf24;
+  }
+}
+
+.ed-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ed-size {
+  width: 4rem;
+}
+
+.ed-brushes {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.ed-button {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--ed-line);
+  border-radius: 0.25rem;
+  color: inherit;
+  background: none;
+  font: inherit;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.ed-brush[aria-pressed="true"] {
+  border-color: var(--ed-fg);
+  font-weight: 600;
+}
+
+.ed-status {
+  min-width: 8rem;
+  color: var(--ed-muted);
+}
+
+/* The space under the toolbar. The board is the largest rectangle of the map's shape
+   that fits in it, so tiles grow and shrink with the map and the window. */
+.ed-stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+
+.ed-board {
+  --ed-width: 16;
+  --ed-height: 16;
+
+  display: grid;
+  grid-template-columns: repeat(var(--ed-width), 1fr);
+  grid-template-rows: repeat(var(--ed-height), 1fr);
+  gap: 1px;
+  width: min(100cqw, 100cqh * var(--ed-width) / var(--ed-height));
+  aspect-ratio: var(--ed-width) / var(--ed-height);
+  border: 1px solid var(--ed-line);
+  background: var(--ed-line);
+  user-select: none;
+  touch-action: none;
+}
+
+.ed-tile {
+  min-width: 0;
+  min-height: 0;
+  background: var(--ed-empty);
+  cursor: crosshair;
+}
+
+.ed-wall {
+  background: var(--ed-wall);
+}
+
+.ed-lab {
+  background: var(--ed-lab);
+}
+
+/* A dot that scales with the tile. */
+.ed-fossil {
+  background-image: radial-gradient(circle, var(--ed-fossil) 35%, transparent 40%);
+}

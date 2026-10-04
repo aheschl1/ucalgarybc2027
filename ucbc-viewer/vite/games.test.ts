@@ -1,9 +1,16 @@
 import { expect, it } from "vitest";
 
-import { gamePackages, gamesSource } from "./games.ts";
+import { defaultGames, gamePackages, gamesSource } from "./games.ts";
 
-it("finds the renderer of each game under games/", () => {
-  expect(gamePackages()).toContain("tictactoe");
+it("reads the default games from ucbc-games' features", () => {
+  expect(defaultGames('[features]\ndefault = ["foo", "bar"]\nall = ["foo", "bar", "baz"]\n')).toEqual([
+    "foo",
+    "bar",
+  ]);
+});
+
+it("finds the renderer of each default game under games/", () => {
+  expect(gamePackages()).toEqual(["ucbc2027"]);
 });
 
 it("imports each game's renderer", () => {

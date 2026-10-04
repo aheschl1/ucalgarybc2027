@@ -2,12 +2,16 @@
   "name": "@ucbc/viewer-ucbc2027",
   "private": true,
   "type": "module",
-  "exports": "./src/index.ts",
+  "exports": "./src/index.tsx",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ucbc/viewer": "*"
+    "@ucbc/viewer": "*",
+    "react": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0"
   }
 }

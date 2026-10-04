@@ -4,11 +4,11 @@ use serde_json::Value;
 
 use crate::error::{ActionError, BotFailure, QueryError};
 use crate::game::{DynGame, GameStatus};
-use crate::ids::{BotRef, TeamInfo};
+use crate::ids::{BotId, TeamInfo};
 
 /// A bot's handle on the game during its own step.
 pub struct StepCtx<'a> {
-    pub bot: BotRef,
+    pub bot: BotId,
     pub team: &'a TeamInfo,
     pub set_index: u32,
     pub tick: u32,
@@ -20,7 +20,7 @@ pub struct StepCtx<'a> {
 
 impl<'a> StepCtx<'a> {
     pub(crate) fn new(
-        bot: BotRef,
+        bot: BotId,
         team: &'a TeamInfo,
         set_index: u32,
         tick: u32,

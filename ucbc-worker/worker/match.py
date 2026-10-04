@@ -71,6 +71,7 @@ def command(match: MatchRow, bots: list[Path], replay: Path) -> list[str]:
         str(c.memory_bytes >> 20),
         "--replay",
         str(replay),
+        "--no-verbose",
     ]
 
 

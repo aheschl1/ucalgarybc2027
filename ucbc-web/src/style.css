@@ -173,10 +173,90 @@ body {
   margin-top: 24px;
 }
 
-.docs h3 {
-  font-size: 14px;
+.docs {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 680px);
+  gap: 48px;
+  padding: 32px;
+}
+
+.docs nav {
+  position: sticky;
+  top: 32px;
+  align-self: start;
+}
+
+.docs nav ol,
+.docs nav ul {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.docs nav ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.docs nav li {
+  margin: 2px 0;
+}
+
+.docs nav p {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.docs a {
+  color: #06c;
+  text-decoration: none;
+}
+
+.docs a:hover {
+  text-decoration: underline;
+}
+
+.docs nav .home {
+  display: block;
+  margin-bottom: 20px;
+  color: inherit;
   font-weight: 600;
-  margin: 16px 0 4px;
+}
+
+.docs h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.docs .lede {
+  margin: 4px 0 20px;
+  color: #555;
+}
+
+.docs section {
+  padding-top: 28px;
+  margin-top: 28px;
+  border-top: 1px solid #eee;
+}
+
+.docs h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.docs h2 .n {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #000;
+  color: #fff;
+  font-size: 12px;
 }
 
 .docs p {
@@ -184,12 +264,17 @@ body {
 }
 
 .docs ul,
-.docs ol {
+.docs ol.numbered {
+  margin: 8px 0;
   padding-left: 20px;
 }
 
-.docs ul {
-  list-style: disc;
+.docs article li {
+  margin: 4px 0;
+}
+
+.docs ol.numbered li {
+  margin: 10px 0;
 }
 
 .docs code {
@@ -199,16 +284,160 @@ body {
   background: #f4f4f4;
 }
 
-.docs pre {
+.docs .code {
+  position: relative;
   margin: 8px 0;
+}
+
+.docs .code .label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 11px;
+  color: #999;
+}
+
+.docs .code .label + button + pre {
+  padding-top: 28px;
+}
+
+.docs .code button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  background: #fff;
+  color: #888;
+  cursor: pointer;
+}
+
+.docs pre {
+  margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
   background: #f4f4f4;
+  overflow-x: auto;
+  font-size: 12px;
 }
 
 .docs pre code {
   padding: 0;
   background: none;
+}
+
+.docs .rule {
+  margin: 10px 0;
+  padding: 8px 12px;
+  border-left: 3px solid #06c;
+  border-radius: 0 6px 6px 0;
+  background: #f2f7fc;
+}
+
+.docs .rule div {
+  color: #444;
+}
+
+.docs .tabs {
+  display: inline-flex;
+  margin: 8px 0 0;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.docs .tabs button {
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 12px;
+  border: 0;
+  background: #fff;
+  color: #888;
+  cursor: pointer;
+}
+
+.docs .tabs button.on {
+  background: #000;
+  color: #fff;
+}
+
+.docs .os {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.docs .os .tabs {
+  margin: 0;
+}
+
+.docs table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.docs td {
+  padding: 4px 16px 4px 0;
+  vertical-align: top;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.docs td:first-child {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.docs table.flags td:first-child {
+  font-weight: 400;
+}
+
+.docs .states code {
+  font-size: 13px;
+}
+
+.docs .stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.docs .stats div {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+}
+
+.docs .stats b {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.docs .stats span {
+  font-size: 12px;
+  color: #888;
+}
+
+@media (max-width: 760px) {
+  .docs {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 24px 16px;
+  }
+
+  .docs nav {
+    position: static;
+  }
+
+  .docs .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .viewer {

@@ -58,7 +58,7 @@ def submit(bot: Path, game: str, name: str | None, test_run: bool) -> None:
         names = zipfile.ZipFile(io.BytesIO(zipped)).namelist()
         click.echo(f"{len(zipped)} bytes, {len(names)} files")
         for n in names:
-            click.echo(f"   {n}")
+            click.echo(f" {n}")
         return
 
     # Upload

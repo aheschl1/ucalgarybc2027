@@ -299,18 +299,22 @@ fn a_failed_carrier_leaves_its_fossil_behind() {
 }
 
 fn with_config(config: Value) -> Result<Ucbc2027, EngineError> {
+    in_set(0, config)
+}
+
+fn in_set(set_index: u32, config: Value) -> Result<Ucbc2027, EngineError> {
     Ucbc2027::create(&SetSetup::new(
-        0,
+        set_index,
         vec![TeamId(0), TeamId(1)],
         0,
         Some(config),
     ))
 }
 
-#[test]
-fn a_set_plays_on_the_map_in_game_config() {
+/// A map file in base64, drawn as rows: `L` lab, `f` a fossil, anything else empty.
+fn drawn(rows: &[&str]) -> String {
     use proto::{Environment, Item};
-    let tiles = ["LL....", "LL..LL", "...fLL"]
+    let tiles = rows
         .concat()
         .chars()
         .map(|ch| {
@@ -326,12 +330,17 @@ fn a_set_plays_on_the_map_in_game_config() {
         })
         .collect();
     let file = proto::Map {
-        width: 6,
-        height: 3,
+        width: rows[0].len() as u32,
+        height: rows.len() as u32,
         tiles,
     };
-    let map = BASE64.encode(file.encode_to_vec());
-    let g = with_config(json!({"map": map})).unwrap();
+    BASE64.encode(file.encode_to_vec())
+}
+
+#[test]
+fn a_set_plays_on_the_map_in_game_config() {
+    let map = drawn(&["LL....", "LL..LL", "...fLL"]);
+    let g = with_config(json!({"maps": [map]})).unwrap();
     let state = Game::snapshot(&g);
     assert_eq!(state.environment.len(), 3);
     assert_eq!(state.environment[0].len(), 6);
@@ -347,18 +356,40 @@ fn a_set_plays_on_the_map_in_game_config() {
 }
 
 #[test]
+fn one_map_plays_every_set_and_several_one_each() {
+    let wide = drawn(&["LL....", "LL..LL", "....LL"]);
+    let tall = drawn(&["LL", "LL", "..", "LL", "LL"]);
+    let width = |g: Ucbc2027| Game::snapshot(&g).environment[0].len();
+    for set in 0..3 {
+        assert_eq!(width(in_set(set, json!({"maps": [wide]})).unwrap()), 6);
+    }
+    let both = json!({"maps": [wide, tall]});
+    assert_eq!(width(in_set(0, both.clone()).unwrap()), 6);
+    assert_eq!(width(in_set(1, both.clone()).unwrap()), 2);
+    match in_set(2, both) {
+        Err(EngineError::Config(message)) => {
+            assert!(message.contains("set 2 has no map"), "{message}")
+        }
+        Err(other) => panic!("expected a config error, got {other}"),
+        Ok(_) => panic!("set 2 has no map"),
+    }
+}
+
+#[test]
 fn a_bad_map_in_game_config_is_a_config_error() {
     for (config, why) in [
-        (json!({"map": 3}), "expected a base64 string"),
-        (json!({"map": "not base64!"}), "Invalid"),
+        (json!({"maps": "x"}), "expected a list"),
+        (json!({"maps": []}), "set 0 has no map"),
+        (json!({"maps": [3]}), "expected a base64 string"),
+        (json!({"maps": ["not base64!"]}), "Invalid"),
         (
-            json!({"map": BASE64.encode([0xff, 0xff])}),
+            json!({"maps": [BASE64.encode([0xff, 0xff])]}),
             "not a map file",
         ),
     ] {
         match with_config(config) {
             Err(EngineError::Config(message)) => {
-                assert!(message.starts_with("game_config.map: "), "{message}");
+                assert!(message.starts_with("game_config.maps"), "{message}");
                 assert!(message.contains(why), "{message:?} should say {why:?}");
             }
             Err(other) => panic!("expected a config error, got {other}"),

@@ -121,12 +121,28 @@ fn most(field: Vec<TeamId>, score: impl Fn(TeamId) -> u32) -> Vec<TeamId> {
         .collect()
 }
 
-/// The map in `game_config`, `{"map": "<a map file in base64>"}`, or the standard one.
-fn map_from(config: Option<&Value>) -> Result<Map, EngineError> {
-    let Some(map) = config.and_then(|c| c.get("map")) else {
+/// The set's map from `game_config`, `{"maps": ["<a map file in base64>", ...]}`: one map
+/// plays every set, otherwise set `i` plays `maps[i]`. Without `maps`, the standard one.
+fn map_from(config: Option<&Value>, set_index: u32) -> Result<Map, EngineError> {
+    let Some(maps) = config.and_then(|c| c.get("maps")) else {
         return Ok(Map::standard());
     };
-    let bad = |why: String| EngineError::Config(format!("game_config.map: {why}"));
+    let bad = |why: String| EngineError::Config(format!("game_config.maps: {why}"));
+    let maps = maps
+        .as_array()
+        .ok_or_else(|| bad("expected a list of base64 strings".into()))?;
+    let i = if maps.len() == 1 {
+        0
+    } else {
+        set_index as usize
+    };
+    let map = maps.get(i).ok_or_else(|| {
+        bad(format!(
+            "set {set_index} has no map; give 1 map or one per set, got {}",
+            maps.len()
+        ))
+    })?;
+    let bad = |why: String| EngineError::Config(format!("game_config.maps[{i}]: {why}"));
     let bytes = map
         .as_str()
         .ok_or_else(|| bad("expected a base64 string".into()))
@@ -148,7 +164,7 @@ impl Game for Ucbc2027 {
                 setup.teams.len()
             )));
         }
-        let map = map_from(setup.game_config.as_ref())?;
+        let map = map_from(setup.game_config.as_ref(), setup.set_index)?;
         let mut bots = BotManager::new();
         // In step order, so the first team's lab steps first.
         for &team in &setup.teams {

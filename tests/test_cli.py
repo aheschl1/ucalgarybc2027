@@ -59,14 +59,33 @@ def test_run_plays_on_a_map_file(tmp_path: Path) -> None:
     args = ["run", noop, noop, "--game", "ucbc2027", "--sets", "1", "--replay", str(replay)]
     result = CliRunner().invoke(main, [*args, "--map", str(standard)])
     assert result.exit_code == 0, result.output
-    recorded = json.loads(replay.read_text())["config"]["game_config"]["map"]
-    assert base64.b64decode(recorded) == standard.read_bytes()
+    recorded = json.loads(replay.read_text())["config"]["game_config"]["maps"]
+    assert [base64.b64decode(m) for m in recorded] == [standard.read_bytes()]
 
     broken = tmp_path / "broken.map"
     broken.write_bytes(b"\xff\xff")
     result = CliRunner().invoke(main, [*args, "--map", str(broken)])
     assert result.exit_code != 0
-    assert "game_config.map: not a map file" in result.output
+    assert "game_config.maps[0]: not a map file" in result.output
+
+
+def test_run_plays_a_map_per_set(tmp_path: Path) -> None:
+    noop = str(UCBC2027.parents[1] / "bots" / "ucbc2027" / "noop")
+    maps = [UCBC2027 / "maps" / f"{name}.map" for name in ["standard", "medium"]]
+    replay = tmp_path / "replay.json"
+    args = ["run", noop, noop, "--game", "ucbc2027", "--sets", "2", "--replay", str(replay)]
+    result = CliRunner().invoke(main, [*args, "--map", str(maps[0]), "--map", str(maps[1])])
+    assert result.exit_code == 0, result.output
+    sets = json.loads(replay.read_text())["sets"]
+    widths = [len(s["initial_state"]["environment"][0]) for s in sets]
+    assert widths[0] != widths[1]
+
+    # One map per set or one for all; anything else is refused before playing.
+    result = CliRunner().invoke(
+        main, [*args, "--sets", "3", "--map", str(maps[0]), "--map", str(maps[1])]
+    )
+    assert result.exit_code == 2
+    assert "once per set (3)" in result.output
 
 
 def test_run_prints_progress_unless_no_verbose(

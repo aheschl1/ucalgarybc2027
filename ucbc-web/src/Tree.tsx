@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import {
   describe,
   type Api,
+  type GameMap,
   type Match,
   type Submission,
   type User,
@@ -263,9 +264,13 @@ function QueueForm({
   onQueued: () => void;
 }) {
   const [all, setAll] = useState<Submission[]>([]);
+  const [maps, setMaps] = useState<GameMap[]>([]);
   const [mine, setMine] = useState("");
   const [opponent, setOpponent] = useState("");
   const [seed, setSeed] = useState(0);
+  const [sets, setSets] = useState(3);
+  // A map id per set; "" is the game's standard map.
+  const [picked, setPicked] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -273,20 +278,46 @@ function QueueForm({
     api
       .load<Submission[]>("/submissions")
       .then(setAll, (err) => setError(describe(err)));
+    api
+      .load<GameMap[]>("/maps")
+      .then(setMaps, (err) => setError(describe(err)));
   }, [version]);
 
-  const own = all.filter((s) => s.team_id === user.team_id);
+  // Admins may queue any submissions; a member needs one of their team's.
+  const own = user.is_admin
+    ? all
+    : all.filter((s) => s.team_id === user.team_id);
+  // The match's game is the first picked bot's, and the maps offered are that game's.
+  const game = (
+    all.find((s) => s.id === mine) ?? all.find((s) => s.id === opponent)
+  )?.game;
+  // Another game's maps do not carry over.
+  useEffect(() => setPicked([]), [game]);
+  const offered = maps.filter((m) => m.game === game && m.archived_at === null);
+  const chosen = Array.from({ length: sets }, (_, i) => picked[i] ?? "");
+  // The standard map everywhere, or a map in every set; the API takes no mix.
+  const partial = chosen.some(Boolean) && !chosen.every(Boolean);
+  const pick = (set: number, id: string) => {
+    const next = [...chosen];
+    next[set] = id;
+    setPicked(next);
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const a = all.find((s) => s.id === mine);
-    if (!a) return;
+    if (!game || partial) return;
     setBusy(true);
     setError("");
     try {
       await api.post("/matches/queue", {
-        game: a.game,
+        game,
         bots: [mine, opponent],
-        config: { seed },
+        config: { seed, sets },
+        // One map for every set when they are all the same.
+        maps:
+          new Set(chosen).size === 1 && chosen[0]
+            ? [chosen[0]]
+            : chosen.filter(Boolean),
       });
       onQueued();
     } catch (err) {
@@ -303,13 +334,13 @@ function QueueForm({
   );
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
-      <Field label="Your submission">
+      <Field label={user.is_admin ? "Submission" : "Your submission"}>
         <Select value={mine} onChange={(e) => setMine(e.target.value)}>
           <option value="">Choose…</option>
           {own.map(option)}
         </Select>
       </Field>
-      <div className="grid grid-cols-[1fr_7rem] gap-3">
+      <div className="grid grid-cols-[1fr_7rem_5rem] gap-3">
         <Field label="Opponent">
           <Select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
             <option value="">Choose…</option>
@@ -323,11 +354,39 @@ function QueueForm({
             onChange={(e) => setSeed(Number(e.target.value))}
           />
         </Field>
+        <Field label="Sets">
+          <Input
+            type="number"
+            min={1}
+            value={sets}
+            onChange={(e) => setSets(Math.max(1, Number(e.target.value)))}
+          />
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {chosen.map((id, i) => (
+          <Field key={i} label={`Set ${i + 1} map`}>
+            <Select
+              title={game ? undefined : "Choose a submission to pick maps"}
+              disabled={!game}
+              value={id}
+              onChange={(e) => pick(i, e.target.value)}
+            >
+              <option value="">Standard map</option>
+              {offered.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ))}
       </div>
       <div className="flex items-center gap-3">
-        <Button disabled={!mine || !opponent || busy}>
+        <Button disabled={!mine || !opponent || partial || busy}>
           {busy ? "Queueing…" : "Queue match"}
         </Button>
+        {partial && <ErrorText>Pick a map for every set, or none</ErrorText>}
         {error && <ErrorText>{error}</ErrorText>}
       </div>
     </form>

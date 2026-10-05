@@ -1,6 +1,13 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "react-router";
-import { describe, type Api, type Match, type MatchRow, type SetResult } from "./api";
+import {
+  describe,
+  type Api,
+  type GameMap,
+  type Match,
+  type MatchRow,
+  type SetResult,
+} from "./api";
 import { cx, Empty, ErrorText, Mono, StatusPill, Table } from "./ui";
 
 const HEAD = ["", "Match", "Status", "Teams", "Sets", ""];
@@ -68,6 +75,7 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
   // The list gives the row without its sets; those load when the branch opens.
   const [match, setMatch] = useState<MatchRow | Match>(row);
   const [open, setOpen] = useState(false);
+  const [mapNames, setMapNames] = useState<string[] | null>(null);
   const [error, setError] = useState("");
   useEffect(() => setMatch(row), [row]);
 
@@ -77,8 +85,22 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
       .load<Match>(`/matches/${encodeURIComponent(row.id)}`)
       .then(setMatch, (err) => setError(describe(err)));
   };
+  // The row names its maps by id; the names come from the map list.
+  const fetchMapNames = () => {
+    if (mapNames || row.maps.length === 0) return;
+    api.load<GameMap[]>("/maps").then(
+      (maps) => {
+        const names = new Map(maps.map((m) => [m.id, m.name]));
+        setMapNames(row.maps.map((id) => names.get(id) ?? id));
+      },
+      (err) => setError(describe(err)),
+    );
+  };
   const toggle = () => {
-    if (!open) fetchSets();
+    if (!open) {
+      fetchSets();
+      fetchMapNames();
+    }
     setOpen(!open);
   };
 
@@ -140,6 +162,11 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
           <td colSpan={COLUMNS - 1} className="px-4 pb-4">
             {match.error && <ErrorText>{match.error}</ErrorText>}
             {error && <ErrorText>{error}</ErrorText>}
+            <p className="mb-2 text-xs text-muted">
+              {match.maps.length === 0
+                ? "Standard map"
+                : `${match.maps.length === 1 ? "Map" : "Maps"} ${(mapNames ?? match.maps).join(", ")}`}
+            </p>
             {"sets" in match ? (
               match.sets.length > 0 ? (
                 <ul className="divide-y divide-line rounded-lg border border-line bg-bg">

@@ -27,7 +27,8 @@ class LostLease(Exception):
 
 async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID:
     """Admins queue any submissions at any priority. A member needs one of their team's
-    submissions in the match, at normal priority."""
+    submissions in the match, at normal priority. Anyone picks the maps; they are not read
+    here, so a bad pick fails the match when it is played."""
     names: list[str] = []
     owned = False
     for bot in req.bots:
@@ -40,7 +41,9 @@ async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID
         raise Forbidden("one of the bots must be your team's submission")
     priority = req.priority if user.is_admin else 0
     teams = [TeamInfo(id=i, name=name) for i, name in enumerate(names)]
-    return await db.match_repo.insert("user", req.game, teams, req.config, req.bots, priority)
+    return await db.match_repo.insert(
+        "user", req.game, teams, req.config, req.bots, req.maps, priority
+    )
 
 
 async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:

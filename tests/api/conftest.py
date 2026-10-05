@@ -59,7 +59,7 @@ async def app(database_url: str, blob_url: str) -> AsyncIterator[FastAPI]:
     async with app.router.lifespan_context(app):
         async with app.state.pool.connection() as conn:
             await conn.execute(
-                "truncate users, teams, sessions, matches, sets, submissions "
+                "truncate users, teams, sessions, matches, sets, submissions, maps "
                 "restart identity cascade"
             )
         yield app

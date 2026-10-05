@@ -17,7 +17,7 @@ from api.models.matches import (
 )
 
 COLUMNS = (
-    "id, origin, game, engine_version, teams, config, bots, status, set_wins, winner_team, error, "
+    "id, origin, game, engine_version, teams, config, bots, maps, status, set_wins, winner_team, error, "
     "priority, attempts, max_attempts, claimed_by, claimed_at, heartbeat_at, created_at, "
     "completed_at"
 )
@@ -51,17 +51,19 @@ class MatchRepo:
         teams: list[TeamInfo],
         config: MatchConfig,
         bots: list[UUID],
+        maps: list[UUID],
         priority: int,
     ) -> UUID:
         cur = await self._conn.execute(
-            "insert into matches (origin, game, teams, config, bots, priority, status) "
-            "values (%s, %s, %s, %s, %s, %s, 'queued') returning id",
+            "insert into matches (origin, game, teams, config, bots, maps, priority, status) "
+            "values (%s, %s, %s, %s, %s, %s, %s, 'queued') returning id",
             (
                 origin,
                 game,
                 Jsonb([t.model_dump() for t in teams]),
                 Jsonb(config.model_dump()),
                 Jsonb([str(b) for b in bots]),
+                Jsonb([str(m) for m in maps]),
                 priority,
             ),
         )

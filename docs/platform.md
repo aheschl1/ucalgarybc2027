@@ -69,6 +69,24 @@ game, size, sha256) is in Postgres; the zip is in the bucket at `submissions/<id
 (`api/blobs.py`, one boto3 client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not; `?mine=true` narrows the
 list to the caller's team's.
 
+## Maps
+
+An admin uploads a map file for a game (`POST /api/maps`, at most 64 KiB); the row (`maps`:
+game, name, size, sha256, uploader) is in Postgres and the file in the bucket at
+`maps/<id>.map`. Names are unique per game, ignoring case. `ucbc-api-cli import-maps <dir>
+--game <game>` uploads every `*.map` in a directory, such as `games/ucbc2027/maps`.
+Every logged-in user lists the metadata; only admins download a file. A map is archived
+(`PATCH /api/maps/<id>`), never deleted, since matches name it: the web app stops offering
+it, and the matches played on it keep its name. `/admin/maps` in the web app is the admin
+page.
+
+`matches.maps` is the map ids a match plays, in set order: none is the game's standard map,
+one plays every set, otherwise one per set. Anyone queuing a match picks them. The API reads
+neither the file nor the pick: it trusts what it stored. The worker downloads each file and
+passes `--map` once per map, so a file the game refuses, a count that is neither 1 nor the
+number of sets, or a file missing from the bucket fails that match, with the reason as its
+error.
+
 ## Queue
 
 A match row is the queue entry.

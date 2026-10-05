@@ -4,6 +4,7 @@ import { get, logOut, makeApi, type User } from "./api";
 import Docs from "./Docs";
 import Leaderboard from "./Leaderboard";
 import Login from "./Login";
+import Maps from "./Maps";
 import NavBar from "./NavBar";
 import Profile from "./Profile";
 import Register from "./Register";
@@ -59,6 +60,7 @@ export default function App() {
           }
         />
         <Route path="/viewer/:matchId" element={<Viewer api={api} />} />
+        {user.is_admin && <Route path="/admin/maps" element={<Maps api={api} />} />}
         <Route
           path="/leaderboard"
           element={<Leaderboard teamId={user.team_id} />}

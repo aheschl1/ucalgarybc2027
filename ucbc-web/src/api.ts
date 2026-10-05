@@ -45,6 +45,14 @@ export function post<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export function patch<T>(path: string, body: unknown): Promise<T> {
+  return send(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export function upload<T>(path: string, form: FormData): Promise<T> {
   return send(path, { method: "POST", body: form });
 }
@@ -68,6 +76,7 @@ export function signUp(
 export type Api = {
   load: <T>(path: string) => Promise<T>;
   post: <T>(path: string, body: unknown) => Promise<T>;
+  patch: <T>(path: string, body: unknown) => Promise<T>;
   upload: <T>(path: string, form: FormData) => Promise<T>;
 };
 
@@ -84,6 +93,7 @@ export function makeApi(onLogOut: () => void): Api {
   return {
     load: (path) => guard(get(path)),
     post: (path, body) => guard(post(path, body)),
+    patch: (path, body) => guard(patch(path, body)),
     upload: (path, form) => guard(upload(path, form)),
   };
 }
@@ -96,6 +106,7 @@ export function describe(err: unknown): string {
 
 // The API's own models, generated from its OpenAPI schema by `make api-types`.
 export type {
+  Map as GameMap,
   Match,
   MatchRow,
   MyTeam as Team,

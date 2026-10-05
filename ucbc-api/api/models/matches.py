@@ -72,6 +72,9 @@ class MatchEnqueue(BaseModel):
     # Submission ids; the engine's team i plays bots[i].
     bots: list[UUID] = Field(min_length=2, max_length=2)
     config: MatchConfig = MatchConfig()
+    # Map ids: none plays the game's standard map, one plays every set, otherwise one per
+    # set in order.
+    maps: list[UUID] = []
     priority: int = 0
 
 
@@ -89,6 +92,7 @@ class MatchRow(BaseModel):
     teams: list[TeamInfo]
     config: MatchConfig
     bots: list[UUID]
+    maps: list[UUID]
     status: MatchStatus
     set_wins: list[int] | None
     winner_team: int | None

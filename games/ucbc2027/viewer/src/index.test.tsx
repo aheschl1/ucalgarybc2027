@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import type { Snapshot } from "./api.gen.ts";
 import { renderer } from "./index.tsx";
-import { assets } from "./skin/assets.ts";
+import { assets, dinoTier } from "./skin/assets.ts";
 
 const { Board, Info } = renderer;
 afterEach(cleanup);
@@ -80,7 +80,7 @@ it("draws the board in layers, a table of team counts, and the set's step order"
   const [lab, dino] = [...bots];
   expect(attrs(lab!.querySelectorAll("image"), "href")).toEqual([assets.lab[1]]);
   expect(attrs(lab!.querySelectorAll(".u27-hit"), "width")).toEqual(["32"]);
-  expect(dino!.querySelector("image")?.getAttribute("href")).toBe(assets.dino[0]);
+  expect(attrs(dino!.querySelectorAll(".u27-frame"), "href")).toEqual(assets.dino[0]![0]);
   expect(dino!.querySelector(".u27-level")?.textContent).toBe("1");
   expect(attrs(dino!.querySelectorAll(".u27-held image"), "href")).toEqual([assets.fossil]);
   expect(svg.querySelector(".u27-selected")).toBeNull();
@@ -121,7 +121,8 @@ it("selects a dino or a lab by its footprint, and shows the selected unit", () =
   fireEvent.click(bot(7).querySelector("image")!);
   fireEvent.click(board.container.querySelectorAll(".u27-terrain image")[2]!);
   expect(onSelect.mock.calls).toEqual([[4], [7], [null]]);
-  expect(attrs(bot(7).querySelectorAll(".u27-held image"), "href")).toEqual([assets.dino[0]]);
+  expect(attrs(bot(7).querySelectorAll(".u27-frame"), "href")).toEqual(assets.dino[1]![1]);
+  expect(attrs(bot(7).querySelectorAll(".u27-held image"), "href")).toEqual([assets.dino[0]![0]![0]]);
 
   const ring = () => {
     const r = board.container.querySelector(".u27-selected");
@@ -149,4 +150,8 @@ it("rejects a state it does not recognise", () => {
     expect(() => render(at(frame, <Info />))).toThrow("not a ucbc2027 state");
   }
   vi.restoreAllMocks();
+});
+
+it("picks a dino's picture tier from its level, the top tier past the last", () => {
+  expect([0, 1, 2, 3, 4, 5, 99].map(dinoTier)).toEqual([0, 0, 1, 2, 3, 3, 3]);
 });

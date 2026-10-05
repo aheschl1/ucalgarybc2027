@@ -1,6 +1,6 @@
 import "./editor.css";
 
-import { type Brush, type Mirror, blank, decode, encode, paint } from "./map.ts";
+import { type Brush, type LabTile, type Mirror, blank, decode, encode, labs, paint } from "./map.ts";
 import { Environment, Item } from "./map_pb.ts";
 
 export interface EditorOptions {
@@ -18,6 +18,8 @@ export interface Editor {
 const NEW_SIZE = 16;
 // As the engine's `MAX_SIDE` in games/ucbc2027/src/map.rs.
 const MAX_SIDE = 64;
+// A map has a lab for each of two teams.
+const TEAMS = 2;
 const BRUSHES: Brush[] = ["empty", "wall", "lab", "fossil"];
 const MIRRORS: [Mirror, string][] = [
   ["none", "No mirror"],
@@ -89,10 +91,23 @@ export function createEditor(el: HTMLElement, options: EditorOptions): Editor {
   );
   el.append(root);
 
-  function drawTile(i: number) {
+  /** A lab tile's quarter of its team's lab picture, or that the engine rejects it. */
+  function labClass(lab: LabTile | undefined): string {
+    if (!lab || lab.team >= TEAMS) return " ed-broken";
+    return ` ed-team-${lab.team} ed-${lab.quarter}`;
+  }
+
+  function drawTile(i: number, lab: LabTile | undefined) {
     const tile = map.tiles[i]!;
     const fossil = tile.item === Item.FOSSIL ? " ed-fossil" : "";
-    tiles[i]!.className = `ed-tile ed-${ENVIRONMENT[tile.environment]}${fossil}`;
+    const place = tile.environment === Environment.LAB ? labClass(lab) : "";
+    tiles[i]!.className = `ed-tile ed-${ENVIRONMENT[tile.environment]}${place}${fossil}`;
+  }
+
+  /** Redraws every tile: painting one lab tile can change which lab, and team, the
+   * others after it belong to. */
+  function drawTiles() {
+    labs(map).forEach((lab, i) => drawTile(i, lab));
   }
 
   function draw() {
@@ -104,7 +119,7 @@ export function createEditor(el: HTMLElement, options: EditorOptions): Editor {
       tile.dataset.i = String(i);
       return tile;
     });
-    tiles.forEach((_, i) => drawTile(i));
+    drawTiles();
     board.replaceChildren(...tiles);
     width.value = String(map.width);
     height.value = String(map.height);
@@ -114,8 +129,9 @@ export function createEditor(el: HTMLElement, options: EditorOptions): Editor {
     const i = Number((target as HTMLElement | null)?.dataset?.i ?? NaN);
     if (Number.isNaN(i)) return;
     const painted = paint(map, i % map.width, Math.floor(i / map.width), brush, mirror);
-    painted.forEach(drawTile);
-    if (painted.length > 0) status.textContent = "Unsaved changes";
+    if (painted.length === 0) return;
+    drawTiles();
+    status.textContent = "Unsaved changes";
   }
 
   newMap.addEventListener("click", () => {

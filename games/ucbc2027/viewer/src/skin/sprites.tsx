@@ -7,7 +7,7 @@ import "./skin.css";
 import type { ComponentType } from "react";
 
 import type { Environment, ItemView, UnitEntry } from "../api.gen.ts";
-import { assets } from "./assets.ts";
+import { assets, dinoTier } from "./assets.ts";
 
 /** A tile's side in SVG units. */
 export const CELL = 16;
@@ -20,12 +20,17 @@ type Sprites<U extends { type: string }, P extends string> = {
 
 type Of<U, T> = Extract<U, { type: T }>;
 
-function forTeam(pictures: string[], team: number): string {
+function forTeam<T>(pictures: T[], team: number): T {
   return pictures[team % pictures.length]!;
 }
 
-function Picture({ href, side = 1 }: { href: string; side?: number }) {
-  return <image href={href} width={side * CELL} height={side * CELL} />;
+function Picture({ href, side = 1, className }: { href: string; side?: number; className?: string }) {
+  return <image className={className} href={href} width={side * CELL} height={side * CELL} />;
+}
+
+/** A dino's frames for its team and level. */
+function dinoFrames(team: number, level: number): string[] {
+  return forTeam(assets.dino, team)[dinoTier(level)]!;
 }
 
 function EmptyTile() {
@@ -45,19 +50,22 @@ function Fossil() {
 }
 
 function HeldDino({ item }: { item: Of<ItemView, "dino"> }) {
-  return <Picture href={forTeam(assets.dino, item.team)} />;
+  return <Picture href={dinoFrames(item.team, item.level)[0]!} />;
 }
 
 function Lab({ unit }: { unit: Of<UnitEntry, "lab"> }) {
   return <Picture href={forTeam(assets.lab, unit.team)} side={2} />;
 }
 
-/** The dino's level on it, and what it holds in the bottom-right quarter. */
+/** The dino in its idle loop (skin.css swaps the frames), its level in the top-left
+ * corner, and what it holds in the bottom-right quarter. */
 function Dino({ unit }: { unit: Of<UnitEntry, "dino"> }) {
   return (
     <>
-      <Picture href={forTeam(assets.dino, unit.team)} />
-      <text className="u27-level" x={CELL / 2} y={CELL / 2}>
+      {dinoFrames(unit.team, unit.level).map((href, i) => (
+        <Picture key={i} href={href} className={`u27-frame u27-frame-${i}`} />
+      ))}
+      <text className="u27-level" x={1} y={1}>
         {unit.level}
       </text>
       {unit.held ? (

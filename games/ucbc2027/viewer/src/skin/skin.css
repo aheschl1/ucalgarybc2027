@@ -1,6 +1,43 @@
+/* The art is 16px pixel art; keep its pixels sharp at any zoom. */
+.u27-board image {
+  image-rendering: pixelated;
+}
+
+/* A dino's two frames take turns, each shown for half the loop. */
+.u27-frame {
+  animation: u27-idle 0.8s steps(1) infinite;
+}
+
+.u27-frame-1 {
+  animation-delay: -0.4s;
+}
+
+@keyframes u27-idle {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .u27-frame {
+    animation: none;
+  }
+
+  .u27-frame-1 {
+    opacity: 0;
+  }
+}
+
 .u27-level {
   fill: #fff;
-  font: 600 9px system-ui, sans-serif;
-  text-anchor: middle;
-  dominant-baseline: central;
+  stroke: #1c1917;
+  stroke-width: 1.5px;
+  paint-order: stroke;
+  font: 700 5px system-ui, sans-serif;
+  text-anchor: start;
+  dominant-baseline: hanging;
+  pointer-events: none;
 }

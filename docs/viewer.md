@@ -71,17 +71,17 @@ is a few hundred KB, rewritten whenever the game changes.
 ## Changing how ucbc2027 looks
 
 ```text
-games/ucbc2027/viewer/assets/        one picture per thing, per team where coloured
+games/ucbc2027/viewer/assets/        16x16 pixel art (labs 64x64), per team where coloured
 games/ucbc2027/viewer/src/skin/
   assets.ts                          which file each thing uses
   sprites.tsx                        one component per thing: picture plus extras (level, held item)
   skin.css                           sprite styling
 ```
 
-A sprite draws in SVG in a box at the origin: one tile is 16 units, a lab is 2x2 tiles.
-Pictures are drawn into that box keeping their aspect ratio. The board places sprites,
-takes clicks over a unit's whole footprint, and draws the selection, so a sprite never
-handles either. Sprites are listed per generated `type`, so a new tile, item, or unit
+A sprite draws in SVG in a box at the origin: one tile is 16 units (one art pixel each),
+a lab is 2x2 tiles. Pictures are drawn into that box keeping their aspect ratio, without
+smoothing. The board places sprites, takes clicks over a unit's whole footprint, and
+draws the selection, so a sprite never handles either. Sprites are listed per generated `type`, so a new tile, item, or unit
 type in the Rust fails the type check until it has one.
 
 ## Adding a renderer

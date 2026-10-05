@@ -51,3 +51,33 @@ export function paint(map: Map, x: number, y: number, brush: Brush, mirror: Mirr
   }
   return [...painted];
 }
+
+/** Where a lab tile sits in its lab: its team, and its quarter of the 2x2 square. */
+export interface LabTile {
+  team: number;
+  quarter: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+}
+
+const QUARTERS: LabTile["quarter"][] = ["top-left", "top-right", "bottom-left", "bottom-right"];
+
+/** Each lab tile's place in its lab by tile index, read as the engine does (`Map::new` in
+ * games/ucbc2027/src/map.rs): in reading order, the first lab tile not yet in a lab is a
+ * new lab's top-left, and the order gives its team. A lab tile left out of every lab, as
+ * in a broken square, has none. */
+export function labs(map: Map): (LabTile | undefined)[] {
+  const isLab = (x: number, y: number) =>
+    x < map.width && y < map.height && map.tiles[y * map.width + x]!.environment === Environment.LAB;
+  const placed = Array.from<LabTile | undefined>({ length: map.tiles.length });
+  let team = 0;
+  map.tiles.forEach((_, i) => {
+    const x = i % map.width;
+    const y = Math.floor(i / map.width);
+    if (!isLab(x, y) || placed[i]) return;
+    const square = [i, i + 1, i + map.width, i + map.width + 1];
+    const whole = isLab(x + 1, y) && isLab(x, y + 1) && isLab(x + 1, y + 1);
+    if (!whole || square.some((j) => placed[j])) return;
+    square.forEach((j, q) => (placed[j] = { team, quarter: QUARTERS[q]! }));
+    team++;
+  });
+  return placed;
+}

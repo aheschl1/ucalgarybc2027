@@ -78,6 +78,15 @@ body {
   margin: 4px 0;
 }
 
+.page ol {
+  margin: 0;
+  padding-left: 28px;
+}
+
+.page li.mine {
+  font-weight: bold;
+}
+
 .tree summary,
 .tree a,
 .page summary,

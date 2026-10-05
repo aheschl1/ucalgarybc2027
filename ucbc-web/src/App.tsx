@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { get, logOut, makeApi, type User } from "./api";
 import Docs from "./Docs";
+import Leaderboard from "./Leaderboard";
 import Login from "./Login";
 import Profile from "./Profile";
 import Register from "./Register";
@@ -31,6 +32,7 @@ export default function App() {
       <Routes>
         <Route path="/register" element={<Register onLogIn={setUser} />} />
         {docs}
+        <Route path="/leaderboard" element={<Leaderboard />} />
         <Route path="*" element={<Login onLogIn={setUser} />} />
       </Routes>
     );
@@ -54,6 +56,10 @@ export default function App() {
         }
       />
       <Route path="/viewer/:matchId" element={<Viewer api={api} />} />
+      <Route
+        path="/leaderboard"
+        element={<Leaderboard teamId={user.team_id} />}
+      />
       {docs}
       {/* Where signing up lands: the session arrives while the browser is still here. */}
       <Route path="/register" element={<Navigate to="/profile" replace />} />

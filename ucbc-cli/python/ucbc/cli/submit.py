@@ -5,10 +5,11 @@ from pathlib import Path
 import click
 import httpx
 
+from ucbc.settings import server_url
+
 MAX_ZIP = 1 << 20
 MAX_UNPACKED = 8 << 20
 MAX_NAME = 64
-SERVER = "https://ucbc.andrewheschl.ca/api"
 
 
 def zip_dir(directory: Path) -> bytes:
@@ -67,12 +68,12 @@ def submit(bot: Path, game: str, name: str | None, test_run: bool) -> None:
 
     try:
         response = httpx.post(
-            f"{SERVER}/submissions",
+            f"{server_url()}/submissions",
             files={"file": (f"{bot.name}.zip", zipped, "application/zip")},
             data=form,
         )
     except httpx.HTTPError as e:
-        raise click.ClickException(f"could not reach {SERVER}: {e}") from e
+        raise click.ClickException(f"could not reach {server_url()}: {e}") from e
 
     if response.status_code != 201:
         raise click.ClickException(response.json().get("detail", response.text))

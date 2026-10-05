@@ -1,3 +1,5 @@
+"""Used for logging in on CLI. Stores the session token in a json file. Checks if the session url matches the server url"""
+
 import json
 import os
 from pathlib import Path

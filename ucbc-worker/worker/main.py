@@ -94,6 +94,13 @@ async def _serve() -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
 
+    try:
+        async with self.pool.connection() as conn:
+            db = DBConnection(conn)
+            scheduler = asyncio.create_task(db.match_repo.run_scheduler(stop))
+    except Exception:
+        log.exception("scheduler failed")
+
     def request_stop() -> None:
         log.info("stopping after the running matches")
         stop.set()

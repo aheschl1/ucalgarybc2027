@@ -1,3 +1,5 @@
+import gzip
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -8,12 +10,14 @@ from psycopg.types.json import Jsonb
 
 from api.models.matches import (
     MatchConfig,
+    MatchEnqueue,
     MatchOrigin,
     MatchRow,
     SetReplay,
     SetResult,
     TeamInfo,
 )
+from api.db import DBConnection
 
 COLUMNS = (
     "id, origin, game, engine_version, teams, config, bots, maps, status, set_wins, winner_team, error, "
@@ -112,6 +116,61 @@ class MatchRepo:
             (*args, limit),
         )
         return [MatchRow.model_validate(row) for row in await cur.fetchall()]
+
+    async def auto_schedule(self) -> UUID | None:
+        """Tries to find 2 most recent submissions (that haven't already faced each other) from different teams and queues a match between them."""
+        # TODO: we should maybe(?) make a model for the columns being returned so it can be validated and cleaned up
+        res = await self._conn.execute(
+            f"""
+            select A.id as id_a, A.team_id as team_id_a, A.game as game_a, B.id as id_b, B.team_id as team_id_b, B.game as game_b
+            from submissions A, submissions B
+            where (id_a, id_b) not in (
+                select (teams->>0, teams->>1)
+                from matches;
+            )
+            and
+            id_a in (
+                select id, team_id, MAX(created_at)
+                from submissions
+                group by team_id;
+            )
+            and
+            id_b in (
+                select id, team_id, MAX(created_at)
+                from submissions
+                group by team_id;
+            )
+            and
+            id_a != id_b
+            and
+            team_id_a != team_id_b
+            and
+            game_a = game_b;
+            """
+        )
+        data = res.fetchone()
+        if data is None:
+            return None
+        # need game from query result
+        game = data["game_a"]
+        # need bot UUIDs from query result
+        bots = [data["id_a"], data["id_b"]]
+        # need team info from query result
+        db = DBConnection(self._conn)
+        team_a = TeamInfo()
+        team_b = TeamInfo()
+        team_a.id = data["team_id_a"]
+        team_a.name = db.team_repo.get(data["team_id_a"])
+        team_b.id = data["team_id_b"]
+        team_b.name = db.team_repo.get(data["team_id_b"])
+        teams = [team_a, team_b]
+        return self.insert("platform", game, teams, MatchConfig(), bots, 0)
+    
+    async def run_scheduler(self, stop: asyncio.Event):
+        """Runs the auto scheduler periodically to queue new matches between new submissions automatically."""
+        while not stop.is_set():
+            match_id = self.auto_schedule()
+            asyncio.sleep(10)
 
     async def claim(self, worker: str, lease: timedelta) -> MatchRow | None:
         """The next queued match, or a running one whose heartbeat is older than `lease`."""

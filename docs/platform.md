@@ -47,8 +47,8 @@ as a non-admin, and the app logs in straight after. Admins are made only by
 
 The web app is a single page with client-side routes. `api/api.py::APP_ROUTES` lists the
 paths it owns, each served the app shell so a reload of one works; anything else under `/`
-is a built file or a 404. Signed out, every path is the login form except `/register` and
-`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`.
+is a built file or a 404. Signed out, every path is the login form except `/register`,
+`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`, and `/leaderboard`.
 
 ## Teams
 
@@ -117,7 +117,8 @@ K is 32 (`services/elo.py`). Every done match counts, user matches included; a t
 slots is skipped. One rating covers every game.
 
 `GET /api/teams/elo` (every team, highest first) and `GET /api/teams/{id}/elo` need no login
-and show the rating rounded, with the match count.
+and show the rating rounded, with the match count. `/leaderboard` in the web app lists the first, and the
+profile shows the caller's team's rating and place.
 
 ## Settings
 

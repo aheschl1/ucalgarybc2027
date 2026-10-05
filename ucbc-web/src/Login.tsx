@@ -45,7 +45,8 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
       {error && <p className="error">{error}</p>}
       <p className="dim center">
         <Link to="/register">create an account</Link> ·{" "}
-        <Link to="/docs">docs</Link>
+        <Link to="/docs">docs</Link> ·{" "}
+        <Link to="/leaderboard">leaderboard</Link>
       </p>
     </form>
   );

@@ -110,6 +110,14 @@ export type Team = {
   created_at: string;
 };
 
+// A team's rating, rounded. Anyone may read every team's.
+export type TeamElo = {
+  id: number;
+  name: string;
+  elo: number;
+  matches: number;
+};
+
 // Mirrors SetResult and TeamInfo in ucbc-engine.
 export type SetResult = {
   index: number;

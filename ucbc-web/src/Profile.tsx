@@ -5,8 +5,10 @@ import {
   type Api,
   type Submission,
   type Team,
+  type TeamElo,
   type User,
 } from "./api";
+import { rating } from "./Leaderboard";
 import { MatchList } from "./matches";
 
 export default function Profile({
@@ -92,6 +94,13 @@ function TeamSection({
     api.load<Team>("/teams/me").then(setTeam, (err) => setError(describe(err)));
   }, []);
 
+  // The whole board, for the team's place on it; refetched when the team changes.
+  const [board, setBoard] = useState<TeamElo[]>([]);
+  useEffect(() => {
+    if (team) api.load<TeamElo[]>("/teams/elo").then(setBoard, () => {});
+  }, [team?.id]);
+  const mine = board.find((t) => t.id === team?.id);
+
   const act = async (call: () => Promise<Team>, moves: boolean) => {
     setBusy(true);
     setError("");
@@ -139,6 +148,12 @@ function TeamSection({
           <p>
             {team.name} <span className="dim">· {team.members.join(", ")}</span>
           </p>
+          {mine && (
+            <p className="dim">
+              {rating(mine)} · #{board.indexOf(mine) + 1} of {board.length} ·{" "}
+              <Link to="/leaderboard">leaderboard</Link>
+            </p>
+          )}
           <p className="dim">
             join code <code>{team.join_code}</code> ·{" "}
             <a href="#" onClick={newCode}>

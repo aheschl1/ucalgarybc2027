@@ -20,9 +20,6 @@ from ucbc.handle import ActionError
 
 DINOS = 4
 LOOK = 3
-"""How far around itself a dino looks for fossils. Every tile looked at is a query,
-and queries are what a step's time goes on."""
-
 
 bot: "Lab | Dino | None" = None
 

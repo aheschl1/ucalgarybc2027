@@ -72,8 +72,8 @@ export default function Viewer({ api }: { api: Api }) {
   return (
     <main className="mx-auto w-full max-w-[84rem] px-4 py-6 sm:px-6">
       <p className="mb-4 flex items-center gap-2 text-sm text-muted">
-        <Link to="/" className="hover:text-fg">
-          Home
+        <Link to="/platform" className="hover:text-fg">
+          Platform
         </Link>
         <span>/</span>
         <span>Match</span>

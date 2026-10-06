@@ -152,7 +152,7 @@ export default function Docs() {
   const shell = os === "windows" ? "PowerShell" : "terminal";
 
   return (
-    <main className="docs mx-auto grid w-full max-w-6xl gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
+    <main className="docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
       <nav className="text-sm md:sticky md:top-24 md:self-start">
         <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
           Get started
@@ -316,14 +316,15 @@ export default function Docs() {
         <Section id="submit" n={4} title="submit">
           <ol className="numbered">
             <li>
-              <Link to="/register">Create an account</Link>, or log in.
+              <Link to="/register">Create an account</Link>, or{" "}
+              <Link to="/login">log in</Link>.
             </li>
             <li>
               Zip the <em>contents</em> of your bot folder:
               <Code label={shell}>{zip[os]}</Code>
             </li>
             <li>
-              On the <Link to="/">home page</Link>, under{" "}
+              On the <Link to="/platform">platform</Link> home page, under{" "}
               <strong>Submit a bot</strong>, choose the zip, optionally name it,
               leave the game as <code>ucbc2027</code>, and press{" "}
               <strong>Upload</strong>.
@@ -348,7 +349,8 @@ export default function Docs() {
 
         <Section id="watch" n={5} title="watch">
           <p>
-            A queued match appears under <strong>Your matches</strong>:
+            A queued match appears under <strong>Queue</strong> on the platform, then under{" "}
+            <strong>Matches</strong>:
           </p>
           <p className="states">
             <code>queued</code> → <code>running</code> → <code>done</code>
@@ -356,7 +358,7 @@ export default function Docs() {
           <p>
             Click it to see who won each set and why. Press{" "}
             <strong>Watch</strong> to step through the replay. Your bots and
-            matches are also on your <Link to="/profile">profile</Link>.
+            matches are also on your <Link to="/platform/profile">profile</Link>.
           </p>
         </Section>
 
@@ -421,7 +423,7 @@ ucbc run mybot mybot --sets 2 --map a.map --map b.map`}</Code>
         <Section id="teams" title="teams">
           <p>
             Every account starts on a team of its own. To play as a group, one
-            of you starts a team on the <Link to="/profile">profile</Link> page
+            of you starts a team on the <Link to="/platform/profile">profile</Link> page
             and the others paste its join code into <strong>join</strong>.
           </p>
           <ul>

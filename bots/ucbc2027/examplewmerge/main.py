@@ -66,11 +66,14 @@ class Dino:
                 self.go(handle, self.home)
             return
         
-        target_level = handle.bones() // 100
+        target_level = handle.bones() // 100 # bot heuristic: what level shoudl we aim to be
+        # look at every cell around the active bot
         for coord in around(handle, me.pos):
             tileitem = handle.item(coord.x, coord.y)
+            # merge based on level heuristic
             if isinstance(tileitem, ItemViewDino) and target_level > me.level and handle.can_merge(tileitem.id):
                 handle.merge(tileitem.id)
+            # attack weaker dinos
             elif isinstance(tileitem, ItemViewDino) and handle.team != tileitem.team and me.level > tileitem.level:
                 handle.attack(tileitem.id)
                 return

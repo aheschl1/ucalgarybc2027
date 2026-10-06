@@ -22,9 +22,11 @@ from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
 )
 @click.option(
     "--map",
-    "map_file",
+    "map_files",
+    multiple=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Play on this map file instead of the game's standard one.",
+    help="Play on this map file instead of the game's standard one. Once for every set, "
+    "or once per set, in order.",
 )
 @click.option("--view", is_flag=True, help="Open the replay in the viewer after the match.")
 @click.option("--show-bot-output", is_flag=True, help="Echo bot output as the match runs.")
@@ -47,7 +49,7 @@ def run(
     match_id: str,
     replay: Path | None,
     summary: Path | None,
-    map_file: Path | None,
+    map_files: tuple[Path, ...],
     view: bool,
     show_bot_output: bool,
     no_verbose: bool,
@@ -71,10 +73,15 @@ def run(
         # Left behind: the process ends on Ctrl-C while serving it.
         replay = Path(tempfile.mkdtemp(prefix="ucbc-")) / "replay.json.gz"
 
+    if map_files and len(map_files) not in (1, sets):
+        raise click.UsageError(
+            f"--map was given {len(map_files)} times; give it once, or once per set ({sets})"
+        )
+
     names = [bot_a.name, bot_b.name]
     game_config = None
-    if map_file is not None:
-        game_config = {"map": base64.b64encode(map_file.read_bytes()).decode()}
+    if map_files:
+        game_config = {"maps": [base64.b64encode(m.read_bytes()).decode() for m in map_files]}
     try:
         result = run_match(
             bot_a,

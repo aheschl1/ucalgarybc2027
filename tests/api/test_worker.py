@@ -10,14 +10,19 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from api.blobs import BlobStore
 from api.db import DBConnection
 from api.services import matches
+from api.services.maps import key_for
+from tests.api.test_maps import MAPS
+from tests.api.test_maps import upload as upload_map
 from tests.api.test_queue import LEASE, get
 from tests.api.test_submissions import upload, zip_dir
 from worker import match as engine
 from worker.main import Worker
 
 BotPath = Callable[[str], Path]
+UCBC2027_BOTS = Path(__file__).resolve().parents[2] / "bots" / "ucbc2027"
 
 
 @pytest.fixture
@@ -33,14 +38,20 @@ def worker(app: FastAPI) -> Worker:
     )
 
 
-async def enqueue(client: AsyncClient, bots: list[Path], game: str = "tictactoe") -> UUID:
+async def enqueue(
+    client: AsyncClient,
+    bots: list[Path],
+    game: str = "tictactoe",
+    sets: int = 3,
+    maps: list[str] | None = None,
+) -> UUID:
     """Uploads each bot directory as a submission of the client's team and queues them."""
     ids = []
     for b in bots:
         r = await upload(client, zip_dir(b), form={"name": b.name, "game": game})
         assert r.status_code == 201, r.text
         ids.append(r.json()["id"])
-    body = {"game": game, "bots": ids, "config": {"seed": 7}}
+    body = {"game": game, "bots": ids, "config": {"seed": 7, "sets": sets}, "maps": maps or []}
     r = await client.post("/matches/queue", json=body)
     assert r.status_code == 201, r.text
     return UUID(r.json()["id"])
@@ -72,6 +83,50 @@ async def test_worker_plays_a_queued_match(
     assert {"detail": "", **replay["result"]} == match["sets"][0]
 
     assert not await worker.run_once(db)
+
+
+async def test_worker_plays_a_map_per_set(
+    app: FastAPI, admin_client: AsyncClient, db: DBConnection, worker: Worker
+) -> None:
+    ids = []
+    for name in ["standard", "medium"]:
+        r = await upload_map(admin_client, (MAPS / f"{name}.map").read_bytes(), f"{name}.map")
+        ids.append(r.json()["id"])
+    noop = UCBC2027_BOTS / "noop"
+    match_id = await enqueue(admin_client, [noop, noop], "ucbc2027", sets=2, maps=ids)
+
+    assert await worker.run_once(db)
+    match = await get(admin_client, match_id)
+    assert match["status"] == "done", match["error"]
+    widths = []
+    for index in [0, 1]:
+        replay = (await admin_client.get(f"/matches/{match_id}/sets/{index}")).json()
+        widths.append(len(replay["initial_state"]["environment"][0]))
+    assert widths == [16, 32]
+
+
+async def test_bad_maps_error_the_match(
+    app: FastAPI, admin_client: AsyncClient, db: DBConnection, worker: Worker
+) -> None:
+    """The API records whatever maps a match names; playing it is where a bad pick shows,
+    as the match's error."""
+    standard = (await upload_map(admin_client)).json()["id"]
+    broken = (await upload_map(admin_client, b"\xff\xff", "broken.map")).json()["id"]
+    gone = (await upload_map(admin_client, filename="gone.map")).json()["id"]
+    blobs: BlobStore = app.state.blobs
+    await blobs.delete(key_for(UUID(gone)))
+    noop = UCBC2027_BOTS / "noop"
+
+    for sets, maps, error in [
+        (1, [broken], "game_config.maps[0]: not a map file"),
+        (3, [standard, standard], "once per set (3)"),
+        (1, [gone], "missing from blob storage"),
+    ]:
+        match_id = await enqueue(admin_client, [noop, noop], "ucbc2027", sets=sets, maps=maps)
+        assert await worker.run_once(db)
+        match = await get(admin_client, match_id)
+        assert match["status"] == "error"
+        assert error in match["error"], match["error"]
 
 
 async def test_unknown_game_errors_the_match(
@@ -109,7 +164,7 @@ async def test_lost_lease_stops_the_engine(
     bot: BotPath,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(engine, "command", lambda match, bots, replay: ["sleep", "30"])
+    monkeypatch.setattr(engine, "command", lambda match, bots, maps, replay: ["sleep", "30"])
     match_id = await enqueue(admin_client, [bot("random"), bot("random")])
 
     running = asyncio.create_task(worker.run_once(db))

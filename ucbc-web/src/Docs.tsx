@@ -295,7 +295,8 @@ export default function Docs() {
                   <code>--map FILE</code>
                 </td>
                 <td>
-                  play on your own <a href="#maps">map</a>
+                  play on your own <a href="#maps">map</a>; repeat it to give
+                  each set its own
                 </td>
               </tr>
               <tr>
@@ -407,10 +408,13 @@ export default function Docs() {
 
         <Section id="maps" title="maps">
           <Code label={shell}>{`ucbc editor my.map
-ucbc run mybot mybot --map my.map --view`}</Code>
+ucbc run mybot mybot --map my.map --view
+ucbc run mybot mybot --sets 2 --map a.map --map b.map`}</Code>
           <p>
             The editor opens in your browser; <strong>Save</strong> writes the
-            file. Site matches use the standard map.
+            file. Give <code>--map</code> once to play every set on that map, or
+            once per set, in order. When you queue a site match, pick one of the
+            site&apos;s maps for each set, or none for the standard map.
           </p>
         </Section>
 

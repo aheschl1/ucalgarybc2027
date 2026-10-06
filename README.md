@@ -30,7 +30,7 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | `--show-bot-output` | bot stdout/stderr |
 | `--no-verbose` | hide tick progress and time estimates |
 | `--replay FILE`, `--summary FILE` | write JSON; a replay named `*.gz` is gzipped |
-| `--map FILE` | play on a map file, e.g. `games/ucbc2027/maps/standard.map` |
+| `--map FILE` | play on a map file, e.g. `games/ucbc2027/maps/standard.map`; once for every set, or repeated once per set |
 | `--view` | open replay in browser |
 
 `uv run ucbc view r.json` replays a saved file. `uv run ucbc editor my.map` opens the

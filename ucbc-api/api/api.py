@@ -15,12 +15,20 @@ from slowapi.errors import RateLimitExceeded
 from api.blobs import BlobStore
 from api.db import create_pool
 from api.errors import ApiError
-from api.routes import auth, matches, submissions, teams, users
+from api.routes import auth, maps, matches, submissions, teams, users
 from api.settings import settings
 
 STATIC = Path(__file__).with_name("static")
 # The paths the web app owns
-APP_ROUTES = ("/", "/register", "/profile", "/docs", "/leaderboard", "/viewer/{match_id}")
+APP_ROUTES = (
+    "/",
+    "/register",
+    "/profile",
+    "/docs",
+    "/leaderboard",
+    "/viewer/{match_id}",
+    "/admin/maps",
+)
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +55,7 @@ def create_app(database_url: str | None = None, blob_url: str | None = None) -> 
     app.include_router(matches.router)
     app.include_router(submissions.router)
     app.include_router(teams.router)
+    app.include_router(maps.router)
     app.add_exception_handler(ApiError, api_error)
     app.state.limiter = auth.limiter
     app.add_exception_handler(RateLimitExceeded, rate_limited)

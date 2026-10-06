@@ -129,7 +129,7 @@ def test_sample_replays_match_the_engine(sample: Path, tmp_path: Path) -> None:
         game="ucbc2027",
         sets=1,
         replay_path=fresh,
-        game_config={"map": base64.b64encode(game_map.read_bytes()).decode()},
+        game_config={"maps": [base64.b64encode(game_map.read_bytes()).decode()]},
     )
     # Not an assert: pytest would diff the whole replay.
     if played(fresh) != played(sample):

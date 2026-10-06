@@ -82,13 +82,34 @@ class MatchRepo:
         return None if row is None else MatchRow.model_validate(row)
 
     async def list_recent(
-        self, team_id: int | None, limit: int, owned_only: bool = False
+        self,
+        team_id: int | None,
+        limit: int,
+        owned_only: bool = False,
+        origin: MatchOrigin | None = None,
+        involving: int | None = None,
+        active: bool = False,
     ) -> list[MatchRow]:
         """Newest first; what `team_id` may see, or every match when None. `owned_only`
-        narrows to matches with one of that team's submissions."""
-        where, args = (OWNED, (team_id,)) if owned_only else (VISIBLE, (team_id, team_id))
+        narrows to matches with one of that team's submissions, `involving` to matches with
+        one of that other team's, `origin` to user or platform matches, and `active` to
+        matches not yet done."""
+        wheres = [f"({VISIBLE})"]
+        args: list[Any] = [team_id, team_id]
+        if owned_only:
+            wheres.append(OWNED)
+            args.append(team_id)
+        if involving is not None:
+            wheres.append(OWNED)
+            args.append(involving)
+        if origin is not None:
+            wheres.append("matches.origin = %s")
+            args.append(origin)
+        if active:
+            wheres.append("matches.status in ('queued', 'running')")
         cur = await self._conn.execute(
-            f"select {COLUMNS} from matches where {where} order by created_at desc limit %s",
+            f"select {COLUMNS} from matches where {' and '.join(wheres)} "
+            "order by created_at desc limit %s",
             (*args, limit),
         )
         return [MatchRow.model_validate(row) for row in await cur.fetchall()]

@@ -6,6 +6,7 @@ from api.errors import ApiError, Forbidden, NotFound
 from api.models.matches import (
     Match,
     MatchEnqueue,
+    MatchOrigin,
     MatchReplay,
     MatchResult,
     MatchRow,
@@ -61,12 +62,26 @@ async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: in
     return replay
 
 
-async def list_matches(db: DBConnection, user: User, mine: bool = False) -> list[MatchRow]:
+async def list_matches(
+    db: DBConnection,
+    user: User,
+    mine: bool = False,
+    origin: MatchOrigin | None = None,
+    team: int | None = None,
+    active: bool = False,
+) -> list[MatchRow]:
     """Platform matches and matches with one of the caller's team's submissions, newest
-    first; every match for an admin. `mine` narrows to the team's own, admin or not."""
-    if mine:
-        return await db.match_repo.list_recent(user.team_id, LIST_LIMIT, owned_only=True)
-    return await db.match_repo.list_recent(None if user.is_admin else user.team_id, LIST_LIMIT)
+    first; every match for an admin. `mine` narrows to the team's own, admin or not; `team`
+    to another team's, of those the caller may see; `origin` to user or platform matches;
+    `active` to matches queued or running."""
+    return await db.match_repo.list_recent(
+        user.team_id if mine or not user.is_admin else None,
+        LIST_LIMIT,
+        owned_only=mine,
+        origin=origin,
+        involving=team,
+        active=active,
+    )
 
 
 async def _visible(db: DBConnection, user: User, match_id: UUID) -> MatchRow:

@@ -69,7 +69,7 @@ export default function Profile({
         </Card>
 
         <Card title="Matches" flush>
-          <MatchList api={api} version={version} mine />
+          <MatchList api={api} version={version} query={{ mine: true }} />
         </Card>
       </div>
     </Page>

@@ -16,6 +16,17 @@ function corner(unit: UnitEntry): Coord {
   return unit.type === "dino" ? unit.pos : unit.origin;
 }
 
+/** The tiles a unit sees, `vision` out from its footprint and clipped to the board. */
+function sight(unit: UnitEntry, cols: number, rows: number) {
+  const { x, y } = corner(unit);
+  const far = SIDE[unit.type] - 1 + unit.vision;
+  const left = Math.max(x - unit.vision, 0);
+  const top = Math.max(y - unit.vision, 0);
+  const right = Math.min(x + far, cols - 1);
+  const bottom = Math.min(y + far, rows - 1);
+  return { left, top, width: right - left + 1, height: bottom - top + 1 };
+}
+
 function at({ x, y }: Coord): string {
   return `translate(${x * CELL} ${y * CELL})`;
 }
@@ -34,7 +45,8 @@ function Terrain({ environment }: { environment: Environment[][] }) {
   );
 }
 
-/** The board in SVG layers: terrain, fossils lying on it, units, and the selection. The
+/** The board in SVG layers: terrain, fossils lying on it, units, and the selection with
+ * the square of tiles it can see. The
  * skin's sprites draw each thing; the board places them. Clicking a unit selects it, and
  * clicking anywhere else clears the selection. */
 export function Board() {
@@ -43,10 +55,13 @@ export function Board() {
   const { selected, select } = useSelection();
   // The environment is fixed for a set, so the terrain is drawn once per set.
   const terrain = useMemo(() => <Terrain environment={s.environment} />, [set]);
-  const width = (s.environment[0]?.length ?? 0) * CELL;
-  const height = s.environment.length * CELL;
+  const cols = s.environment[0]?.length ?? 0;
+  const rows = s.environment.length;
+  const width = cols * CELL;
+  const height = rows * CELL;
   const units = [...s.units].sort((a, b) => LAYER[a.type] - LAYER[b.type]);
   const chosen = s.units.find((u) => u.id === selected);
+  const seen = chosen && sight(chosen, cols, rows);
 
   return (
     <svg
@@ -76,6 +91,14 @@ export function Board() {
         ))}
       </g>
       <g className="u27-overlay">
+        {seen ? (
+          <rect
+            className="u27-vision"
+            transform={at({ x: seen.left, y: seen.top })}
+            width={seen.width * CELL}
+            height={seen.height * CELL}
+          />
+        ) : null}
         {chosen ? (
           <rect
             className="u27-selected"

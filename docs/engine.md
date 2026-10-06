@@ -214,7 +214,10 @@ seeds (`set_seed(match_seed, set)`, `bot_seed(set_seed, bot)`).
 
 ```text
 ucbc2027    the competition game and the default build. Labs spawn dinos for bones; dinos
-            move and carry fossils home to raise income. At the tick limit the most
+            move and carry fossils home to raise income. A bot's `item` and
+            `environment` queries answer only within its vision (`me().vision`): 2
+            tiles from a lab's footprint, 3 from a dino plus 1 every two levels. At
+            the tick limit the most
             points (bones held) win, then most fossils, then the highest level dino,
             then a coin toss on the set's seed.
 tictactoe   the example game, and what the bot-runtime tests play.

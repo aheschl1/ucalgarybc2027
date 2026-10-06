@@ -14,7 +14,15 @@ def dino_at(x: int, y: int, blocked: set[tuple[int, int]]) -> tuple[Ucbc2027Hand
     def bridge(name: str, payload: dict[str, Any]) -> dict[str, Any]:
         if payload["type"] == "me":
             return {
-                "ok": {"type": "dino", "id": 2, "pos": pos, "level": 1, "health": 10, "held": None}
+                "ok": {
+                    "type": "dino",
+                    "id": 2,
+                    "pos": pos,
+                    "level": 1,
+                    "health": 10,
+                    "held": None,
+                    "vision": 3,
+                }
             }
         assert payload["type"] == "move"
         to = (payload["x"], payload["y"])
@@ -57,10 +65,32 @@ def test_step_toward_its_own_tile_does_not_move() -> None:
     assert moves == []
 
 
-def test_a_lab_has_no_position() -> None:
-    def bridge(name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return {"ok": {"type": "lab", "id": 0, "origin": {"x": 1, "y": 7}, "health": 100}}
+def lab() -> Ucbc2027Handle:
+    """A handle on a lab whose tiles are (1, 7) to (2, 8)."""
 
-    handle = Ucbc2027Handle(Identity(0, 0, "a", 0, "ucbc2027"), bridge)
+    def bridge(name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        origin = {"x": 1, "y": 7}
+        return {"ok": {"type": "lab", "id": 0, "origin": origin, "health": 100, "vision": 2}}
+
+    return Ucbc2027Handle(Identity(0, 0, "a", 0, "ucbc2027"), bridge)
+
+
+def test_a_lab_has_no_position() -> None:
     with pytest.raises(TypeError):
-        handle.pos()
+        lab().pos()
+
+
+def test_a_dino_sees_its_vision_square() -> None:
+    handle, _ = dino_at(3, 3, set())
+    assert handle.can_see(6, 0)
+    assert handle.can_see(0, 6)
+    assert not handle.can_see(7, 3)
+    assert not handle.can_see(3, 7)
+
+
+def test_a_lab_sees_from_its_nearest_tile() -> None:
+    handle = lab()
+    assert handle.can_see(4, 10)
+    assert handle.can_see(0, 5)
+    assert not handle.can_see(5, 7)
+    assert not handle.can_see(1, 4)

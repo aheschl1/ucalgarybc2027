@@ -154,3 +154,59 @@ def test_replays_gzipped(fresh_url: str) -> None:
     alembic(fresh_url, "downgrade", "0009")
     with psycopg.connect(fresh_url) as conn:
         assert conn.execute("select replay from sets").fetchone() == (replay,)
+
+
+def test_replay_vision(fresh_url: str) -> None:
+    def unit(kind: str, **fields: object) -> dict[str, object]:
+        return {"type": kind, "team": 0, "health": 10, **fields}
+
+    def state(*units: dict[str, object]) -> dict[str, object]:
+        return {"tick": 0, "units": list(units)}
+
+    old = {
+        "index": 0,
+        "first_team": 0,
+        "initial_state": state(unit("lab", id=0)),
+        "ticks": [
+            {
+                "number": 0,
+                "steps": [],
+                "state_after": state(
+                    unit("lab", id=0),
+                    unit("dino", id=2, level=1),
+                    unit("dino", id=3, level=3),
+                    unit("dino", id=4, level=6, vision=9),
+                ),
+            }
+        ],
+    }
+    other = {"index": 0, "first_team": 0, "initial_state": {"cells": []}, "ticks": []}
+    alembic(fresh_url, "upgrade", "0012")
+    with psycopg.connect(fresh_url, autocommit=True) as conn:
+        for game, replay in [("ucbc2027", old), ("tictactoe", other)]:
+            row = conn.execute(
+                "insert into matches (origin, game, teams, config, bots, maps, status) "
+                "values ('user', %s, '[]', '{}', '[]', '[]', 'done') returning id",
+                (game,),
+            ).fetchone()
+            assert row is not None
+            conn.execute(
+                "insert into sets (match_id, index, first_team, reason, ticks, replay) "
+                "values (%s, 0, 0, 'draw', 1, %s)",
+                (row[0], gzip.compress(json.dumps(replay).encode())),
+            )
+
+    # Each ucbc2027 unit gets the vision its kind and level gave it; one that has a
+    # vision keeps it, and other games are untouched.
+    alembic(fresh_url, "upgrade", "0013")
+    with psycopg.connect(fresh_url) as conn:
+        rows = conn.execute(
+            "select m.game, s.replay from sets s join matches m on m.id = s.match_id"
+        ).fetchall()
+        replays = {game: json.loads(gzip.decompress(gz)) for game, gz in rows}
+    migrated = replays["ucbc2027"]
+    assert [u["vision"] for u in migrated["initial_state"]["units"]] == [2]
+    assert [u["vision"] for u in migrated["ticks"][0]["state_after"]["units"]] == [2, 3, 4, 9]
+    assert replays["tictactoe"] == other
+
+    alembic(fresh_url, "downgrade", "0012")

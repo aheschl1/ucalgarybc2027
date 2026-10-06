@@ -118,6 +118,7 @@ class UnitViewDino:
     pos: Coord
     level: int
     health: int
+    vision: int
     held: ItemView | None
 
     @classmethod
@@ -127,6 +128,7 @@ class UnitViewDino:
             pos=Coord._from(d["pos"]),
             level=d["level"],
             health=d["health"],
+            vision=d["vision"],
             held=None if (_held := d.get("held")) is None else _from_ItemView(_held),
         )
 
@@ -137,6 +139,7 @@ class UnitViewLab:
     origin: Coord
     """Top-left of its four tiles."""
     health: int
+    vision: int
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
@@ -144,6 +147,7 @@ class UnitViewLab:
             id=d["id"],
             origin=Coord._from(d["origin"]),
             health=d["health"],
+            vision=d["vision"],
         )
 
 

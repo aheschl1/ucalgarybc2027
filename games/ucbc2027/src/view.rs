@@ -24,6 +24,7 @@ pub enum UnitView {
         /// Top-left of its four tiles.
         origin: Coord,
         health: u32,
+        vision: usize,
     },
     Dino {
         id: u64,
@@ -31,6 +32,7 @@ pub enum UnitView {
         level: u32,
         health: u32,
         held: Option<ItemView>,
+        vision: usize,
     },
 }
 

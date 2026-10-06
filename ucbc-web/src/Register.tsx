@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { describe, logIn, signUp, type User } from "./api";
 import { AuthCard } from "./Login";
 import { Button, ErrorText, Field, Input } from "./ui";
@@ -14,6 +14,7 @@ export default function Register({
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const { search } = useLocation();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -21,7 +22,7 @@ export default function Register({
     setError("");
     try {
       // Signing up does not log you in, so the app does it straight after. The
-      // session swaps the route table, which is what lands this on the profile.
+      // session swaps this route for a redirect: to `next`, else the profile.
       await signUp(email, displayName, password);
       onLogIn(await logIn(email, password));
     } catch (err) {
@@ -32,10 +33,14 @@ export default function Register({
 
   return (
     <AuthCard
+      title="Create an account"
       footer={
-        <Link to="/" className="hover:text-fg hover:underline">
-          Log in
-        </Link>
+        <>
+          Have an account?{" "}
+          <Link to={`/login${search}`} className="font-medium text-fg hover:underline">
+            Log in
+          </Link>
+        </>
       }
     >
       <form className="flex flex-col gap-4" onSubmit={submit}>

@@ -13,16 +13,23 @@ export function cx(...names: (string | false | null | undefined)[]): string {
   return names.filter(Boolean).join(" ");
 }
 
-/** A page's width and gutters; `wide` for the ones with tables side by side. */
-export function Page({ wide, children }: { wide?: boolean; children: ReactNode }) {
+/** A page's width and gutters, its left edge in line with the nav's; `wide` for the ones
+ * with tables side by side. */
+export function Page({
+  wide,
+  title,
+  children,
+}: {
+  wide?: boolean;
+  title?: string;
+  children: ReactNode;
+}) {
   return (
-    <main
-      className={cx(
-        "mx-auto w-full px-4 py-8 sm:px-6 sm:py-10",
-        wide ? "max-w-6xl" : "max-w-3xl",
-      )}
-    >
-      {children}
+    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <div className={cx(!wide && "max-w-3xl")}>
+        {title && <h1 className="mb-6 text-2xl font-semibold tracking-tight">{title}</h1>}
+        {children}
+      </div>
     </main>
   );
 }

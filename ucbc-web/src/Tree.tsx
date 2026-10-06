@@ -46,7 +46,7 @@ export default function Tree({
   };
 
   return (
-    <Page wide>
+    <Page wide title="Platform">
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Submit a bot">
           <UploadForm api={api} onUploaded={refresh} />
@@ -134,7 +134,7 @@ function MatchFilters({
   return (
     <div className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
       <Select
-        className="w-auto"
+        className="sm:w-auto"
         aria-label="Ranked"
         value={KINDS.findIndex(([, origin]) => origin === query.origin)}
         onChange={(e) => onChange({ ...query, origin: KINDS[Number(e.target.value)]?.[1] })}
@@ -146,7 +146,7 @@ function MatchFilters({
         ))}
       </Select>
       <Select
-        className="w-auto"
+        className="sm:w-auto"
         aria-label="Team"
         value={team}
         onChange={(e) => setTeam(e.target.value)}

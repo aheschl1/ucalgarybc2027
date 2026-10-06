@@ -22,12 +22,12 @@ STATIC = Path(__file__).with_name("static")
 # The paths the web app owns
 APP_ROUTES = (
     "/",
+    "/login",
     "/register",
-    "/profile",
     "/docs",
     "/leaderboard",
-    "/viewer/{match_id}",
-    "/admin/maps",
+    "/platform",
+    "/platform/{rest:path}",
 )
 
 log = logging.getLogger(__name__)

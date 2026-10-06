@@ -160,7 +160,7 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
         <td className="px-4 py-3 text-right">
           {match.status === "done" && (
             <Link
-              to={`/viewer/${encodeURIComponent(match.id)}`}
+              to={`/platform/matches/${encodeURIComponent(match.id)}`}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-bg hover:ring-1 hover:ring-line"
             >

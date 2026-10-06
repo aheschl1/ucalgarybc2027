@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { ApiError, logIn, type User } from "./api";
 import { Button, ErrorText, Field, Input } from "./ui";
 
@@ -8,6 +8,8 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Carries `next` across, so signing up instead still lands where you were going.
+  const { search } = useLocation();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,10 +29,14 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
 
   return (
     <AuthCard
+      title="Log in"
       footer={
-        <Link to="/register" className="hover:text-fg hover:underline">
-          Create an account
-        </Link>
+        <>
+          No account?{" "}
+          <Link to={`/register${search}`} className="font-medium text-fg hover:underline">
+            Sign up
+          </Link>
+        </>
       }
     >
       <form className="flex flex-col gap-4" onSubmit={submit}>
@@ -61,11 +67,22 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
 }
 
 /** Logging in and signing up: one narrow card in the middle of the page. */
-export function AuthCard({ footer, children }: { footer: ReactNode; children: ReactNode }) {
+export function AuthCard({
+  title,
+  footer,
+  children,
+}: {
+  title: string;
+  footer: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <main className="flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="rounded-xl border border-line p-6 shadow-sm">{children}</div>
+        <div className="rounded-xl border border-line p-6 shadow-sm">
+          <h1 className="mb-5 text-lg font-semibold tracking-tight">{title}</h1>
+          {children}
+        </div>
         <p className="mt-6 text-center text-muted">{footer}</p>
       </div>
     </main>

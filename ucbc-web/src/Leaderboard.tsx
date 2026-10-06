@@ -14,7 +14,7 @@ export default function Leaderboard({ teamId }: { teamId?: number }) {
   }, []);
 
   return (
-    <Page>
+    <Page title="Leaderboard">
       <Card flush>
         {error && (
           <div className="p-4">

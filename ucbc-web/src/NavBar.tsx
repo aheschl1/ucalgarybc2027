@@ -5,11 +5,13 @@ import { cx } from "./ui";
 
 const TITLES: Record<string, string> = {
   "/": "Home",
-  "/profile": "Profile",
+  "/platform": "Platform",
+  "/platform/profile": "Profile",
   "/leaderboard": "Leaderboard",
   "/docs": "Docs",
-  "/admin/maps": "Maps",
+  "/platform/admin/maps": "Maps",
   "/register": "Sign up",
+  "/login": "Log in",
 };
 
 const link = ({ isActive }: { isActive: boolean }) =>
@@ -32,16 +34,27 @@ export default function NavBar({
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const page = pathname.startsWith("/viewer/") ? "Match" : TITLES[pathname];
-    document.title = page ? `${page} · UCBC` : "UCBC";
+    const page = pathname.startsWith("/platform/matches/") ? "Match" : TITLES[pathname];
+    document.title = page ? `${page} · UCBC` : "UCalgary Battlecode";
     setOpen(false);
   }, [pathname]);
 
   const links = (
     <>
+      <NavLink to="/" end className={link}>
+        Home
+      </NavLink>
       {user && (
-        <NavLink to="/" end className={link}>
-          Home
+        // The dashboard and its matches; Profile and Maps have their own highlights.
+        <NavLink
+          to="/platform"
+          className={() =>
+            link({
+              isActive: pathname === "/platform" || pathname.startsWith("/platform/matches/"),
+            })
+          }
+        >
+          Platform
         </NavLink>
       )}
       <NavLink to="/leaderboard" className={link}>
@@ -51,7 +64,7 @@ export default function NavBar({
         Docs
       </NavLink>
       {user?.is_admin && (
-        <NavLink to="/admin/maps" className={link}>
+        <NavLink to="/platform/admin/maps" className={link}>
           Maps
         </NavLink>
       )}
@@ -61,8 +74,8 @@ export default function NavBar({
   return (
     <nav className="sticky top-0 z-20 border-b border-line bg-bg/80 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-8 px-4 sm:px-6">
-        <Link to="/" className="font-semibold tracking-tight">
-          UCBC
+        <Link to="/" className="font-semibold tracking-tight whitespace-nowrap">
+          UCalgary Battlecode
         </Link>
 
         <div className="hidden items-center gap-6 sm:flex">{links}</div>
@@ -71,7 +84,7 @@ export default function NavBar({
           {user ? (
             <>
               <NavLink
-                to="/profile"
+                to="/platform/profile"
                 className={({ isActive }) =>
                   cx(
                     "flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover",
@@ -92,12 +105,12 @@ export default function NavBar({
               </button>
             </>
           ) : (
-            pathname !== "/" && (
+            !["/login", "/register"].includes(pathname) && (
               <Link
-                to="/"
-                className="rounded-lg bg-fg px-3 py-1.5 font-medium text-bg hover:bg-fg/85"
+                to="/platform"
+                className="hidden rounded-lg bg-fg px-3 py-1.5 font-medium whitespace-nowrap text-bg hover:bg-fg/85 min-[360px]:block"
               >
-                Log in
+                Go to platform
               </Link>
             )
           )}
@@ -117,6 +130,11 @@ export default function NavBar({
       {open && (
         <div className="flex flex-col border-t border-line px-4 pb-2 sm:hidden [&>a]:py-2.5 [&>a]:after:hidden">
           {links}
+          {user && (
+            <NavLink to="/platform/profile" className={link}>
+              Profile
+            </NavLink>
+          )}
           {user && (
             <button onClick={onLogOut} className="cursor-pointer py-2.5 text-left text-muted hover:text-fg">
               Log out

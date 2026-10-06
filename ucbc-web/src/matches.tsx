@@ -13,32 +13,48 @@ import { cx, Empty, ErrorText, Mono, StatusPill, Table } from "./ui";
 const HEAD = ["", "Match", "Status", "Teams", "Sets", ""];
 const COLUMNS = HEAD.length;
 
-/** Matches as a table; `before` puts rows of the caller's own on top. */
+/** Filters for `GET /matches`; each one narrows the list. */
+export type MatchQuery = {
+  mine?: boolean;
+  active?: boolean;
+  origin?: MatchRow["origin"];
+  team?: number;
+};
+
+/** Matches as a table, narrowed by `query`; `before` puts rows of the caller's own on top. */
 export function MatchList({
   api,
   version,
-  mine,
-  activeOnly,
+  query = {},
   before,
   empty = "No matches",
 }: {
   api: Api;
   version: number;
-  mine?: boolean;
-  activeOnly?: boolean;
+  query?: MatchQuery;
   before?: ReactNode;
   empty?: string;
 }) {
   const [rows, setRows] = useState<MatchRow[] | null>(null);
   const [error, setError] = useState("");
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== false) params.set(key, String(value));
+  }
+  const search = params.toString();
 
   useEffect(() => {
-    api
-      .load<MatchRow[]>(mine ? "/matches?mine=true" : "/matches")
-      .then(setRows, (err) => setError(describe(err)));
-  }, [version]);
-
-  const filteredRows = activeOnly ? rows?.filter((r) => r.status !== "done") : rows;
+    // A filter changed before the last list came back; that list is dropped.
+    let current = true;
+    setError("");
+    api.load<MatchRow[]>(search ? `/matches?${search}` : "/matches").then(
+      (r) => current && setRows(r),
+      (err) => current && setError(describe(err)),
+    );
+    return () => {
+      current = false;
+    };
+  }, [version, search]);
 
   if (error) {
     return (
@@ -47,11 +63,11 @@ export function MatchList({
       </div>
     );
   }
-  if (filteredRows?.length === 0 && !before) return <Empty>{empty}</Empty>;
+  if (rows?.length === 0 && !before) return <Empty>{empty}</Empty>;
   return (
     <Table head={HEAD}>
       {before}
-      {filteredRows?.map((row) => <MatchBranch key={row.id} row={row} api={api} />)}
+      {rows?.map((row) => <MatchBranch key={row.id} row={row} api={api} />)}
     </Table>
   );
 }
@@ -127,7 +143,7 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
           <Mono value={match.id} />
           {match.origin === "platform" && (
             <span className="ml-2 rounded border border-line px-1.5 py-px text-[11px] text-muted">
-              platform
+              ranked
             </span>
           )}
         </td>

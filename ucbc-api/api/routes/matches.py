@@ -4,7 +4,7 @@ from fastapi import APIRouter, Response, status
 
 from api.auth import CurrentUser
 from api.db import DB
-from api.models.matches import Match, MatchCreated, MatchEnqueue, MatchRow
+from api.models.matches import Match, MatchCreated, MatchEnqueue, MatchOrigin, MatchRow
 from api.services import matches
 
 router = APIRouter(prefix="/matches", tags=["matches"])
@@ -17,10 +17,18 @@ async def enqueue(body: MatchEnqueue, db: DB, user: CurrentUser) -> MatchCreated
 
 
 @router.get("")
-async def list_matches(db: DB, user: CurrentUser, mine: bool = False) -> list[MatchRow]:
+async def list_matches(
+    db: DB,
+    user: CurrentUser,
+    mine: bool = False,
+    origin: MatchOrigin | None = None,
+    team: int | None = None,
+    active: bool = False,
+) -> list[MatchRow]:
     """Platform matches and the caller's team's, newest first; every match for an admin.
-    `mine` narrows to matches the caller's team has a bot in."""
-    return await matches.list_matches(db, user, mine)
+    `mine` narrows to matches the caller's team has a bot in, `team` to those another team
+    has a bot in, `origin` to user or platform matches, and `active` to queued or running."""
+    return await matches.list_matches(db, user, mine, origin, team, active)
 
 
 @router.get("/{match_id}")

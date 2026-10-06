@@ -10,7 +10,7 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create(body: UserCreate, db: DB) -> User:
-    """Sign up. Admins are made with `ucbc-api-cli create-admin`, never here."""
+    """Sign up. Admins are made under /admin/users, never here."""
     return await create_user(db, body.email, body.display_name, body.password, is_admin=False)
 
 

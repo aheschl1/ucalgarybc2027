@@ -5,9 +5,10 @@ import {
   type GameMap,
   type Match,
   type Submission,
+  type TeamElo,
   type User,
 } from "./api";
-import { MatchBranch, MatchList, MatchNote } from "./matches";
+import { MatchBranch, MatchList, MatchNote, type MatchQuery } from "./matches";
 import {
   Button,
   Card,
@@ -32,6 +33,7 @@ export default function Tree({
 }) {
   const [lookup, setLookup] = useState("");
   const [opened, setOpened] = useState<string[]>([]);
+  const [query, setQuery] = useState<MatchQuery>({});
   // Bumped after an upload or a queued match so the lists refetch.
   const [version, setVersion] = useState(0);
   const refresh = () => setVersion((v) => v + 1);
@@ -53,9 +55,13 @@ export default function Tree({
           <QueueForm api={api} user={user} version={version} onQueued={refresh} />
         </Card>
 
+        <Card className="lg:col-span-2" title="Queue" flush>
+          <MatchList api={api} version={version} query={{ active: true }} empty="Empty" />
+        </Card>
+
         <Card
           className="lg:col-span-2"
-          title="Your matches"
+          title="Matches"
           flush
           action={
             <form className="flex w-full gap-2 sm:w-auto" onSubmit={open}>
@@ -71,23 +77,15 @@ export default function Tree({
             </form>
           }
         >
+          <MatchFilters api={api} user={user} query={query} onChange={setQuery} />
           <MatchList
             api={api}
             version={version}
-            mine
+            query={query}
             empty="No matches"
             before={opened.map((id) => (
               <LookupBranch key={id} id={id} api={api} />
             ))}
-          />
-        </Card>
-
-        <Card className="lg:col-span-2" title="Match queue" flush>
-          <MatchList
-            api={api}
-            version={version}
-            activeOnly
-            empty="Empty"
           />
         </Card>
 
@@ -96,6 +94,74 @@ export default function Tree({
         </Card>
       </div>
     </Page>
+  );
+}
+
+// Ranked matches are the platform's; unranked are the ones teams request.
+const KINDS: [string, MatchQuery["origin"]][] = [
+  ["All matches", undefined],
+  ["Ranked", "platform"],
+  ["Unranked", "user"],
+];
+
+/** The match list's filters: ranked or not, and which team played. */
+function MatchFilters({
+  api,
+  user,
+  query,
+  onChange,
+}: {
+  api: Api;
+  user: User;
+  query: MatchQuery;
+  onChange: (query: MatchQuery) => void;
+}) {
+  const [teams, setTeams] = useState<TeamElo[]>([]);
+  useEffect(() => {
+    // The filter still works without the names; it only offers fewer teams.
+    api.load<TeamElo[]>("/teams/elo").then(setTeams, () => setTeams([]));
+  }, []);
+
+  // "mine" is the caller's team; a number is another team.
+  const team = query.mine ? "mine" : query.team === undefined ? "" : String(query.team);
+  const setTeam = (value: string) =>
+    onChange({
+      origin: query.origin,
+      mine: value === "mine" || undefined,
+      team: value && value !== "mine" ? Number(value) : undefined,
+    });
+
+  return (
+    <div className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
+      <Select
+        className="w-auto"
+        aria-label="Ranked"
+        value={KINDS.findIndex(([, origin]) => origin === query.origin)}
+        onChange={(e) => onChange({ ...query, origin: KINDS[Number(e.target.value)]?.[1] })}
+      >
+        {KINDS.map(([label], i) => (
+          <option key={label} value={i}>
+            {label}
+          </option>
+        ))}
+      </Select>
+      <Select
+        className="w-auto"
+        aria-label="Team"
+        value={team}
+        onChange={(e) => setTeam(e.target.value)}
+      >
+        <option value="">All teams</option>
+        <option value="mine">Your team</option>
+        {teams
+          .filter((t) => t.id !== user.team_id)
+          .map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+      </Select>
+    </div>
   );
 }
 

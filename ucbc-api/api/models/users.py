@@ -26,8 +26,12 @@ class StoredUser(User):
 
 
 class UserCreate(BaseModel):
-    """Self-serve signup. Admins are made with `ucbc-api-cli create-admin`."""
+    """Self-serve signup. Admins are made under /admin/users."""
 
     email: EmailStr
     display_name: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=8, max_length=128)
+
+
+class AdminUserCreate(UserCreate):
+    is_admin: bool = False

@@ -42,8 +42,11 @@ proxy, uvicorn must be told to trust the forwarded address for that to be per cl
 A user is `email`, `display_name`, `password_hash`, `is_admin`. The email is the login
 credential and is never shown to anyone but its owner; the display name is the only thing
 another user sees, next to a submission. `POST /api/users` is open: anyone signs up, always
-as a non-admin, and the app logs in straight after. Admins are made only by
-`ucbc-api-cli create-admin`. Nothing about a user can be changed once it exists.
+as a non-admin, and the app logs in straight after. Admins create, list and delete users
+under `/api/admin/users`; a user who uploaded submissions cannot be deleted. `ucbc-api-cli`
+calls these as an admin (`--email`/`--password`/`--url`, defaulting to `UCBC_ADMIN_EMAIL`,
+`UCBC_ADMIN_PASSWORD`, `UCBC_API_URL`); its `create-admin` writes the first admin straight
+to the database. Nothing about a user can be changed once it exists.
 
 The web app is a single page with client-side routes. `api/api.py::APP_ROUTES` lists the
 paths it owns, each served the app shell so a reload of one works; anything else under `/`
@@ -73,8 +76,9 @@ list to the caller's team's.
 
 An admin uploads a map file for a game (`POST /api/maps`, at most 64 KiB); the row (`maps`:
 game, name, size, sha256, uploader) is in Postgres and the file in the bucket at
-`maps/<id>.map`. Names are unique per game, ignoring case. `ucbc-api-cli import-maps <dir>
---game <game>` uploads every `*.map` in a directory, such as `games/ucbc2027/maps`.
+`maps/<id>.map`. Names are unique per game, ignoring case. `ucbc-api-cli upload-map <file> --game <game>`
+uploads one; `ucbc-api-cli import-maps <dir> --game <game>` uploads every `*.map` in a
+directory, such as `games/ucbc2027/maps`.
 Every logged-in user lists the metadata; only admins download a file. A map is archived
 (`PATCH /api/maps/<id>`), never deleted, since matches name it: the web app stops offering
 it, and the matches played on it keep its name. `/admin/maps` in the web app is the admin
@@ -142,5 +146,5 @@ profile shows the caller's team's rating and place.
 
 `UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,
 `BLOB_URL` (`scheme://access:secret@host[:port]/bucket[?region=]`), `API_HOST`,
-`API_PORT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
+`API_PORT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `API_URL` (the last three for `ucbc-api-cli`), `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
 `WORKER_NAME`.

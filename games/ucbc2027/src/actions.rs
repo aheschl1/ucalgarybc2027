@@ -9,7 +9,7 @@ use crate::map::Environment;
 use crate::rules;
 use crate::state::Item;
 use crate::unit::{Dino, Unit};
-use crate::view::{Dropped, ItemView, Spawned};
+use crate::view::{Dropped, ItemView, Spawned, UnitView};
 
 fn invalid(message: &str) -> ActionError {
     ActionError::Invalid(message.into())
@@ -117,5 +117,48 @@ impl Ucbc2027 {
             self.state.items[at] = Some(item);
             Ok(Dropped::Placed)
         }
+    }
+
+    /// The target's bot goes; this one takes its tile. If the target held something,
+    /// this dino takes it and leaves what it held on its old tile.
+    pub(crate) fn merge(&mut self, bot: BotId, target: BotId) -> Result<UnitView, ActionError> {
+        let team = self.bots[bot].team();
+        let dino = self.bots[bot]
+            .as_dino()
+            .ok_or_else(|| invalid("only a dino can merge"))?;
+        if self.turn.merges >= rules::MERGES_PER_TURN {
+            return Err(invalid("already merged this turn"));
+        }
+        if target == bot {
+            return Err(invalid("cannot merge with itself"));
+        }
+        let other = self
+            .bots
+            .get(target)
+            .ok_or_else(|| invalid("no such bot"))?;
+        if other.team() != team {
+            return Err(invalid("not your team"));
+        }
+        let other = other
+            .as_dino()
+            .ok_or_else(|| invalid("can only merge with a dino"))?;
+        if dino.pos.dist(other.pos) > dino.stats().action_range {
+            return Err(invalid("out of range"));
+        }
+        let (at, level, health, held) = (other.pos, other.level, other.health, other.held);
+        self.bots.remove(target);
+        let dino = self.bots[bot].as_dino_mut().expect("checked above");
+        let from = dino.pos;
+        dino.pos = at;
+        dino.level += level;
+        dino.health = (dino.health + health).min(rules::DINO_MAX_HEALTH);
+        let left = match held {
+            Some(_) => std::mem::replace(&mut dino.held, held),
+            None => None,
+        };
+        self.state.items[from] = left;
+        self.state.items[at] = Some(Item::Dino(bot));
+        self.turn.merges += 1;
+        Ok(self.unit_view(bot))
     }
 }

@@ -104,7 +104,7 @@ it("selects a dino or a lab by its footprint, and shows the selected unit", () =
         pos: { x: 3, y: 1 },
         level: 2,
         health: 10,
-        held: { type: "dino", level: 1, team: 0 },
+        held: { type: "dino", id: 5, level: 1, team: 0 },
       },
     ],
     fossils: [],

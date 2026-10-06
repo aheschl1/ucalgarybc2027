@@ -1,8 +1,8 @@
-//! Game balance numbers. Placeholders until the design doc settles them.
-
 pub const START_BONES: u32 = 50;
 pub const LAB_HEALTH: u32 = 100;
 pub const DINO_HEALTH: u32 = 10;
+pub const DINO_MAX_HEALTH: u32 = 50;
+pub const MERGES_PER_TURN: u32 = 1;
 pub const SPAWN_COST: u32 = 10;
 pub const MOVE_RANGE: usize = 1;
 pub const ACTION_RANGE: usize = 1;

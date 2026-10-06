@@ -50,6 +50,15 @@ pub enum Action {
     /// Dino only: put down what it holds, on a free tile within action range or on
     /// your own lab to deposit it. Free, as often as you like.
     Drop(Request<Coord, Dropped>),
+    /// Dino only, a limited number of times per turn: merge with a friendly dino within
+    /// action range and step onto its tile.
+    Merge(Request<Target, UnitView>),
+}
+
+/// Another bot, by the id `item` shows on its tile.
+#[derive(Deserialize, JsonSchema)]
+pub struct Target {
+    pub bot_id: u64,
 }
 
 pub struct Ucbc2027 {
@@ -64,6 +73,7 @@ pub struct Ucbc2027 {
 pub(crate) struct Turn {
     pub spawned: bool,
     pub moved: bool,
+    pub merges: u32,
 }
 
 impl Ucbc2027 {
@@ -75,6 +85,7 @@ impl Ucbc2027 {
                     unreachable!("bot {id} on the board is not a dino")
                 };
                 ItemView::Dino {
+                    id: id.0,
                     team: bot.team().0,
                     level: dino.level,
                 }
@@ -83,13 +94,15 @@ impl Ucbc2027 {
         }
     }
 
-    fn unit_view(&self, bot: BotId) -> UnitView {
+    pub(crate) fn unit_view(&self, bot: BotId) -> UnitView {
         match &*self.bots[bot] {
             Unit::Lab(lab) => UnitView::Lab {
+                id: bot.0,
                 origin: lab.origin,
                 health: lab.health,
             },
             Unit::Dino(dino) => UnitView::Dino {
+                id: bot.0,
                 pos: dino.pos,
                 level: dino.level,
                 health: dino.health,
@@ -196,6 +209,7 @@ impl Game for Ucbc2027 {
             Action::Move(a) => Ok(a.reply(self.move_to(bot, *a)?)),
             Action::Grab(a) => Ok(a.reply(self.grab(bot, *a)?)),
             Action::Drop(a) => Ok(a.reply(self.drop(bot, *a)?)),
+            Action::Merge(a) => Ok(a.reply(self.merge(bot, BotId(a.bot_id))?)),
         }
     }
 
@@ -251,7 +265,6 @@ impl Game for Ucbc2027 {
                 .ids()
                 .into_iter()
                 .map(|id| UnitEntry {
-                    id: id.0,
                     team: self.bots[id].team().0,
                     unit: self.unit_view(id),
                 })

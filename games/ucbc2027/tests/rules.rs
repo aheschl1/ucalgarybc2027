@@ -4,7 +4,10 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use prost::Message;
 use serde_json::{Value, json};
-use ucbc_2027::rules::{BASE_INCOME, INCOME_PER_FOSSIL, LAB_HEALTH, SPAWN_COST, START_BONES};
+use ucbc_2027::rules::{
+    BASE_INCOME, DINO_HEALTH, DINO_MAX_HEALTH, INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_PER_TURN,
+    SPAWN_COST, START_BONES,
+};
 use ucbc_2027::{Coord, Ucbc2027, UnitView, proto};
 use ucbc_engine::{ActionError, BotFailure, BotId, DynGame, EngineError, Game, SetSetup, TeamId};
 
@@ -62,6 +65,14 @@ fn dino_at(game: &mut dyn DynGame, x: u64, y: u64) -> BotId {
     let spawned = spawn(game, LAB0, x, y).unwrap();
     game.end_step(LAB0);
     BotId(spawned["bot_id"].as_u64().unwrap())
+}
+
+fn merge(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, ActionError> {
+    game.apply_action(bot, &json!({"type": "merge", "bot_id": target.0}))
+}
+
+fn me(game: &dyn DynGame, bot: BotId) -> Value {
+    game.handle_query(bot, &json!({"type": "me"})).unwrap()
 }
 
 fn bones(game: &dyn DynGame, bot: BotId) -> u64 {
@@ -159,7 +170,7 @@ fn a_dino_moves_once_per_turn_diagonals_included() {
     assert_eq!(item(g.as_ref(), 3, 7), Value::Null);
     assert_eq!(
         item(g.as_ref(), 4, 6),
-        json!({"type": "dino", "team": 0, "level": 1})
+        json!({"type": "dino", "id": dino.0, "team": 0, "level": 1})
     );
     refused(go(g.as_mut(), dino, 4, 7), "already moved");
     g.end_step(dino);
@@ -340,6 +351,7 @@ fn a_set_plays_on_the_map_in_game_config() {
     assert_eq!(
         *lab1,
         UnitView::Lab {
+            id: 1,
             origin: Coord::new(4, 1),
             health: LAB_HEALTH
         }
@@ -416,4 +428,141 @@ fn a_full_tie_is_a_coin_toss_on_the_seed() {
     };
     assert_eq!(toss(0), (Some(TeamId(0)), "coin toss".into()));
     assert_eq!(toss(1), (Some(TeamId(1)), "coin toss".into()));
+}
+
+#[test]
+fn a_merge_adds_levels_and_takes_the_target_tile() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    let other = dino_at(g.as_mut(), 3, 8);
+    assert_eq!(item(g.as_ref(), 3, 8)["id"], json!(other.0));
+    let merged = merge(g.as_mut(), dino, other).unwrap();
+    let health = 2 * DINO_HEALTH;
+    assert_eq!(
+        merged,
+        json!({"type": "dino", "id": dino.0, "pos": {"x": 3, "y": 8}, "level": 2, "health": health, "held": null})
+    );
+    assert_eq!(item(g.as_ref(), 3, 7), Value::Null);
+    assert_eq!(
+        item(g.as_ref(), 3, 8),
+        json!({"type": "dino", "id": dino.0, "team": 0, "level": 2})
+    );
+    assert!(g.team_of(other).is_none());
+    let ids: Vec<Value> = g.snapshot()["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| u["id"].clone())
+        .collect();
+    assert_eq!(ids, [json!(0), json!(1), json!(dino.0)]);
+    // The move is still unused.
+    go(g.as_mut(), dino, 4, 8).unwrap();
+}
+
+#[test]
+fn merges_per_turn_are_limited() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 0, 8);
+    let others: Vec<BotId> = (0..=MERGES_PER_TURN)
+        .map(|i| dino_at(g.as_mut(), 0, 7 - u64::from(i)))
+        .collect();
+    for &other in &others[..MERGES_PER_TURN as usize] {
+        merge(g.as_mut(), dino, other).unwrap();
+    }
+    let last = *others.last().unwrap();
+    refused(merge(g.as_mut(), dino, last), "already merged");
+    g.end_step(dino);
+    merge(g.as_mut(), dino, last).unwrap();
+}
+
+#[test]
+fn a_merge_refuses_what_the_rules_forbid() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    let far = dino_at(g.as_mut(), 3, 9);
+    let spawned = spawn(g.as_mut(), LAB1, 12, 7).unwrap();
+    let enemy = BotId(spawned["bot_id"].as_u64().unwrap());
+    refused(merge(g.as_mut(), LAB0, dino), "only a dino");
+    refused(merge(g.as_mut(), dino, dino), "itself");
+    refused(merge(g.as_mut(), dino, BotId(99)), "no such bot");
+    refused(merge(g.as_mut(), dino, LAB0), "only merge with a dino");
+    refused(merge(g.as_mut(), dino, LAB1), "not your team");
+    refused(merge(g.as_mut(), dino, enemy), "not your team");
+    refused(merge(g.as_mut(), dino, far), "out of range");
+    assert_eq!(me(g.as_ref(), dino)["level"], json!(1));
+    assert_eq!(item(g.as_ref(), 3, 9)["id"], json!(far.0));
+    // None of that used the merge.
+    walk(g.as_mut(), far, &[(3, 8)]);
+    merge(g.as_mut(), dino, far).unwrap();
+}
+
+#[test]
+fn merged_health_is_capped() {
+    let mut g = game();
+    for _ in 0..SPAWN_COST {
+        g.end_tick();
+    }
+    let ring = [(0, 9), (0, 8), (0, 7), (0, 6), (1, 6), (2, 6)];
+    let dinos: Vec<BotId> = ring
+        .iter()
+        .map(|&(x, y)| dino_at(g.as_mut(), x, y))
+        .collect();
+    for &other in &dinos[1..] {
+        merge(g.as_mut(), dinos[0], other).unwrap();
+        g.end_step(dinos[0]);
+    }
+    let me = me(g.as_ref(), dinos[0]);
+    const { assert!(DINO_HEALTH * 6 > DINO_MAX_HEALTH) };
+    assert_eq!(me["level"], json!(6));
+    assert_eq!(me["health"], json!(DINO_MAX_HEALTH));
+    assert_eq!(me["pos"], json!({"x": 2, "y": 6}));
+}
+
+#[test]
+fn a_merge_takes_the_target_load_and_leaves_its_own() {
+    // The target holds; the merger holds nothing.
+    let mut g = game();
+    let carrier = by_fossil(g.as_mut());
+    grab(g.as_mut(), carrier, 6, 7).unwrap();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    walk(g.as_mut(), dino, &[(4, 6)]);
+    merge(g.as_mut(), dino, carrier).unwrap();
+    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), 4, 6), Value::Null);
+
+    // The merger holds; the target holds nothing.
+    let mut g = game();
+    let carrier = by_fossil(g.as_mut());
+    grab(g.as_mut(), carrier, 6, 7).unwrap();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    walk(g.as_mut(), dino, &[(4, 6)]);
+    merge(g.as_mut(), carrier, dino).unwrap();
+    assert_eq!(held(g.as_ref(), carrier), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), 5, 6), Value::Null);
+
+    // Both hold: the merger's goes down where it stood.
+    let mut g = game();
+    let first = by_fossil(g.as_mut());
+    grab(g.as_mut(), first, 6, 7).unwrap();
+    walk(g.as_mut(), first, &[(6, 6), (7, 6), (8, 6)]);
+    put(g.as_mut(), first, 7, 7).unwrap();
+    grab(g.as_mut(), first, 9, 7).unwrap();
+    let second = dino_at(g.as_mut(), 3, 7);
+    walk(g.as_mut(), second, &[(4, 6), (5, 6), (6, 6)]);
+    grab(g.as_mut(), second, 7, 7).unwrap();
+    walk(g.as_mut(), second, &[(7, 6)]);
+    merge(g.as_mut(), second, first).unwrap();
+    assert_eq!(me(g.as_ref(), second)["pos"], json!({"x": 8, "y": 6}));
+    assert_eq!(held(g.as_ref(), second), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), 7, 6), json!({"type": "fossil"}));
+}
+
+#[test]
+fn an_absorbed_dino_does_not_step_again() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    let other = dino_at(g.as_mut(), 3, 8);
+    merge(g.as_mut(), dino, other).unwrap();
+    assert!(g.team_of(other).is_none());
+    assert!(!g.schedule().contains(&other));
 }

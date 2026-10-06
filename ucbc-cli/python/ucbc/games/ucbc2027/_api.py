@@ -76,12 +76,14 @@ class EnvironmentWall:
 
 @dataclass(frozen=True)
 class ItemViewDino:
+    id: int
     team: int
     level: int
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
+            id=d["id"],
             team=d["team"],
             level=d["level"],
         )
@@ -112,6 +114,7 @@ class Spawned:
 
 @dataclass(frozen=True)
 class UnitViewDino:
+    id: int
     pos: Coord
     level: int
     health: int
@@ -120,6 +123,7 @@ class UnitViewDino:
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
+            id=d["id"],
             pos=Coord._from(d["pos"]),
             level=d["level"],
             health=d["health"],
@@ -129,6 +133,7 @@ class UnitViewDino:
 
 @dataclass(frozen=True)
 class UnitViewLab:
+    id: int
     origin: Coord
     """Top-left of its four tiles."""
     health: int
@@ -136,6 +141,7 @@ class UnitViewLab:
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
+            id=d["id"],
             origin=Coord._from(d["origin"]),
             health=d["health"],
         )
@@ -254,3 +260,8 @@ class Ucbc2027Api(Handle):
         """Dino only: put down what it holds, on a free tile within action range or on
         your own lab to deposit it. Free, as often as you like."""
         return _from_Dropped(self._act({"type": "drop", "x": x, "y": y}))
+
+    def merge(self, bot_id: int) -> UnitView:
+        """Dino only, a limited number of times per turn: merge with a friendly dino within
+        action range and step onto its tile."""
+        return _from_UnitView(self._act({"type": "merge", "bot_id": bot_id}))

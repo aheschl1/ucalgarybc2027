@@ -75,6 +75,10 @@ export type Action =
   | {
       bot_id: number;
       type: "merge";
+    }
+  | {
+      bot_id: number;
+      type: "attack";
     };
 
 export interface Ucbc2027Api {

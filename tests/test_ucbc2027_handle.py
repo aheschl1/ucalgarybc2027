@@ -13,7 +13,9 @@ def dino_at(x: int, y: int, blocked: set[tuple[int, int]]) -> tuple[Ucbc2027Hand
 
     def bridge(name: str, payload: dict[str, Any]) -> dict[str, Any]:
         if payload["type"] == "me":
-            return {"ok": {"type": "dino", "id": 2, "pos": pos, "level": 1, "health": 10, "held": None}}
+            return {
+                "ok": {"type": "dino", "id": 2, "pos": pos, "level": 1, "health": 10, "held": None}
+            }
         assert payload["type"] == "move"
         to = (payload["x"], payload["y"])
         if to in blocked:

@@ -205,63 +205,56 @@ class Ucbc2027Api(Handle):
     """Queries and actions of the `ucbc2027` game, one method each."""
 
     def me(self) -> UnitView:
-        """This bot."""
         return _from_UnitView(self._query({"type": "me"}))
 
     def bones(self) -> int:
-        """Your team's bones."""
         reply: int = self._query({"type": "bones"})
         return reply
 
     def fossils(self) -> int:
-        """Fossils your team has deposited at its lab."""
         reply: int = self._query({"type": "fossils"})
         return reply
 
     def item(self, x: int, y: int) -> ItemView | None:
-        """What is on a tile; None if nothing."""
         reply = self._query({"type": "item", "x": x, "y": y})
         return None if reply is None else _from_ItemView(reply)
 
     def environment(self, x: int, y: int) -> Environment:
-        """What a tile is made of."""
         return _from_Environment(self._query({"type": "environment", "x": x, "y": y}))
 
     def width(self) -> int:
-        """Tiles across the board."""
         reply: int = self._query({"type": "width"})
         return reply
 
     def height(self) -> int:
-        """Tiles down the board."""
         reply: int = self._query({"type": "height"})
         return reply
 
+    def can_merge(self, bot_id: int) -> bool:
+        reply: bool = self._query({"type": "can_merge", "bot_id": bot_id})
+        return reply
+
+    def can_attack(self, bot_id: int) -> bool:
+        reply: bool = self._query({"type": "can_attack", "bot_id": bot_id})
+        return reply
+
     def noop(self) -> None:
-        """Does nothing."""
         self._act({"type": "noop"})
 
     def spawn(self, x: int, y: int) -> Spawned:
-        """Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
-        lab. It steps from the next tick."""
         return Spawned._from(self._act({"type": "spawn", "x": x, "y": y}))
 
     def move(self, x: int, y: int) -> Coord:
-        """Dino only, once per turn: to a free tile within move range. Replies with the
-        new position."""
         return Coord._from(self._act({"type": "move", "x": x, "y": y}))
 
     def grab(self, x: int, y: int) -> ItemView:
-        """Dino only: pick up the fossil on a tile within action range. A dino holds one
-        thing at a time. Free, as often as you like."""
         return _from_ItemView(self._act({"type": "grab", "x": x, "y": y}))
 
     def drop(self, x: int, y: int) -> Dropped:
-        """Dino only: put down what it holds, on a free tile within action range or on
-        your own lab to deposit it. Free, as often as you like."""
         return _from_Dropped(self._act({"type": "drop", "x": x, "y": y}))
 
     def merge(self, bot_id: int) -> UnitView:
-        """Dino only, a limited number of times per turn: merge with a friendly dino within
-        action range and step onto its tile."""
         return _from_UnitView(self._act({"type": "merge", "bot_id": bot_id}))
+
+    def attack(self, bot_id: int) -> None:
+        self._act({"type": "attack", "bot_id": bot_id})

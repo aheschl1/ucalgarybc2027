@@ -5,8 +5,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use prost::Message;
 use serde_json::{Value, json};
 use ucbc_2027::rules::{
-    BASE_INCOME, DINO_HEALTH, DINO_MAX_HEALTH, INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_PER_TURN,
-    SPAWN_COST, START_BONES,
+    ATTACK_COST, ATTACKS_PER_TURN, BASE_INCOME, DINO_HEALTH, DINO_MAX_HEALTH, EQUAL_LEVEL_DAMAGE,
+    INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_PER_TURN, SPAWN_COST, START_BONES, damage,
 };
 use ucbc_2027::{Coord, Ucbc2027, UnitView, proto};
 use ucbc_engine::{ActionError, BotFailure, BotId, DynGame, EngineError, Game, SetSetup, TeamId};
@@ -67,8 +67,51 @@ fn dino_at(game: &mut dyn DynGame, x: u64, y: u64) -> BotId {
     BotId(spawned["bot_id"].as_u64().unwrap())
 }
 
+/// Asks `can_<kind>` first and checks the action agrees.
+#[track_caller]
+fn checked(
+    game: &mut dyn DynGame,
+    kind: &str,
+    bot: BotId,
+    target: BotId,
+) -> Result<Value, ActionError> {
+    let can = game
+        .handle_query(
+            bot,
+            &json!({"type": format!("can_{kind}"), "bot_id": target.0}),
+        )
+        .unwrap();
+    let result = game.apply_action(bot, &json!({"type": kind, "bot_id": target.0}));
+    assert_eq!(
+        can,
+        json!(result.is_ok()),
+        "can_{kind} disagrees: {result:?}"
+    );
+    result
+}
+
+#[track_caller]
 fn merge(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, ActionError> {
-    game.apply_action(bot, &json!({"type": "merge", "bot_id": target.0}))
+    checked(game, "merge", bot, target)
+}
+
+#[track_caller]
+fn attack(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, ActionError> {
+    checked(game, "attack", bot, target)
+}
+
+/// A team 0 dino at (9, 6) facing a team 1 dino at (10, 6) that holds the fossil
+/// from (9, 7).
+fn face_off(game: &mut dyn DynGame) -> (BotId, BotId) {
+    let ours = dino_at(game, 3, 7);
+    let spawned = spawn(game, LAB1, 12, 6).unwrap();
+    game.end_step(LAB1);
+    let theirs = BotId(spawned["bot_id"].as_u64().unwrap());
+    walk(game, theirs, &[(11, 6), (10, 6)]);
+    grab(game, theirs, 9, 7).unwrap();
+    let path: Vec<(u64, u64)> = (4..=9).map(|x| (x, 6)).collect();
+    walk(game, ours, &path);
+    (ours, theirs)
 }
 
 fn me(game: &dyn DynGame, bot: BotId) -> Value {
@@ -565,4 +608,101 @@ fn an_absorbed_dino_does_not_step_again() {
     merge(g.as_mut(), dino, other).unwrap();
     assert!(g.team_of(other).is_none());
     assert!(!g.schedule().contains(&other));
+}
+
+#[test]
+fn damage_is_the_level_gap_squared_and_half_that_upward() {
+    assert_eq!(damage(1, 1), EQUAL_LEVEL_DAMAGE);
+    assert_eq!(damage(3, 3), EQUAL_LEVEL_DAMAGE);
+    assert_eq!(damage(3, 1), 4);
+    assert_eq!(damage(4, 1), 9);
+    assert_eq!(damage(1, 3), 2);
+    assert_eq!(damage(1, 4), 4);
+    // Never nothing.
+    assert_eq!(damage(2, 1), 1);
+    assert_eq!(damage(1, 2), 1);
+}
+
+#[test]
+fn an_attack_costs_bones_and_happens_a_limited_number_of_times_per_turn() {
+    let mut g = game();
+    let (ours, theirs) = face_off(g.as_mut());
+    let before = bones(g.as_ref(), LAB0);
+    for i in 1..=ATTACKS_PER_TURN {
+        assert_eq!(attack(g.as_mut(), ours, theirs).unwrap(), Value::Null);
+        let health = DINO_HEALTH - i * EQUAL_LEVEL_DAMAGE;
+        assert_eq!(me(g.as_ref(), theirs)["health"], json!(health));
+    }
+    let spent = u64::from(ATTACKS_PER_TURN * ATTACK_COST);
+    assert_eq!(bones(g.as_ref(), LAB0), before - spent);
+    refused(attack(g.as_mut(), ours, theirs), "already attacked");
+    // The move is still unused.
+    go(g.as_mut(), ours, 9, 5).unwrap();
+    g.end_step(ours);
+    attack(g.as_mut(), ours, theirs).unwrap();
+}
+
+#[test]
+fn an_attack_refuses_what_the_rules_forbid() {
+    let mut g = game();
+    let (ours, theirs) = face_off(g.as_mut());
+    let friend = dino_at(g.as_mut(), 3, 7);
+    walk(
+        g.as_mut(),
+        friend,
+        &[(4, 6), (5, 6), (6, 6), (7, 6), (8, 6)],
+    );
+    refused(attack(g.as_mut(), LAB0, theirs), "only a dino");
+    refused(attack(g.as_mut(), ours, ours), "own team");
+    refused(attack(g.as_mut(), ours, friend), "own team");
+    refused(attack(g.as_mut(), ours, BotId(99)), "no such bot");
+    refused(attack(g.as_mut(), ours, LAB1), "only attack a dino");
+    refused(attack(g.as_mut(), friend, theirs), "out of range");
+    assert_eq!(me(g.as_ref(), theirs)["health"], json!(DINO_HEALTH));
+    // Spend the rest of team 0's bones on spawns.
+    let ring = [(0, 6), (0, 7), (0, 8), (0, 9), (1, 6), (2, 6)];
+    for &(x, y) in &ring[..(bones(g.as_ref(), LAB0) / u64::from(SPAWN_COST)) as usize] {
+        dino_at(g.as_mut(), x, y);
+    }
+    assert!(bones(g.as_ref(), LAB0) < u64::from(ATTACK_COST));
+    refused(attack(g.as_mut(), ours, theirs), "not enough bones");
+    assert_eq!(me(g.as_ref(), theirs)["health"], json!(DINO_HEALTH));
+    // None of that used the attack.
+    for _ in 0..ATTACK_COST / BASE_INCOME {
+        g.end_tick();
+    }
+    attack(g.as_mut(), ours, theirs).unwrap();
+}
+
+#[test]
+fn a_dino_with_no_health_dies_and_drops_its_load() {
+    let mut g = game();
+    let (ours, theirs) = face_off(g.as_mut());
+    let hits = DINO_HEALTH.div_ceil(EQUAL_LEVEL_DAMAGE);
+    for _ in 1..hits {
+        attack(g.as_mut(), ours, theirs).unwrap();
+        g.end_step(ours);
+    }
+    attack(g.as_mut(), ours, theirs).unwrap();
+    assert!(g.team_of(theirs).is_none());
+    assert!(!g.schedule().contains(&theirs));
+    assert_eq!(item(g.as_ref(), 10, 6), json!({"type": "fossil"}));
+    g.end_step(ours);
+    refused(attack(g.as_mut(), ours, theirs), "no such bot");
+}
+
+#[test]
+fn a_bigger_dino_hits_harder() {
+    let mut g = game();
+    let (ours, theirs) = face_off(g.as_mut());
+    let friend = dino_at(g.as_mut(), 3, 7);
+    walk(
+        g.as_mut(),
+        friend,
+        &[(4, 6), (5, 6), (6, 6), (7, 6), (8, 6)],
+    );
+    merge(g.as_mut(), friend, ours).unwrap();
+    attack(g.as_mut(), friend, theirs).unwrap();
+    let health = DINO_HEALTH - damage(2, 1);
+    assert_eq!(me(g.as_ref(), theirs)["health"], json!(health));
 }

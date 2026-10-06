@@ -10,11 +10,11 @@ from ucbc.games.ucbc2027 import (
     Coord,
     Direction,
     EnvironmentLab,
-    ItemViewDino,
     ItemViewFossil,
     Ucbc2027Handle,
     UnitViewDino,
     UnitViewLab,
+    ItemViewDino
 )
 from ucbc.handle import ActionError
 
@@ -70,13 +70,13 @@ class Dino:
             return
         
         target_level = handle.bones() // 100
-        if me.level < target_level:
-            for y in range(me.pos.y - 1, me.pos.y + 2):
-                for x in range(me.pos.x - 1, me.pos.x + 2):
-                    if x > 0 and y > 0 and x < handle.width() and y < handle.height():
-                        tileitem = handle.item(x, y)
-                        if isinstance(tileitem, ItemViewDino) and tileitem.team == handle.team and tileitem.id != handle.bot_id:
-                            handle.merge(tileitem.id)
+        for coord in around(handle, me.pos):
+            tileitem = handle.item(coord.x, coord.y)
+            if isinstance(tileitem, ItemViewDino) and target_level > me.level and handle.can_merge(tileitem.id):
+                handle.merge(tileitem.id)
+            elif isinstance(tileitem, ItemViewDino) and handle.team != tileitem.team and me.level > tileitem.level:
+                handle.attack(tileitem.id)
+                return
         
         fossil = nearest_fossil(handle, me.pos)
                     
@@ -130,3 +130,15 @@ def nearest_fossil(handle: Ucbc2027Handle, pos: Coord) -> Coord | None:
 def dist(a: Coord, b: Coord) -> int:
     """Tiles apart, diagonals counting as one."""
     return max(abs(a.x - b.x), abs(a.y - b.y))
+
+def around(handle: Ucbc2027Handle, pos: Coord) -> list[Coord]:
+    """The 8 tiles around a position, in reading order."""
+    results = []
+    for y in range(pos.y - 1, pos.y + 2):
+        for x in range(pos.x - 1, pos.x + 2):
+            if x == pos.x and y == pos.y:
+                continue
+            if x < 0 or y < 0 or x >= handle.width() or y >= handle.height():
+                continue
+            results.append(Coord(x, y))
+    return results

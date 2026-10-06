@@ -77,6 +77,7 @@ impl Dino {
         Stats {
             move_range: rules::MOVE_RANGE,
             action_range: rules::ACTION_RANGE,
+            attack_range: rules::ATTACK_RANGE,
         }
     }
 }
@@ -87,6 +88,8 @@ pub struct Stats {
     pub move_range: usize,
     /// How far away a grab or drop may reach.
     pub action_range: usize,
+    /// How far away an attack may reach.
+    pub attack_range: usize,
 }
 
 #[cfg(test)]

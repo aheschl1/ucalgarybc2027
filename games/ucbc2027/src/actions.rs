@@ -119,9 +119,9 @@ impl Ucbc2027 {
         }
     }
 
-    /// The target's bot goes; this one takes its tile. If the target held something,
-    /// this dino takes it and leaves what it held on its old tile.
-    pub(crate) fn merge(&mut self, bot: BotId, target: BotId) -> Result<UnitView, ActionError> {
+    /// Why `bot` may not merge with `target` now, if it may not. The merge action and
+    /// the `can_merge` query both ask this.
+    pub(crate) fn check_merge(&self, bot: BotId, target: BotId) -> Result<(), ActionError> {
         let team = self.bots[bot].team();
         let dino = self.bots[bot]
             .as_dino()
@@ -145,6 +145,14 @@ impl Ucbc2027 {
         if dino.pos.dist(other.pos) > dino.stats().action_range {
             return Err(invalid("out of range"));
         }
+        Ok(())
+    }
+
+    /// The target's bot goes; this one takes its tile. If the target held something,
+    /// this dino takes it and leaves what it held on its old tile.
+    pub(crate) fn merge(&mut self, bot: BotId, target: BotId) -> Result<UnitView, ActionError> {
+        self.check_merge(bot, target)?;
+        let other = self.bots[target].as_dino().expect("checked above");
         let (at, level, health, held) = (other.pos, other.level, other.health, other.held);
         self.bots.remove(target);
         let dino = self.bots[bot].as_dino_mut().expect("checked above");
@@ -160,5 +168,51 @@ impl Ucbc2027 {
         self.state.items[at] = Some(Item::Dino(bot));
         self.turn.merges += 1;
         Ok(self.unit_view(bot))
+    }
+
+    /// Why `bot` may not attack `target` now, if it may not. The attack action and
+    /// the `can_attack` query both ask this.
+    pub(crate) fn check_attack(&self, bot: BotId, target: BotId) -> Result<(), ActionError> {
+        let team = self.bots[bot].team();
+        let dino = self.bots[bot]
+            .as_dino()
+            .ok_or_else(|| invalid("only a dino can attack"))?;
+        if self.turn.attacks >= rules::ATTACKS_PER_TURN {
+            return Err(invalid("already attacked this turn"));
+        }
+        let other = self
+            .bots
+            .get(target)
+            .ok_or_else(|| invalid("no such bot"))?;
+        if other.team() == team {
+            return Err(invalid("cannot attack your own team"));
+        }
+        let other = other
+            .as_dino()
+            .ok_or_else(|| invalid("can only attack a dino"))?;
+        if dino.pos.dist(other.pos) > dino.stats().attack_range {
+            return Err(invalid("out of range"));
+        }
+        if self.state.team(team).bones < rules::ATTACK_COST {
+            return Err(invalid("not enough bones"));
+        }
+        Ok(())
+    }
+
+    /// A target left with no health is removed, its tile left with what it held.
+    pub(crate) fn attack(&mut self, bot: BotId, target: BotId) -> Result<(), ActionError> {
+        self.check_attack(bot, target)?;
+        let team = self.bots[bot].team();
+        let level = |id| self.bots[id].as_dino().expect("checked above").level;
+        let damage = rules::damage(level(bot), level(target));
+        self.state.team_mut(team).bones -= rules::ATTACK_COST;
+        self.turn.attacks += 1;
+        let other = self.bots[target].as_dino_mut().expect("checked above");
+        other.health = other.health.saturating_sub(damage);
+        if other.health == 0 {
+            self.state.clear_dino(other);
+            self.bots.remove(target);
+        }
+        Ok(())
     }
 }

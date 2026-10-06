@@ -139,14 +139,6 @@
   @apply bg-fg text-bg;
 }
 
-.docs .os {
-  @apply flex items-center gap-2 text-xs;
-}
-
-.docs .os .tabs {
-  @apply m-0;
-}
-
 .docs table {
   @apply my-3 w-full border-collapse text-left;
 }

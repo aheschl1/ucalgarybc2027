@@ -7,7 +7,7 @@ export default function Home({ user }: { user?: User }) {
   return (
     <Page>
       <h1 className="text-2xl font-semibold tracking-tight">UCalgary Battlecode</h1>
-      <p className="mt-3 text-muted">A 1v1 game between bots written in Python.</p>
+      <p className="mt-3 text-muted">A 1v1 game competition between bots written in Python.</p>
       <div className="mt-6 flex flex-wrap items-center gap-4">
         <Link
           to={user ? "/platform" : "/register"}

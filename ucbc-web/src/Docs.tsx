@@ -1,12 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-type Os = "linux" | "windows";
-
 const STEPS = [
   ["install", "install"],
   ["write", "write a bot"],
-  ["run", "run it locally"],
+  ["run", "run the game locally"],
   ["submit", "submit"],
   ["watch", "watch"],
 ] as const;
@@ -98,19 +96,11 @@ const UV = `uv init ucbc-bots
 cd ucbc-bots
 uv add ucbc`;
 
-const pip = {
-  linux: `python3 -m venv .venv
-source .venv/bin/activate
-pip install ucbc`,
-  windows: `py -m venv .venv
-.venv\\Scripts\\Activate.ps1
-pip install ucbc`,
-};
+const PIP = `python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\Activate.ps1
+pip install ucbc`;
 
-const zip = {
-  linux: `cd mybot && zip -r ../mybot.zip .`,
-  windows: `Compress-Archive -Path mybot\\* -DestinationPath mybot.zip`,
-};
+const ZIP = `cd mybot && zip -r ../mybot.zip .`;
 
 const BOT = `# mybot/main.py
 from ucbc.games.ucbc2027 import Ucbc2027Handle
@@ -145,11 +135,7 @@ def step(handle):
     bot.step(handle)`;
 
 export default function Docs() {
-  const [os, setOs] = useState<Os>(
-    navigator.userAgent.includes("Windows") ? "windows" : "linux",
-  );
   const [tool, setTool] = useState<"uv" | "pip">("uv");
-  const shell = os === "windows" ? "PowerShell" : "terminal";
 
   return (
     <main className="docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
@@ -182,18 +168,6 @@ export default function Docs() {
       </nav>
 
       <article>
-        <div className="os">
-          <span className="dim">commands for</span>
-          <Tabs
-            value={os}
-            options={[
-              ["linux", "Linux"],
-              ["windows", "Windows"],
-            ]}
-            onChange={setOs}
-          />
-        </div>
-
         <Section id="install" n={1} title="install">
           <table>
             <tbody>
@@ -226,7 +200,7 @@ export default function Docs() {
             ]}
             onChange={setTool}
           />
-          <Code label={shell}>{tool === "uv" ? UV : pip[os]}</Code>
+          <Code label="terminal">{tool === "uv" ? UV : PIP}</Code>
         </Section>
 
         <Section id="write" n={2} title="write a bot">
@@ -246,18 +220,11 @@ export default function Docs() {
           <Rule title="Keep state in a global.">
             Globals last from step to step within a set. Each set starts fresh.
           </Rule>
-          <Rule title="A refused action raises ActionError.">
-            Nothing is forfeited; catch it and try something else.
-          </Rule>
-          <Rule title="Seed randomness from handle.seed.">
-            It differs per unit and per set but is fixed by the match seed, so
-            matches replay exactly.
-          </Rule>
           <Code>{STATE}</Code>
         </Section>
 
-        <Section id="run" n={3} title="run it locally">
-          <Code label={shell}>ucbc run mybot mybot --view</Code>
+        <Section id="run" n={3} title="run the game locally">
+          <Code label="terminal">ucbc run mybot mybot --view</Code>
           <p>
             Plays one bot folder against another (here, against itself),
             prints each set's result, and opens the replay in your browser.
@@ -307,10 +274,6 @@ export default function Docs() {
               </tr>
             </tbody>
           </table>
-          <Rule title="Local matches are site matches.">
-            Same engine, same <a href="#limits">limits</a>. Same bots and seed
-            give the same result on any machine.
-          </Rule>
         </Section>
 
         <Section id="submit" n={4} title="submit">
@@ -321,7 +284,7 @@ export default function Docs() {
             </li>
             <li>
               Zip the <em>contents</em> of your bot folder:
-              <Code label={shell}>{zip[os]}</Code>
+              <Code label="terminal">{ZIP}</Code>
             </li>
             <li>
               On the <Link to="/platform">platform</Link> home page, under{" "}
@@ -363,7 +326,7 @@ export default function Docs() {
         </Section>
 
         <Section id="limits" title="limits">
-          <p>The same for every bot, locally and on the site.</p>
+          <p>The same for every bot, locally and on the platform.</p>
           <div className="stats">
             <div>
               <b>3 ms</b>
@@ -409,7 +372,7 @@ export default function Docs() {
         </Section>
 
         <Section id="maps" title="maps">
-          <Code label={shell}>{`ucbc editor my.map
+          <Code label="terminal">{`ucbc editor my.map
 ucbc run mybot mybot --map my.map --view
 ucbc run mybot mybot --sets 2 --map a.map --map b.map`}</Code>
           <p>

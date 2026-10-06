@@ -10,16 +10,15 @@ from ucbc.games.ucbc2027 import (
     Coord,
     Direction,
     EnvironmentLab,
+    ItemViewDino,
     ItemViewFossil,
     Ucbc2027Handle,
     UnitViewDino,
     UnitViewLab,
-    ItemViewDino
 )
 from ucbc.handle import ActionError
 
 DINOS = 4
-LOOK = 3
 
 bot: "Lab | Dino | None" = None
 
@@ -65,21 +64,29 @@ class Dino:
             else:
                 self.go(handle, self.home)
             return
-        
-        target_level = handle.bones() // 100 # bot heuristic: what level shoudl we aim to be
+
+        target_level = handle.bones() // 100  # bot heuristic: what level shoudl we aim to be
         # look at every cell around the active bot
         for coord in around(handle, me.pos):
             tileitem = handle.item(coord.x, coord.y)
             # merge based on level heuristic
-            if isinstance(tileitem, ItemViewDino) and target_level > me.level and handle.can_merge(tileitem.id):
+            if (
+                isinstance(tileitem, ItemViewDino)
+                and target_level > me.level
+                and handle.can_merge(tileitem.id)
+            ):
                 handle.merge(tileitem.id)
             # attack weaker dinos
-            elif isinstance(tileitem, ItemViewDino) and handle.team != tileitem.team and me.level > tileitem.level:
+            elif (
+                isinstance(tileitem, ItemViewDino)
+                and handle.team != tileitem.team
+                and me.level > tileitem.level
+            ):
                 handle.attack(tileitem.id)
                 return
-        
-        fossil = nearest_fossil(handle, me.pos)
-                    
+
+        fossil = nearest_fossil(handle, me.pos, me.vision)
+
         if fossil is None:
             self.wander(handle)
         elif dist(fossil, me.pos) <= 1:
@@ -115,11 +122,14 @@ def home_tile(handle: Ucbc2027Handle, pos: Coord) -> Coord:
     raise RuntimeError("spawned away from the lab")
 
 
-def nearest_fossil(handle: Ucbc2027Handle, pos: Coord) -> Coord | None:
+def nearest_fossil(handle: Ucbc2027Handle, pos: Coord, look: int) -> Coord | None:
+    """The closest fossil within `look` tiles: the dino's vision, since a tile any
+    further is refused. Every tile looked at is a query, and queries are what a
+    step's time goes on."""
     width, height = handle.width(), handle.height()
     best: Coord | None = None
-    for y in range(max(pos.y - LOOK, 0), min(pos.y + LOOK + 1, height)):
-        for x in range(max(pos.x - LOOK, 0), min(pos.x + LOOK + 1, width)):
+    for y in range(max(pos.y - look, 0), min(pos.y + look + 1, height)):
+        for x in range(max(pos.x - look, 0), min(pos.x + look + 1, width)):
             if isinstance(handle.item(x, y), ItemViewFossil):
                 here = Coord(x, y)
                 if best is None or dist(here, pos) < dist(best, pos):
@@ -130,6 +140,7 @@ def nearest_fossil(handle: Ucbc2027Handle, pos: Coord) -> Coord | None:
 def dist(a: Coord, b: Coord) -> int:
     """Tiles apart, diagonals counting as one."""
     return max(abs(a.x - b.x), abs(a.y - b.y))
+
 
 def around(handle: Ucbc2027Handle, pos: Coord) -> list[Coord]:
     """The 8 tiles around a position, in reading order."""

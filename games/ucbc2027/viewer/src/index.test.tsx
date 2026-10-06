@@ -38,8 +38,8 @@ it("draws the board in layers, a table of team counts, and the set's step order"
     tick: 3,
     environment: [[{ type: "lab", team: 1 }, { type: "wall" }, { type: "empty" }, { type: "empty" }]],
     units: [
-      { id: 2, team: 0, type: "dino", pos: { x: 2, y: 0 }, level: 1, health: 10, held: { type: "fossil" } },
-      { id: 0, team: 1, type: "lab", origin: { x: 0, y: 0 }, health: 100 },
+      { id: 2, team: 0, type: "dino", pos: { x: 2, y: 0 }, level: 1, health: 10, held: { type: "fossil" }, vision: 3 },
+      { id: 0, team: 1, type: "lab", origin: { x: 0, y: 0 }, health: 100, vision: 2 },
     ],
     fossils: [{ x: 3, y: 0 }],
     teams: [
@@ -84,6 +84,7 @@ it("draws the board in layers, a table of team counts, and the set's step order"
   expect(dino!.querySelector(".u27-level")?.textContent).toBe("1");
   expect(attrs(dino!.querySelectorAll(".u27-held image"), "href")).toEqual([assets.fossil]);
   expect(svg.querySelector(".u27-selected")).toBeNull();
+  expect(svg.querySelector(".u27-vision")).toBeNull();
 });
 
 it("selects a dino or a lab by its footprint, and shows the selected unit", () => {
@@ -96,7 +97,7 @@ it("selects a dino or a lab by its footprint, and shows the selected unit", () =
       [lab, lab, empty, empty],
     ],
     units: [
-      { id: 4, team: 0, type: "lab", origin: { x: 0, y: 0 }, health: 90 },
+      { id: 4, team: 0, type: "lab", origin: { x: 0, y: 0 }, health: 90, vision: 2 },
       {
         id: 7,
         team: 1,
@@ -105,6 +106,7 @@ it("selects a dino or a lab by its footprint, and shows the selected unit", () =
         level: 2,
         health: 10,
         held: { type: "dino", id: 5, level: 1, team: 0 },
+        vision: 3,
       },
     ],
     fossils: [],
@@ -136,9 +138,43 @@ it("selects a dino or a lab by its footprint, and shows the selected unit", () =
 
   const info = render(at(frame, <Info />, 7));
   const rows = [...info.container.querySelectorAll(".u27-unit tr")].map((r) => r.textContent);
-  expect(rows).toEqual(["Unitdino", "Level2", "At3, 1", "Health10", "Holdsa level 1 dino of alpha"]);
+  expect(rows).toEqual([
+    "Unitdino",
+    "Level2",
+    "At3, 1",
+    "Health10",
+    "Holdsa level 1 dino of alpha",
+    "Vision3",
+  ]);
   info.rerender(at(frame, <Info />, 9));
   expect(info.container.textContent).toContain("Bot 9 is not on the board.");
+});
+
+it("outlines what only the selected unit can see, clipped to the board", () => {
+  const empty = { type: "empty" } as const;
+  const state: Snapshot = {
+    tick: 0,
+    environment: Array.from({ length: 10 }, () => Array.from({ length: 10 }, () => empty)),
+    units: [
+      { id: 0, team: 0, type: "lab", origin: { x: 1, y: 1 }, health: 100, vision: 2 },
+      { id: 2, team: 0, type: "dino", pos: { x: 5, y: 6 }, level: 1, health: 10, held: null, vision: 3 },
+    ],
+    fossils: [],
+    teams: [{ bones: 0, fossils: 0 }],
+  };
+  const frame = { state, tick: null, set, teams };
+  const board = render(at(frame, <Board />));
+  const sight = () =>
+    [...board.container.querySelectorAll(".u27-vision")].map((r) =>
+      ["transform", "width", "height"].map((a) => r.getAttribute(a)),
+    );
+  expect(sight()).toEqual([]);
+  // Tiles (2, 3) to (8, 9): three each way, the bottom edge on the board's.
+  board.rerender(at(frame, <Board />, 2));
+  expect(sight()).toEqual([["translate(32 48)", "112", "112"]]);
+  // Two out from the 2x2 footprint, clipped at the top and left: (0, 0) to (4, 4).
+  board.rerender(at(frame, <Board />, 0));
+  expect(sight()).toEqual([["translate(0 0)", "80", "80"]]);
 });
 
 it("rejects a state it does not recognise", () => {

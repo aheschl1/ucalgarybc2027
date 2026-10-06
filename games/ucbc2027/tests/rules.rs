@@ -9,7 +9,9 @@ use ucbc_2027::rules::{
     INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_PER_TURN, SPAWN_COST, START_BONES, damage,
 };
 use ucbc_2027::{Coord, Ucbc2027, UnitView, proto};
-use ucbc_engine::{ActionError, BotFailure, BotId, DynGame, EngineError, Game, SetSetup, TeamId};
+use ucbc_engine::{
+    ActionError, BotFailure, BotId, DynGame, EngineError, Game, QueryError, SetSetup, TeamId,
+};
 
 const LAB0: BotId = BotId(0);
 const LAB1: BotId = BotId(1);
@@ -55,8 +57,9 @@ fn by_fossil(game: &mut dyn DynGame) -> BotId {
     dino
 }
 
-fn item(game: &dyn DynGame, x: u64, y: u64) -> Value {
-    game.handle_query(LAB0, &json!({"type": "item", "x": x, "y": y}))
+/// What `bot` sees on (x, y).
+fn item(game: &dyn DynGame, bot: BotId, x: u64, y: u64) -> Value {
+    game.handle_query(bot, &json!({"type": "item", "x": x, "y": y}))
         .unwrap()
 }
 
@@ -210,9 +213,9 @@ fn a_dino_moves_once_per_turn_diagonals_included() {
     assert_eq!(go(g.as_mut(), dino, 4, 6).unwrap(), json!({"x": 4, "y": 6}));
     let me = g.handle_query(dino, &json!({"type": "me"})).unwrap();
     assert_eq!(me["pos"], json!({"x": 4, "y": 6}));
-    assert_eq!(item(g.as_ref(), 3, 7), Value::Null);
+    assert_eq!(item(g.as_ref(), dino, 3, 7), Value::Null);
     assert_eq!(
-        item(g.as_ref(), 4, 6),
+        item(g.as_ref(), dino, 4, 6),
         json!({"type": "dino", "id": dino.0, "team": 0, "level": 1})
     );
     refused(go(g.as_mut(), dino, 4, 7), "already moved");
@@ -235,7 +238,7 @@ fn a_move_must_be_in_range_onto_a_free_tile() {
         Err(ActionError::Malformed(_))
     ));
     refused(go(g.as_mut(), LAB0, 0, 7), "only a dino");
-    assert_eq!(item(g.as_ref(), 3, 7)["type"], "dino");
+    assert_eq!(item(g.as_ref(), dino, 3, 7)["type"], "dino");
     // None of that used the turn; walk up to the wall at (5, 5), then the fossil
     // at (6, 7).
     go(g.as_mut(), dino, 4, 6).unwrap();
@@ -263,14 +266,14 @@ fn grab_and_put_are_free_and_hold_one_thing() {
         json!({"type": "fossil"})
     );
     assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), 6, 7), Value::Null);
+    assert_eq!(item(g.as_ref(), dino, 6, 7), Value::Null);
     refused(grab(g.as_mut(), dino, 6, 7), "already holding");
     assert_eq!(
         put(g.as_mut(), dino, 6, 6).unwrap(),
         json!({"type": "placed"})
     );
     refused(put(g.as_mut(), dino, 6, 6), "holding nothing");
-    assert_eq!(item(g.as_ref(), 6, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), dino, 6, 6), json!({"type": "fossil"}));
     // Again in the same turn, and the move is still unused.
     grab(g.as_mut(), dino, 6, 6).unwrap();
     put(g.as_mut(), dino, 6, 7).unwrap();
@@ -288,8 +291,8 @@ fn grab_and_put_refuse_what_the_rules_forbid() {
     refused(grab(g.as_mut(), dino, 4, 7), "cannot carry");
     refused(grab(g.as_mut(), dino, 5, 6), "cannot carry"); // itself
     refused(grab(g.as_mut(), LAB0, 0, 7), "only a dino");
-    assert_eq!(item(g.as_ref(), 4, 7)["type"], "dino");
-    assert_eq!(item(g.as_ref(), 6, 7), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), dino, 4, 7)["type"], "dino");
+    assert_eq!(item(g.as_ref(), dino, 6, 7), json!({"type": "fossil"}));
     grab(g.as_mut(), dino, 6, 7).unwrap();
     refused(put(g.as_mut(), dino, 4, 7), "not free");
     refused(put(g.as_mut(), dino, 5, 5), "not free"); // a wall
@@ -346,10 +349,9 @@ fn a_failed_carrier_leaves_its_fossil_behind() {
     let dino = by_fossil(g.as_mut());
     grab(g.as_mut(), dino, 6, 7).unwrap();
     g.bot_failed(dino, &BotFailure::exception("RuntimeError", "boom"));
-    assert_eq!(item(g.as_ref(), 5, 6), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), 6, 7), Value::Null);
     let fossils = g.snapshot()["fossils"].as_array().unwrap().clone();
     assert!(fossils.contains(&json!({"x": 5, "y": 6})));
+    assert!(!fossils.contains(&json!({"x": 6, "y": 7})));
 }
 
 fn with_config(config: Value) -> Result<Ucbc2027, EngineError> {
@@ -405,7 +407,8 @@ fn a_set_plays_on_the_map_in_game_config() {
         UnitView::Lab {
             id: 1,
             origin: Coord::new(4, 1),
-            health: LAB_HEALTH
+            health: LAB_HEALTH,
+            vision: 2,
         }
     );
 }
@@ -509,16 +512,16 @@ fn a_merge_adds_levels_and_takes_the_target_tile() {
     let mut g = game();
     let dino = dino_at(g.as_mut(), 3, 7);
     let other = dino_at(g.as_mut(), 3, 8);
-    assert_eq!(item(g.as_ref(), 3, 8)["id"], json!(other.0));
+    assert_eq!(item(g.as_ref(), dino, 3, 8)["id"], json!(other.0));
     let merged = merge(g.as_mut(), dino, other).unwrap();
     let health = 2 * DINO_HEALTH;
     assert_eq!(
         merged,
-        json!({"type": "dino", "id": dino.0, "pos": {"x": 3, "y": 8}, "level": 2, "health": health, "held": null})
+        json!({"type": "dino", "id": dino.0, "pos": {"x": 3, "y": 8}, "level": 2, "health": health, "held": null, "vision": 3})
     );
-    assert_eq!(item(g.as_ref(), 3, 7), Value::Null);
+    assert_eq!(item(g.as_ref(), dino, 3, 7), Value::Null);
     assert_eq!(
-        item(g.as_ref(), 3, 8),
+        item(g.as_ref(), dino, 3, 8),
         json!({"type": "dino", "id": dino.0, "team": 0, "level": 2})
     );
     assert!(g.team_of(other).is_none());
@@ -564,7 +567,7 @@ fn a_merge_refuses_what_the_rules_forbid() {
     refused(merge(g.as_mut(), dino, enemy), "not your team");
     refused(merge(g.as_mut(), dino, far), "out of range");
     assert_eq!(me(g.as_ref(), dino)["level"], json!(1));
-    assert_eq!(item(g.as_ref(), 3, 9)["id"], json!(far.0));
+    assert_eq!(item(g.as_ref(), dino, 3, 9)["id"], json!(far.0));
     // None of that used the merge.
     walk(g.as_mut(), far, &[(3, 8)]);
     merge(g.as_mut(), dino, far).unwrap();
@@ -602,7 +605,7 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     walk(g.as_mut(), dino, &[(4, 6)]);
     merge(g.as_mut(), dino, carrier).unwrap();
     assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), 4, 6), Value::Null);
+    assert_eq!(item(g.as_ref(), dino, 4, 6), Value::Null);
 
     // The merger holds; the target holds nothing.
     let mut g = game();
@@ -612,7 +615,7 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     walk(g.as_mut(), dino, &[(4, 6)]);
     merge(g.as_mut(), carrier, dino).unwrap();
     assert_eq!(held(g.as_ref(), carrier), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), 5, 6), Value::Null);
+    assert_eq!(item(g.as_ref(), carrier, 5, 6), Value::Null);
 
     // Both hold: the merger's goes down where it stood.
     let mut g = game();
@@ -628,7 +631,7 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     merge(g.as_mut(), second, first).unwrap();
     assert_eq!(me(g.as_ref(), second)["pos"], json!({"x": 8, "y": 6}));
     assert_eq!(held(g.as_ref(), second), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), 7, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), second, 7, 6), json!({"type": "fossil"}));
 }
 
 #[test]
@@ -717,7 +720,7 @@ fn a_dino_with_no_health_dies_and_drops_its_load() {
     attack(g.as_mut(), ours, theirs).unwrap();
     assert!(g.team_of(theirs).is_none());
     assert!(!g.schedule().contains(&theirs));
-    assert_eq!(item(g.as_ref(), 10, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), ours, 10, 6), json!({"type": "fossil"}));
     g.end_step(ours);
     refused(attack(g.as_mut(), ours, theirs), "no such bot");
 }
@@ -736,4 +739,56 @@ fn a_bigger_dino_hits_harder() {
     attack(g.as_mut(), friend, theirs).unwrap();
     let health = DINO_HEALTH - damage(2, 1);
     assert_eq!(me(g.as_ref(), theirs)["health"], json!(health));
+}
+
+#[track_caller]
+fn unseen(game: &dyn DynGame, bot: BotId, x: u64, y: u64) {
+    for kind in ["item", "environment"] {
+        match game.handle_query(bot, &json!({"type": kind, "x": x, "y": y})) {
+            Err(QueryError::Rejected(message)) => assert!(message.contains("out of vision")),
+            other => panic!("expected ({x}, {y}) out of vision, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_lab_sees_two_tiles_from_its_footprint() {
+    let g = game();
+    assert_eq!(me(g.as_ref(), LAB0)["vision"], json!(2));
+    // Its tiles are (1, 7) to (2, 8).
+    item(g.as_ref(), LAB0, 4, 10);
+    item(g.as_ref(), LAB0, 0, 5);
+    unseen(g.as_ref(), LAB0, 5, 7);
+    unseen(g.as_ref(), LAB0, 1, 4);
+}
+
+#[test]
+fn a_dino_sees_three_tiles_and_more_as_it_levels() {
+    let mut g = game();
+    let dino = dino_at(g.as_mut(), 3, 7);
+    assert_eq!(me(g.as_ref(), dino)["vision"], json!(3));
+    item(g.as_ref(), dino, 6, 4);
+    unseen(g.as_ref(), dino, 7, 7);
+    let other = dino_at(g.as_mut(), 3, 8);
+    merge(g.as_mut(), dino, other).unwrap();
+    g.end_step(dino);
+    // Level 2, at (3, 8): still three.
+    assert_eq!(me(g.as_ref(), dino)["vision"], json!(3));
+    unseen(g.as_ref(), dino, 7, 8);
+    let third = dino_at(g.as_mut(), 3, 9);
+    merge(g.as_mut(), dino, third).unwrap();
+    // Level 3, at (3, 9): four.
+    assert_eq!(me(g.as_ref(), dino)["vision"], json!(4));
+    item(g.as_ref(), dino, 7, 9);
+    unseen(g.as_ref(), dino, 8, 9);
+}
+
+#[test]
+fn off_the_board_is_not_out_of_vision() {
+    let g = game();
+    let query = json!({"type": "item", "x": 99, "y": 7});
+    match g.handle_query(LAB0, &query) {
+        Err(QueryError::Rejected(message)) => assert!(message.contains("off the board")),
+        other => panic!("expected off the board, got {other:?}"),
+    }
 }

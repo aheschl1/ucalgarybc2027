@@ -24,11 +24,13 @@ function Unit({ id, units, teams }: { id: number; units: UnitEntry[]; teams: Tea
           ["At", `${unit.pos.x}, ${unit.pos.y}`],
           ["Health", String(unit.health)],
           ["Holds", held(unit.held, teams)],
+          ["Vision", String(unit.vision)],
         ]
       : [
           ["Unit", "lab"],
           ["At", `${unit.origin.x}, ${unit.origin.y}`],
           ["Health", String(unit.health)],
+          ["Vision", String(unit.vision)],
         ];
   return (
     <table className="ucbc-table u27-unit">

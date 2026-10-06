@@ -26,6 +26,7 @@ export type UnitEntry1 =
       id: number;
       origin: Coord1;
       type: "lab";
+      vision: number;
     }
   | {
       health: number;
@@ -34,6 +35,7 @@ export type UnitEntry1 =
       level: number;
       pos: Coord;
       type: "dino";
+      vision: number;
     };
 /**
  * What is on a tile.

@@ -81,11 +81,13 @@ impl Ucbc2027 {
     }
 
     pub(crate) fn unit_view(&self, bot: BotId) -> UnitView {
-        match &*self.bots[bot] {
+        let unit = &*self.bots[bot];
+        match unit {
             Unit::Lab(lab) => UnitView::Lab {
                 id: bot.0,
                 origin: lab.origin,
                 health: lab.health,
+                vision: unit.vision(),
             },
             Unit::Dino(dino) => UnitView::Dino {
                 id: bot.0,
@@ -93,6 +95,7 @@ impl Ucbc2027 {
                 level: dino.level,
                 health: dino.health,
                 held: dino.held.map(|item| self.item_view(item)),
+                vision: unit.vision(),
             },
         }
     }
@@ -187,16 +190,24 @@ impl Game for Ucbc2027 {
 
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         let off_board = |at: Coord| QueryError::Rejected(format!("{at} is off the board"));
+        let unseen = |at: Coord| QueryError::Rejected(format!("{at} is out of vision"));
+        let sees = |at: Coord| self.bots[bot].sees(at);
         match query {
             Queries::Me(q) => Ok(q.reply(self.unit_view(bot))),
             Queries::Bones(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).bones)),
             Queries::Fossils(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).fossils)),
             Queries::Item(q) => {
                 let item = self.state.items.get(*q).ok_or_else(|| off_board(*q))?;
+                if !sees(*q) {
+                    return Err(unseen(*q));
+                }
                 Ok(q.reply(item.map(|item| self.item_view(item))))
             }
             Queries::Environment(q) => {
                 let env = self.state.map.env(*q).ok_or_else(|| off_board(*q))?;
+                if !sees(*q) {
+                    return Err(unseen(*q));
+                }
                 Ok(q.reply(env))
             }
             Queries::Width(q) => Ok(q.reply(self.state.map.width())),

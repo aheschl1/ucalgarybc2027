@@ -17,39 +17,33 @@ use crate::view::{Dropped, ItemView, Snapshot, Spawned, TeamView, UnitEntry, Uni
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    /// This bot.
     Me(Request<(), UnitView>),
-    /// Your team's bones.
     Bones(Request<(), u32>),
-    /// Fossils your team has deposited at its lab.
     Fossils(Request<(), u32>),
-    /// What is on a tile; None if nothing.
     Item(Request<Coord, Option<ItemView>>),
-    /// What a tile is made of.
     Environment(Request<Coord, Environment>),
-    /// Tiles across the board.
     Width(Request<(), usize>),
-    /// Tiles down the board.
     Height(Request<(), usize>),
+    CanMerge(Request<Target, bool>),
+    CanAttack(Request<Target, bool>),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// Does nothing.
     Noop(Request<(), ()>),
-    /// Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
-    /// lab. It steps from the next tick.
     Spawn(Request<Coord, Spawned>),
-    /// Dino only, once per turn: to a free tile within move range. Replies with the
-    /// new position.
     Move(Request<Coord, Coord>),
-    /// Dino only: pick up the fossil on a tile within action range. A dino holds one
-    /// thing at a time. Free, as often as you like.
     Grab(Request<Coord, ItemView>),
-    /// Dino only: put down what it holds, on a free tile within action range or on
-    /// your own lab to deposit it. Free, as often as you like.
     Drop(Request<Coord, Dropped>),
+    Merge(Request<Target, UnitView>),
+    Attack(Request<Target, ()>),
+}
+
+/// Another bot, by the id `item` shows on its tile.
+#[derive(Deserialize, JsonSchema)]
+pub struct Target {
+    pub bot_id: u64,
 }
 
 pub struct Ucbc2027 {
@@ -64,6 +58,8 @@ pub struct Ucbc2027 {
 pub(crate) struct Turn {
     pub spawned: bool,
     pub moved: bool,
+    pub merges: u32,
+    pub attacks: u32,
 }
 
 impl Ucbc2027 {
@@ -75,6 +71,7 @@ impl Ucbc2027 {
                     unreachable!("bot {id} on the board is not a dino")
                 };
                 ItemView::Dino {
+                    id: id.0,
                     team: bot.team().0,
                     level: dino.level,
                 }
@@ -83,13 +80,15 @@ impl Ucbc2027 {
         }
     }
 
-    fn unit_view(&self, bot: BotId) -> UnitView {
+    pub(crate) fn unit_view(&self, bot: BotId) -> UnitView {
         match &*self.bots[bot] {
             Unit::Lab(lab) => UnitView::Lab {
+                id: bot.0,
                 origin: lab.origin,
                 health: lab.health,
             },
             Unit::Dino(dino) => UnitView::Dino {
+                id: bot.0,
                 pos: dino.pos,
                 level: dino.level,
                 health: dino.health,
@@ -202,6 +201,8 @@ impl Game for Ucbc2027 {
             }
             Queries::Width(q) => Ok(q.reply(self.state.map.width())),
             Queries::Height(q) => Ok(q.reply(self.state.map.height())),
+            Queries::CanMerge(q) => Ok(q.reply(self.check_merge(bot, BotId(q.bot_id)).is_ok())),
+            Queries::CanAttack(q) => Ok(q.reply(self.check_attack(bot, BotId(q.bot_id)).is_ok())),
         }
     }
 
@@ -212,6 +213,8 @@ impl Game for Ucbc2027 {
             Action::Move(a) => Ok(a.reply(self.move_to(bot, *a)?)),
             Action::Grab(a) => Ok(a.reply(self.grab(bot, *a)?)),
             Action::Drop(a) => Ok(a.reply(self.drop(bot, *a)?)),
+            Action::Merge(a) => Ok(a.reply(self.merge(bot, BotId(a.bot_id))?)),
+            Action::Attack(a) => Ok(a.reply(self.attack(bot, BotId(a.bot_id))?)),
         }
     }
 
@@ -267,7 +270,6 @@ impl Game for Ucbc2027 {
                 .ids()
                 .into_iter()
                 .map(|id| UnitEntry {
-                    id: id.0,
                     team: self.bots[id].team().0,
                     unit: self.unit_view(id),
                 })

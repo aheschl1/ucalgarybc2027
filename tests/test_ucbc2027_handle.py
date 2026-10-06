@@ -13,7 +13,9 @@ def dino_at(x: int, y: int, blocked: set[tuple[int, int]]) -> tuple[Ucbc2027Hand
 
     def bridge(name: str, payload: dict[str, Any]) -> dict[str, Any]:
         if payload["type"] == "me":
-            return {"ok": {"type": "dino", "pos": pos, "level": 1, "health": 10, "held": None}}
+            return {
+                "ok": {"type": "dino", "id": 2, "pos": pos, "level": 1, "health": 10, "held": None}
+            }
         assert payload["type"] == "move"
         to = (payload["x"], payload["y"])
         if to in blocked:
@@ -57,7 +59,7 @@ def test_step_toward_its_own_tile_does_not_move() -> None:
 
 def test_a_lab_has_no_position() -> None:
     def bridge(name: str, payload: dict[str, Any]) -> dict[str, Any]:
-        return {"ok": {"type": "lab", "origin": {"x": 1, "y": 7}, "health": 100}}
+        return {"ok": {"type": "lab", "id": 0, "origin": {"x": 1, "y": 7}, "health": 100}}
 
     handle = Ucbc2027Handle(Identity(0, 0, "a", 0, "ucbc2027"), bridge)
     with pytest.raises(TypeError):

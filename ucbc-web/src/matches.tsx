@@ -6,10 +6,12 @@ export function MatchList({
   api,
   version,
   mine,
+  activeOnly,
 }: {
   api: Api;
   version: number;
   mine?: boolean;
+  activeOnly?: boolean;
 }) {
   const [rows, setRows] = useState<Match[]>([]);
   const [error, setError] = useState("");
@@ -20,6 +22,8 @@ export function MatchList({
       .then(setRows, (err) => setError(describe(err)));
   }, [version]);
 
+  const filteredRows = activeOnly ? rows.filter((r) => r.status !== "done") : rows;
+
   if (error) {
     return (
       <li>
@@ -29,7 +33,7 @@ export function MatchList({
   }
   return (
     <>
-      {rows.map((row) => (
+      {filteredRows.map((row) => (
         <MatchBranch key={row.id} row={row} api={api} />
       ))}
     </>

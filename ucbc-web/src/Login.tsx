@@ -25,10 +25,14 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
   };
 
   return (
-    <form className="login" onSubmit={submit}>
+    <div className="login-page">
+
+      <h2>University of Calgary - Battle Code</h2>
+
+      <form className="login" onSubmit={submit}>
       <input
         type="email"
-        placeholder="email"
+        placeholder="Enter email"
         autoComplete="email"
         autoFocus
         value={email}
@@ -36,7 +40,7 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
       />
       <input
         type="password"
-        placeholder="password"
+        placeholder="Enter password"
         autoComplete="current-password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -44,10 +48,11 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
       <button disabled={busy || !email || !password}>log in</button>
       {error && <p className="error">{error}</p>}
       <p className="dim center">
-        <Link to="/register">create an account</Link> ·{" "}
-        <Link to="/docs">docs</Link> ·{" "}
-        <Link to="/leaderboard">leaderboard</Link>
+        <Link to="/register">Create an account</Link> ·{" "}
+        <Link to="/docs">Docs</Link> ·{" "}
+        <Link to="/leaderboard">Leaderboard</Link>
       </p>
     </form>
+    </div>
   );
 }

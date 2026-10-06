@@ -40,14 +40,15 @@ export default function Profile({
     <main className="page">
       <h1>{user.display_name}</h1>
       <p className="dim">
-        {user.email} · {user.is_admin ? "admin" : "user"} · joined{" "}
+        {user.email} · {user.is_admin ? "Admin" : "User"} · Joined{" "}
         {user.created_at.slice(0, 10)}
       </p>
 
-      <h2>team</h2>
+      <hr />
+
       <TeamSection api={api} onMove={moved} />
 
-      <h2>bots</h2>
+      <h2>Bots</h2>
       {error ? (
         <p className="error">{error}</p>
       ) : (
@@ -65,14 +66,10 @@ export default function Profile({
         ))}
       </ul>
 
-      <h2>matches</h2>
+      <h2>Matches</h2>
       <ul>
         <MatchList api={api} version={version} mine />
       </ul>
-
-      <p className="back">
-        <Link to="/">back</Link>
-      </p>
     </main>
   );
 }
@@ -145,19 +142,19 @@ function TeamSection({
     <>
       {team && (
         <>
-          <p>
-            {team.name} <span className="dim">· {team.members.join(", ")}</span>
-          </p>
+          <h2>Team {team ? team.name : "team"}</h2>
+
+          <p>Members: {team.members.join(", ")}</p>
           {mine && (
             <p className="dim">
               {rating(mine)} · #{board.indexOf(mine) + 1} of {board.length} ·{" "}
-              <Link to="/leaderboard">leaderboard</Link>
+              <Link to="/leaderboard">Leaderboard</Link>
             </p>
           )}
           <p className="dim">
-            join code <code>{team.join_code}</code> ·{" "}
+            Join code: <code>{team.join_code}</code> ·{" "}
             <a href="#" onClick={newCode}>
-              new code
+              Generate New Code
             </a>
           </p>
         </>
@@ -166,22 +163,22 @@ function TeamSection({
         <li>
           <form className="lookup" onSubmit={join}>
             <input
-              placeholder="another team's join code"
+              placeholder="Enter Team Join Code"
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
-            <button disabled={busy || !code.trim()}>join</button>
+            <button disabled={busy || !code.trim()}>Join Team</button>
           </form>
         </li>
         <li>
           <form className="lookup" onSubmit={start}>
             <input
-              placeholder="new team name"
+              placeholder="Enter New Team Name"
               maxLength={64}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-            <button disabled={busy || !name.trim()}>start team</button>
+            <button disabled={busy || !name.trim()}>Start Team</button>
           </form>
         </li>
       </ul>

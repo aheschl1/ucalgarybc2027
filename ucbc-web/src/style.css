@@ -1,520 +1,184 @@
-* {
-  box-sizing: border-box;
+@import "tailwindcss";
+
+/* Black and white, with University of Calgary red used sparingly: focus, the primary
+   action, the active page, the viewer's own team, and errors. */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-bg: #ffffff;
+  --color-fg: #0a0a0a;
+  --color-muted: #737373;
+  --color-line: #e5e5e5;
+  --color-panel: #fafafa;
+  --color-hover: #f4f4f5;
+  --color-accent: #d6001c;
+  --color-accent-fg: #ffffff;
+  --color-accent-soft: #fdf2f3;
 }
 
-body {
-  margin: 0;
-  background: #fff;
-  color: #000;
-  font:
-    14px/1.5 system-ui,
-    sans-serif;
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0a0a0a;
+    --color-fg: #fafafa;
+    --color-muted: #a3a3a3;
+    --color-line: #262626;
+    --color-panel: #111111;
+    --color-hover: #1a1a1a;
+    --color-accent: #e8303f;
+    --color-accent-soft: #2a0b0f;
+  }
 }
 
-.login {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0 auto;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-bg text-fg font-sans text-sm antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+
+  ::selection {
+    @apply bg-accent text-accent-fg;
+  }
 }
 
-.login-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+/* The replay viewer brings its own styles; only its accent follows ours. */
+.ucbc-viewer {
+  --ucbc-accent: var(--color-accent);
 }
 
-.login-page h2 {
-  margin: 0 0 16px;
-  text-align: center;
-}
-
-.login input,
-.login button {
-  font: inherit;
-  padding: 10px 16px;
-  text-align: center;
-  border: 1px solid #ddd;
-  border-radius: 999px;
-  background: #fff;
-  color: inherit;
-  outline: none;
-}
-
-.login input:focus {
-  border-color: #999;
-}
-
-.login button {
-  cursor: pointer;
-}
-
-.login button:disabled {
-  color: #aaa;
-  cursor: default;
-}
-
-.error {
-  margin: 0;
-  text-align: center;
-  font-size: 12px;
-  color: #c33;
-}
-
-.dim {
-  color: #888;
-}
-
-.tree,
-.page {
-  padding: 32px;
-}
-
-.tree ul,
-.page ul {
-  list-style: none;
-  margin: 0;
-  padding-left: 20px;
-}
-
-.tree > ul,
-.page > ul {
-  padding-left: 0;
-}
-
-.tree li,
-.page li {
-  margin: 4px 0;
-}
-
-.page ol {
-  margin: 0;
-  padding-left: 28px;
-}
-
-.page li.mine {
-  font-weight: bold;
-}
-
-.tree summary,
-.tree a,
-.page summary,
-.page a,
-.viewer a,
-.login a {
-  color: #06c;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.tree summary:hover,
-.tree a:hover,
-.page summary:hover,
-.page a:hover,
-.viewer a:hover,
-.login a:hover {
-  text-decoration: underline;
-}
-
-.tree .error,
-.page .error,
-.viewer .error {
-  display: inline;
-  text-align: left;
-}
-
-.lookup {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin: 12px 0;
-}
-
-.lookup input,
-.lookup select,
-.lookup button,
-.lookup .file-button {
-  font: inherit;
-  padding: 6px 12px;
-  border: 1px solid #000;
-  border-radius: 6px;
-  background: #fff;
-  color: inherit;
-  outline: none;
-  height: 32px;
-}
-
-.lookup button,
-.lookup .file-button {
-  width: auto;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.lookup input {
-  width: auto;
-  border: 1px solid #049dfd;
-}
-
-.lookup input[type="file"],
-.lookup input[type="number"],
-.lookup select {
-  width: auto;
-  padding: 6px 12px;
-}
-
-.lookup button:disabled,
-.lookup .file-button:disabled {
-  color: #aaa;
-}
-
-.tree pre,
-.page pre {
-  margin: 4px 0 0 20px;
-  font-size: 12px;
-  max-height: 480px;
-  overflow: auto;
-}
-
-.page {
-  max-width: 760px;
-}
-
-.page h1 {
-  font-size: 18px;
-  font-weight: 800;
-  color: #000;
-  margin: 0;
-}
-
-.page h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: #000;
-  margin: 24px 0 6px;
-}
-
-.page p {
-  margin: 4px 0;
-}
-
-.center {
-  text-align: center;
-}
-
-.page .back {
-  margin-top: 24px;
-}
-
-.docs {
-  display: grid;
-  grid-template-columns: 160px minmax(0, 680px);
-  gap: 48px;
-  padding: 32px;
-}
-
-.docs nav {
-  position: sticky;
-  top: 32px;
-  align-self: start;
-}
-
-.docs nav ol,
-.docs nav ul {
-  margin: 0 0 16px;
-  padding-left: 20px;
-}
-
-.docs nav ul {
-  list-style: none;
-  padding-left: 0;
-}
-
-.docs nav li {
-  margin: 2px 0;
-}
-
-.docs nav p {
-  margin: 0 0 4px;
-  font-size: 12px;
-}
-
-.docs a {
-  color: #06c;
-  text-decoration: none;
-}
-
-.docs a:hover {
-  text-decoration: underline;
-}
-
-.docs nav .home {
-  display: block;
-  margin-bottom: 20px;
-  color: inherit;
-  font-weight: 600;
-}
-
-.docs h1 {
-  font-size: 22px;
-  font-weight: 600;
-  margin: 0;
-}
-
-.docs .lede {
-  margin: 4px 0 20px;
-  color: #555;
-}
-
+/* Docs: long-form prose, styled as a whole rather than element by element. */
 .docs section {
-  padding-top: 28px;
-  margin-top: 28px;
-  border-top: 1px solid #eee;
+  @apply mt-10 border-t border-line pt-10 scroll-mt-20;
 }
 
 .docs h2 {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 10px;
+  @apply mb-3 flex items-center gap-3 text-base font-semibold;
 }
 
 .docs h2 .n {
-  display: inline-grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #000;
-  color: #fff;
-  font-size: 12px;
+  @apply inline-grid size-6 place-items-center rounded-full bg-accent text-xs font-semibold text-accent-fg;
 }
 
 .docs p {
-  margin: 8px 0;
+  @apply my-2 leading-relaxed;
 }
 
-.docs ul,
+.docs article ul,
 .docs ol.numbered {
-  margin: 8px 0;
-  padding-left: 20px;
+  @apply my-2 list-disc pl-5;
+}
+
+.docs ol.numbered {
+  @apply list-decimal;
 }
 
 .docs article li {
-  margin: 4px 0;
+  @apply my-1;
 }
 
 .docs ol.numbered li {
-  margin: 10px 0;
+  @apply my-2.5;
+}
+
+.docs article a {
+  @apply underline decoration-line underline-offset-2 hover:decoration-fg;
 }
 
 .docs code {
-  font-size: 12px;
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: #f4f4f4;
+  @apply rounded bg-panel px-1 py-px font-mono text-[0.8125rem] ring-1 ring-line;
 }
 
 .docs .code {
-  position: relative;
-  margin: 8px 0;
+  @apply relative my-3;
 }
 
 .docs .code .label {
-  position: absolute;
-  top: 8px;
-  left: 12px;
-  font-size: 11px;
-  color: #999;
+  @apply absolute top-2 left-3 text-[11px] text-muted;
 }
 
 .docs .code .label + button + pre {
-  padding-top: 28px;
+  @apply pt-8;
 }
 
 .docs .code button {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  font: inherit;
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid #ddd;
-  border-radius: 999px;
-  background: #fff;
-  color: #888;
-  cursor: pointer;
+  @apply absolute top-1.5 right-1.5 cursor-pointer rounded-md border border-line bg-bg px-2 py-0.5 text-[11px] text-muted hover:text-fg;
 }
 
 .docs pre {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: #f4f4f4;
-  overflow-x: auto;
-  font-size: 12px;
+  @apply m-0 overflow-x-auto rounded-lg border border-line bg-panel px-3.5 py-3 font-mono text-xs leading-relaxed;
 }
 
 .docs pre code {
-  padding: 0;
-  background: none;
+  @apply bg-transparent p-0 ring-0;
 }
 
 .docs .rule {
-  margin: 10px 0;
-  padding: 8px 12px;
-  border-left: 3px solid #06c;
-  border-radius: 0 6px 6px 0;
-  background: #f2f7fc;
+  @apply my-3 rounded-r-lg border-l-2 border-accent bg-panel px-3.5 py-2.5;
 }
 
 .docs .rule div {
-  color: #444;
+  @apply text-muted;
 }
 
 .docs .tabs {
-  display: inline-flex;
-  margin: 8px 0 0;
-  border: 1px solid #ddd;
-  border-radius: 999px;
-  overflow: hidden;
+  @apply mt-2 inline-flex rounded-lg border border-line bg-panel p-0.5;
 }
 
 .docs .tabs button {
-  font: inherit;
-  font-size: 12px;
-  padding: 3px 12px;
-  border: 0;
-  background: #fff;
-  color: #888;
-  cursor: pointer;
+  @apply cursor-pointer rounded-md px-3 py-1 text-xs text-muted hover:text-fg;
 }
 
 .docs .tabs button.on {
-  background: #000;
-  color: #fff;
+  @apply bg-fg text-bg;
 }
 
 .docs .os {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  @apply flex items-center gap-2 text-xs;
 }
 
 .docs .os .tabs {
-  margin: 0;
+  @apply m-0;
 }
 
 .docs table {
-  border-collapse: collapse;
-  margin: 8px 0;
+  @apply my-3 w-full border-collapse text-left;
 }
 
 .docs td {
-  padding: 4px 16px 4px 0;
-  vertical-align: top;
-  border-bottom: 1px solid #f0f0f0;
+  @apply border-b border-line py-1.5 pr-4 align-top;
 }
 
 .docs td:first-child {
-  white-space: nowrap;
-  font-weight: 600;
+  @apply font-semibold whitespace-nowrap;
 }
 
 .docs table.flags td:first-child {
-  font-weight: 400;
-}
-
-.docs .states code {
-  font-size: 13px;
+  @apply font-normal;
 }
 
 .docs .stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin: 12px 0;
+  @apply my-3 grid grid-cols-2 gap-2 sm:grid-cols-4;
 }
 
 .docs .stats div {
-  display: flex;
-  flex-direction: column;
-  padding: 12px;
-  border: 1px solid #eee;
-  border-radius: 8px;
+  @apply flex flex-col rounded-lg border border-line p-3;
 }
 
 .docs .stats b {
-  font-size: 20px;
-  font-weight: 600;
+  @apply text-xl font-semibold;
 }
 
 .docs .stats span {
-  font-size: 12px;
-  color: #888;
+  @apply text-xs text-muted;
 }
 
-@media (max-width: 760px) {
-  .docs {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-    padding: 24px 16px;
-  }
-
-  .docs nav {
-    position: static;
-  }
-
-  .docs .stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-.viewer {
-  padding: 16px 32px;
-}
-
-.viewer p {
-  margin: 0 0 8px;
-}
-
-.navbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 32px;
-  border-bottom: 1px solid #000;
-  background: #fff;
-}
-
-.navbar-right, .navbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.navbar-right button,
-.navbar-right a {
-  font: inherit;
-  padding: 0;
-  border: none;
-  background: none;
-  color: #000;
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.navbar-right button:hover,
-.navbar-right a:hover {
-  text-decoration: underline;
-}
-
-
-.file-input {
-  display: none;
+.docs .dim {
+  @apply text-muted;
 }

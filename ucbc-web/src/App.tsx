@@ -30,44 +30,44 @@ export default function App() {
   if (!user) {
     // Signing in at any address lands on it, since the route table below then applies.
     return (
-      <Routes>
-        <Route path="/register" element={<Register onLogIn={setUser} />} />
-        {docs}
-        <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="*" element={<Login onLogIn={setUser} />} />
-      </Routes>
+      <>
+        <NavBar />
+        <Routes>
+          <Route path="/register" element={<Register onLogIn={setUser} />} />
+          {docs}
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="*" element={<Login onLogIn={setUser} />} />
+        </Routes>
+      </>
     );
   }
 
   const api = makeApi(leave);
   return (
     <>
-    <NavBar onLogOut={leave} user={user} />
-    <Routes>
-      <Route
-        path="/"
-        element={<Tree user={user} api={api} />}
-      />
-      <Route
-        path="/profile"
-        element={
-          <Profile
-            user={user}
-            api={api}
-            onMove={(team) => setUser({ ...user, team_id: team.id })}
-          />
-        }
-      />
-      <Route path="/viewer/:matchId" element={<Viewer api={api} />} />
-      <Route
-        path="/leaderboard"
-        element={<Leaderboard teamId={user.team_id} />}
-      />
-      {docs}
-      {/* Where signing up lands: the session arrives while the browser is still here. */}
-      <Route path="/register" element={<Navigate to="/profile" replace />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      <NavBar onLogOut={leave} user={user} />
+      <Routes>
+        <Route path="/" element={<Tree user={user} api={api} />} />
+        <Route
+          path="/profile"
+          element={
+            <Profile
+              user={user}
+              api={api}
+              onMove={(team) => setUser({ ...user, team_id: team.id })}
+            />
+          }
+        />
+        <Route path="/viewer/:matchId" element={<Viewer api={api} />} />
+        <Route
+          path="/leaderboard"
+          element={<Leaderboard teamId={user.team_id} />}
+        />
+        {docs}
+        {/* Where signing up lands: the session arrives while the browser is still here. */}
+        <Route path="/register" element={<Navigate to="/profile" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </>
   );
 }

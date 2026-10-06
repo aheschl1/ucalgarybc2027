@@ -152,36 +152,36 @@ export default function Docs() {
   const shell = os === "windows" ? "PowerShell" : "terminal";
 
   return (
-    <main className="docs">
-      <nav>
-        <Link to="/" className="home">
-          ucbc
-        </Link>
-        <p className="dim">get started</p>
-        <ol>
-          {STEPS.map(([id, title]) => (
+    <main className="docs mx-auto grid w-full max-w-6xl gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
+      <nav className="text-sm md:sticky md:top-24 md:self-start">
+        <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+          Get started
+        </p>
+        <ol className="mb-6 flex flex-col gap-0.5">
+          {STEPS.map(([id, title], i) => (
             <li key={id}>
-              <a href={`#${id}`}>{title}</a>
+              <a href={`#${id}`} className="flex gap-2 rounded-md px-2 py-1 text-muted hover:bg-hover hover:text-fg">
+                <span className="w-3 tabular-nums">{i + 1}</span>
+                {title}
+              </a>
             </li>
           ))}
         </ol>
-        <p className="dim">reference</p>
-        <ul>
+        <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+          Reference
+        </p>
+        <ul className="flex flex-col gap-0.5">
           {REFERENCE.map(([id, title]) => (
             <li key={id}>
-              <a href={`#${id}`}>{title}</a>
+              <a href={`#${id}`} className="block rounded-md px-2 py-1 text-muted hover:bg-hover hover:text-fg">
+                {title}
+              </a>
             </li>
           ))}
         </ul>
       </nav>
 
       <article>
-        <h1>docs</h1>
-        <p className="lede">
-          Write a bot in Python, play it on your machine, upload it here, and
-          queue matches against anyone's bot.
-        </p>
-
         <div className="os">
           <span className="dim">commands for</span>
           <Tabs
@@ -323,14 +323,14 @@ export default function Docs() {
             </li>
             <li>
               On the <Link to="/">home page</Link>, under{" "}
-              <strong>submissions</strong>, choose the zip, optionally name it,
+              <strong>Submit a bot</strong>, choose the zip, optionally name it,
               leave the game as <code>ucbc2027</code>, and press{" "}
-              <strong>upload zip</strong>.
+              <strong>Upload</strong>.
             </li>
             <li>
-              Under <strong>matches</strong>, pick one of your team's
+              Under <strong>Request a match</strong>, pick one of your team's
               submissions and an opponent (any submission, yours included), set
-              a seed if you like, and press <strong>queue match</strong>.
+              a seed if you like, and press <strong>Queue match</strong>.
             </li>
           </ol>
           <Rule title="main.py must be at the top of the zip, not in a folder.">
@@ -347,14 +347,14 @@ export default function Docs() {
 
         <Section id="watch" n={5} title="watch">
           <p>
-            A queued match appears under <strong>matches</strong>:
+            A queued match appears under <strong>Your matches</strong>:
           </p>
           <p className="states">
             <code>queued</code> → <code>running</code> → <code>done</code>
           </p>
           <p>
-            Expand it to see who won each set and why. Press{" "}
-            <strong>watch</strong> to step through the replay. Your bots and
+            Click it to see who won each set and why. Press{" "}
+            <strong>Watch</strong> to step through the replay. Your bots and
             matches are also on your <Link to="/profile">profile</Link>.
           </p>
         </Section>

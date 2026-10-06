@@ -1,6 +1,8 @@
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router";
 import { describe, logIn, signUp, type User } from "./api";
+import { AuthCard } from "./Login";
+import { Button, ErrorText, Field, Input } from "./ui";
 
 export default function Register({
   onLogIn,
@@ -29,37 +31,48 @@ export default function Register({
   };
 
   return (
-    <form className="login" onSubmit={submit}>
-      <input
-        type="email"
-        placeholder="email"
-        autoComplete="email"
-        autoFocus
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        placeholder="display name"
-        autoComplete="nickname"
-        maxLength={64}
-        value={displayName}
-        onChange={(e) => setDisplayName(e.target.value)}
-      />
-      <input
-        type="password"
-        placeholder="password (8 or more)"
-        autoComplete="new-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <button disabled={busy || !email || !displayName || password.length < 8}>
-        sign up
-      </button>
-      {error && <p className="error">{error}</p>}
-      <p className="dim center">
-        <Link to="/">already have an account?</Link> ·{" "}
-        <Link to="/docs">docs</Link>
-      </p>
-    </form>
+    <AuthCard
+      footer={
+        <Link to="/" className="hover:text-fg hover:underline">
+          Log in
+        </Link>
+      }
+    >
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <Field label="Email">
+          <Input
+            type="email"
+            autoComplete="email"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label="Display name">
+          <Input
+            autoComplete="nickname"
+            maxLength={64}
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+        </Field>
+        <Field label="Password">
+          <Input
+            type="password"
+            placeholder="8+ characters"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
+        {error && <ErrorText>{error}</ErrorText>}
+        <Button
+          className="mt-1 w-full"
+          disabled={busy || !email || !displayName || password.length < 8}
+        >
+          Sign up
+        </Button>
+      </form>
+    </AuthCard>
   );
 }

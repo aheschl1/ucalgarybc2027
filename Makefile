@@ -1,4 +1,4 @@
-.PHONY: help setup build gen sdk viewer-types editor-types viewer editor web replays runtime guest cpython wheels test test-api lint clean up down db release-check tag
+.PHONY: help setup build gen sdk viewer-types editor-types api-types viewer editor web replays runtime guest cpython wheels test test-api lint clean up down db release-check tag
 .DEFAULT_GOAL := help
 
 # Builds include ucbc-games' default games. The tests build every game: they play
@@ -55,10 +55,12 @@ node_modules: package-lock.json
 	npm ci
 	touch $@
 
-# Code generated from the Rust types (the Python SDK and the viewer's TypeScript types)
-# and from map.proto (the map editor's). Committed, so a fresh checkout works without
-# cargo; regenerated before anything uses it.
-gen: sdk viewer-types editor-types
+# Generated code:
+#   sdk           Rust game types   -> Python SDK (ucbc-cli/python/ucbc/games)
+#   viewer-types  Rust JSON Schemas -> viewer and renderer TypeScript (*.gen.ts)
+#   editor-types  map.proto         -> map editor TypeScript
+#   api-types     API OpenAPI       -> web app TypeScript (ucbc-web/src/api.gen.ts)
+gen: sdk viewer-types editor-types api-types
 
 sdk:
 	cargo run -q -p ucbc-dev -- gen-sdk ucbc-cli/python/ucbc/games
@@ -68,6 +70,9 @@ viewer-types: node_modules
 
 editor-types: node_modules
 	npm run gen -w @ucbc/editor-ucbc2027 --silent
+
+api-types: node_modules
+	node ucbc-web/scripts/gen-api.mjs
 
 # The viewer page, built into the ucbc package for `ucbc view`.
 viewer: viewer-types
@@ -86,7 +91,7 @@ replays: build  ## rewrite the viewer's sample replays, when tests say they are 
 	done
 
 # The platform frontend, built into the API package so `ucbc-api` serves it at /.
-web: viewer-types
+web: viewer-types api-types
 	npm run build -w ucbc-web -- --outDir ../ucbc-api/api/static --emptyOutDir
 
 # The bot runtime (ucbc-wasm), into the ucbc package: the guest (CPython for WASI linked

@@ -1,3 +1,5 @@
+import type { User } from "./api.gen";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -92,67 +94,13 @@ export function describe(err: unknown): string {
     : "could not reach the api";
 }
 
-export type User = {
-  id: number;
-  email: string;
-  display_name: string;
-  is_admin: boolean;
-  team_id: number;
-  created_at: string;
-};
-
-// A participant team, not the engine's in-game teams. Only its members are sent one.
-export type Team = {
-  id: number;
-  name: string;
-  join_code: string;
-  members: string[];
-  created_at: string;
-};
-
-// A team's rating, rounded. Anyone may read every team's.
-export type TeamElo = {
-  id: number;
-  name: string;
-  elo: number;
-  matches: number;
-};
-
-// Mirrors SetResult and TeamInfo in ucbc-engine.
-export type SetResult = {
-  index: number;
-  first_team: number;
-  winner_team: number | null;
-  reason: "win" | "draw" | "forfeit";
-  detail: string;
-  ticks: number;
-};
-
-export type Submission = {
-  id: string;
-  user_id: number;
-  display_name: string;
-  team_id: number;
-  team_name: string;
-  name: string;
-  game: string;
-  size: number;
-  sha256: string;
-  created_at: string;
-};
-
-export type Match = {
-  id: string;
-  origin: "user" | "platform";
-  game: string;
-  bots: string[];
-  engine_version: string | null;
-  teams: { id: number; name: string }[];
-  config: { sets: number; seed: number; step_ms: number; memory_bytes: number };
-  status: "queued" | "running" | "done" | "error";
-  set_wins: number[] | null;
-  winner_team: number | null;
-  error: string | null;
-  created_at: string;
-  sets?: SetResult[];
-};
+// The API's own models, generated from its OpenAPI schema by `make api-types`.
+export type {
+  Match,
+  MatchRow,
+  MyTeam as Team,
+  SetResult,
+  Submission,
+  TeamElo,
+  User,
+} from "./api.gen";

@@ -6,7 +6,21 @@ import {
   type Submission,
   type User,
 } from "./api";
-import { MatchBranch, MatchList } from "./matches";
+import { MatchBranch, MatchList, MatchNote } from "./matches";
+import {
+  Button,
+  Card,
+  cx,
+  day,
+  Empty,
+  ErrorText,
+  Field,
+  Input,
+  Mono,
+  Page,
+  Select,
+  Table,
+} from "./ui";
 
 export default function Tree({
   user,
@@ -29,59 +43,58 @@ export default function Tree({
   };
 
   return (
-    
-    <main className="tree">
+    <Page wide>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card title="Submit a bot">
+          <UploadForm api={api} onUploaded={refresh} />
+        </Card>
+        <Card title="Request a match">
+          <QueueForm api={api} user={user} version={version} onQueued={refresh} />
+        </Card>
 
-      <section>
-        <h2>Submissions</h2>
-        <SubmissionsBranch
-          api={api}
-          user={user}
-          version={version}
-          onChange={refresh}
-        />
-      </section>
-
-      <section>
-        <h2>Request Match</h2>
-          <QueueForm
+        <Card
+          className="lg:col-span-2"
+          title="Your matches"
+          flush
+          action={
+            <form className="flex w-full gap-2 sm:w-auto" onSubmit={open}>
+              <Input
+                className="sm:w-64"
+                placeholder="Match ID"
+                value={lookup}
+                onChange={(e) => setLookup(e.target.value)}
+              />
+              <Button variant="secondary" disabled={!lookup.trim()}>
+                Open
+              </Button>
+            </form>
+          }
+        >
+          <MatchList
             api={api}
-            user={user}
             version={version}
-            onQueued={refresh}
+            mine
+            empty="No matches"
+            before={opened.map((id) => (
+              <LookupBranch key={id} id={id} api={api} />
+            ))}
           />
+        </Card>
 
-        <h2>Your Matches</h2>
-        <ul>
-          <MatchList api={api} version={version} mine/>
-        </ul>
-      </section>
-
-      <section>
-        <h2>Match Queue</h2>
-        <ul>
-          <MatchList api={api} version={version} activeOnly/>
-        </ul>
-      </section>
-
-      <section>
-        <h2>Lookup Match</h2>
-        <form className="lookup" onSubmit={open}>
-          <input
-            placeholder="Search match ID"
-            value={lookup}
-            onChange={(e) => setLookup(e.target.value)}
+        <Card className="lg:col-span-2" title="Match queue" flush>
+          <MatchList
+            api={api}
+            version={version}
+            activeOnly
+            empty="Empty"
           />
-          <button disabled={!lookup.trim()}>open</button>
-        </form>
+        </Card>
 
-        <ul>
-          {opened.map((id) => (
-            <LookupBranch key={id} id={id} api={api} />
-          ))}
-        </ul>
-      </section>
-    </main>
+        <Card className="lg:col-span-2" title="Submissions" flush>
+          <SubmissionsBranch api={api} user={user} version={version} />
+        </Card>
+      </div>
+    </Page>
   );
 }
 
@@ -89,15 +102,14 @@ function SubmissionsBranch({
   api,
   user,
   version,
-  onChange,
 }: {
   api: Api;
   user: User;
   version: number;
-  onChange: () => void;
 }) {
   const [all, setAll] = useState<Submission[]>([]);
   const [error, setError] = useState("");
+  const [showOthers, setShowOthers] = useState(false);
 
   useEffect(() => {
     api
@@ -107,36 +119,66 @@ function SubmissionsBranch({
 
   const mine = all.filter((s) => s.team_id === user.team_id);
   const others = all.filter((s) => s.team_id !== user.team_id);
-  const row = (s: Submission) => (
-    <li key={s.id}>
-      {s.name}{" "}
-      <span className="dim">
-        {s.game} · {s.team_name} · by {s.display_name} ·{" "}
-        {s.created_at.slice(0, 10)} · {s.id}
-      </span>
-    </li>
-  );
 
+  if (error) {
+    return (
+      <div className="p-4">
+        <ErrorText>{error}</ErrorText>
+      </div>
+    );
+  }
   return (
-    <ul>
-      <li>
-        <UploadForm api={api} onUploaded={onChange} />
-      </li>
-      {error && (
-        <li>
-          <span className="error">{error}</span>
-        </li>
+    <>
+      {mine.length > 0 ? (
+        <SubmissionTable rows={mine} />
+      ) : (
+        <Empty>No submissions</Empty>
       )}
-      {mine.map(row)}
       {others.length > 0 && (
-        <li>
-          <details>
-            <summary>others</summary>
-            <ul>{others.map(row)}</ul>
-          </details>
-        </li>
+        <div className="border-t border-line">
+          <button
+            className="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-muted hover:text-fg"
+            onClick={() => setShowOthers(!showOthers)}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className={cx("size-3.5 transition-transform", showOthers && "rotate-90")}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M6 4l4 4-4 4" />
+            </svg>
+            Other teams ({others.length})
+          </button>
+          {showOthers && <SubmissionTable rows={others} team />}
+        </div>
       )}
-    </ul>
+    </>
+  );
+}
+
+/** Submissions, newest as the API sends them. `team` adds the owning team's column. */
+export function SubmissionTable({ rows, team }: { rows: Submission[]; team?: boolean }) {
+  return (
+    <Table head={["Name", "Game", ...(team ? ["Team"] : []), "By", "Uploaded", "ID"]}>
+      {rows.map((s) => (
+        <tr key={s.id}>
+          <td className="px-4 py-3 font-medium">{s.name}</td>
+          <td className="px-4 py-3 text-muted">{s.game}</td>
+          {team && <td className="px-4 py-3">{s.team_name}</td>}
+          <td className="px-4 py-3 text-muted">{s.display_name}</td>
+          <td className="px-4 py-3 whitespace-nowrap text-muted tabular-nums">
+            {day(s.created_at)}
+          </td>
+          <td className="px-4 py-3">
+            <Mono value={s.id} />
+          </td>
+        </tr>
+      ))}
+    </Table>
   );
 }
 
@@ -170,31 +212,41 @@ function UploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }) {
   };
 
   return (
-    <form className="lookup" onSubmit={submit}>
-      <input
-        id="file-upload"
-        className="file-input"
-        type="file"
-        accept=".zip"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-      />
-
-      <label htmlFor="file-upload" className="file-button">
-        Choose File
+    <form className="flex flex-col gap-4" onSubmit={submit}>
+      <label
+        className={cx(
+          "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-6 text-center transition-colors hover:border-fg",
+          file ? "border-fg bg-panel" : "border-line",
+        )}
+      >
+        <input
+          className="sr-only"
+          type="file"
+          accept=".zip"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
+        <span className="font-medium">{file ? file.name : "Choose a .zip"}</span>
+        <span className="text-xs text-muted">
+          {file ? `${(file.size / 1024).toFixed(1)} KiB` : "Max 1 MiB"}
+        </span>
       </label>
-
-      <input
-        placeholder="Name (File name)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <input
-        placeholder="Game"
-        value={game}
-        onChange={(e) => setGame(e.target.value)}
-      />
-      <button disabled={!file || !game.trim() || busy}>Upload Zip</button>
-      {error && <span className="error">{error}</span>}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </Field>
+        <Field label="Game">
+          <Input value={game} onChange={(e) => setGame(e.target.value)} />
+        </Field>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button variant="accent" disabled={!file || !game.trim() || busy}>
+          {busy ? "Uploading…" : "Upload"}
+        </Button>
+        {error && <ErrorText>{error}</ErrorText>}
+      </div>
     </form>
   );
 }
@@ -250,23 +302,34 @@ function QueueForm({
     </option>
   );
   return (
-    <form className="lookup" onSubmit={submit}>
-      <select value={mine} onChange={(e) => setMine(e.target.value)}>
-        <option value="">Submission</option>
-        {own.map(option)}
-      </select>
-      <select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
-        <option value="">Opponent</option>
-        {all.map(option)}
-      </select>
-      <input
-        type="number"
-        title="seed"
-        value={seed}
-        onChange={(e) => setSeed(Number(e.target.value))}
-      />
-      <button disabled={!mine || !opponent || busy}>Queue match</button>
-      {error && <span className="error">{error}</span>}
+    <form className="flex flex-col gap-4" onSubmit={submit}>
+      <Field label="Your submission">
+        <Select value={mine} onChange={(e) => setMine(e.target.value)}>
+          <option value="">Choose…</option>
+          {own.map(option)}
+        </Select>
+      </Field>
+      <div className="grid grid-cols-[1fr_7rem] gap-3">
+        <Field label="Opponent">
+          <Select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
+            <option value="">Choose…</option>
+            {all.map(option)}
+          </Select>
+        </Field>
+        <Field label="Seed">
+          <Input
+            type="number"
+            value={seed}
+            onChange={(e) => setSeed(Number(e.target.value))}
+          />
+        </Field>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button disabled={!mine || !opponent || busy}>
+          {busy ? "Queueing…" : "Queue match"}
+        </Button>
+        {error && <ErrorText>{error}</ErrorText>}
+      </div>
     </form>
   );
 }
@@ -283,17 +346,11 @@ function LookupBranch({ id, api }: { id: string; api: Api }) {
 
   if (error) {
     return (
-      <li>
-        {id} <span className="error">{error}</span>
-      </li>
+      <MatchNote id={id}>
+        <span className="text-accent">{error}</span>
+      </MatchNote>
     );
   }
-  if (!row) {
-    return (
-      <li>
-        {id} <span className="dim">loading</span>
-      </li>
-    );
-  }
+  if (!row) return <MatchNote id={id}>…</MatchNote>;
   return <MatchBranch row={row} api={api} />;
 }

@@ -1,4 +1,4 @@
-import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
   describe,
@@ -10,6 +10,8 @@ import {
 } from "./api";
 import { rating } from "./Leaderboard";
 import { MatchList } from "./matches";
+import { SubmissionTable } from "./Tree";
+import { Button, Card, day, Empty, ErrorText, Field, Input, Page } from "./ui";
 
 export default function Profile({
   user,
@@ -37,40 +39,40 @@ export default function Profile({
   };
 
   return (
-    <main className="page">
-      <h1>{user.display_name}</h1>
-      <p className="dim">
-        {user.email} · {user.is_admin ? "Admin" : "User"} · Joined{" "}
-        {user.created_at.slice(0, 10)}
-      </p>
+    <Page>
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center gap-4">
+          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-fg text-lg font-semibold text-bg uppercase">
+            {user.display_name.slice(0, 1)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold">{user.display_name}</p>
+            <p className="truncate text-muted">
+              {user.email} · {user.is_admin ? "Admin" : "Member"} · Joined{" "}
+              {day(user.created_at)}
+            </p>
+          </div>
+        </div>
 
-      <hr />
+        <TeamSection api={api} onMove={moved} />
 
-      <TeamSection api={api} onMove={moved} />
+        <Card title="Your bots" flush>
+          {error ? (
+            <div className="p-4">
+              <ErrorText>{error}</ErrorText>
+            </div>
+          ) : bots.length === 0 ? (
+            <Empty>No bots</Empty>
+          ) : (
+            <SubmissionTable rows={bots} />
+          )}
+        </Card>
 
-      <h2>Bots</h2>
-      {error ? (
-        <p className="error">{error}</p>
-      ) : (
-        bots.length === 0 && <p className="dim">none</p>
-      )}
-      <ul>
-        {bots.map((s) => (
-          <li key={s.id}>
-            {s.name}{" "}
-            <span className="dim">
-              {s.game} · by {s.display_name} · {s.created_at.slice(0, 10)} ·{" "}
-              {s.id}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <h2>Matches</h2>
-      <ul>
-        <MatchList api={api} version={version} mine />
-      </ul>
-    </main>
+        <Card title="Matches" flush>
+          <MatchList api={api} version={version} mine />
+        </Card>
+      </div>
+    </Page>
   );
 }
 
@@ -133,60 +135,91 @@ function TeamSection({
     if (leave())
       act(() => api.post<Team>("/teams", { name: name.trim() }), true);
   };
-  const newCode = (e: MouseEvent) => {
-    e.preventDefault();
+  const newCode = () =>
     act(() => api.post<Team>("/teams/me/code", undefined), false);
-  };
 
   return (
     <>
       {team && (
-        <>
-          <h2>Team {team ? team.name : "team"}</h2>
-
-          <p>Members: {team.members.join(", ")}</p>
-          {mine && (
-            <p className="dim">
-              {rating(mine)} · #{board.indexOf(mine) + 1} of {board.length} ·{" "}
-              <Link to="/leaderboard">Leaderboard</Link>
-            </p>
-          )}
-          <p className="dim">
-            Join code: <code>{team.join_code}</code> ·{" "}
-            <a href="#" onClick={newCode}>
-              Generate New Code
-            </a>
-          </p>
-        </>
+        <Card
+          title={team.name}
+          action={
+            mine && (
+              <Link
+                to="/leaderboard"
+                className="text-sm text-muted hover:text-fg hover:underline"
+              >
+                #{board.indexOf(mine) + 1} of {board.length} · {rating(mine)}
+              </Link>
+            )
+          }
+        >
+          <div className="flex flex-col gap-5">
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted">Members</p>
+              <ul className="flex flex-wrap gap-1.5">
+                {team.members.map((m) => (
+                  <li
+                    key={m}
+                    className="rounded-full border border-line bg-panel px-2.5 py-0.5"
+                  >
+                    {m}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-medium text-muted">Join code</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="rounded-lg border border-line bg-panel px-3 py-1.5 font-mono tracking-wider">
+                  {team.join_code}
+                </code>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(team.join_code)}
+                >
+                  Copy
+                </Button>
+                <Button variant="ghost" type="button" disabled={busy} onClick={newCode}>
+                  New code
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
       )}
-      <ul>
-        <li>
-          <form className="lookup" onSubmit={join}>
-            <input
-              placeholder="Enter Team Join Code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-            <button disabled={busy || !code.trim()}>Join Team</button>
+
+      <Card title="Switch team">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <form className="grid grid-cols-[1fr_auto] items-end gap-2" onSubmit={join}>
+            <Field label="Join with a code">
+              <Input value={code} onChange={(e) => setCode(e.target.value)} />
+            </Field>
+            <Button variant="secondary" disabled={busy || !code.trim()}>
+              Join
+            </Button>
           </form>
-        </li>
-        <li>
-          <form className="lookup" onSubmit={start}>
-            <input
-              placeholder="Enter New Team Name"
-              maxLength={64}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <button disabled={busy || !name.trim()}>Start Team</button>
+          <form className="grid grid-cols-[1fr_auto] items-end gap-2" onSubmit={start}>
+            <Field label="Start a new team">
+              <Input
+                placeholder="Team name"
+                maxLength={64}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </Field>
+            <Button variant="secondary" disabled={busy || !name.trim()}>
+              Start
+            </Button>
           </form>
-        </li>
-      </ul>
-      {error && <p className="error">{error}</p>}
-      <p className="dim">
-        Joining or starting a team moves you out of this one; its bots and
-        matches stay with it.
-      </p>
+        </div>
+        {error && (
+          <div className="mt-3">
+            <ErrorText>{error}</ErrorText>
+          </div>
+        )}
+      </Card>
     </>
   );
 }

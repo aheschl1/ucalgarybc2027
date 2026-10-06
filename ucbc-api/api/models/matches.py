@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # The replay types mirror the engine's replay JSON (ucbc-engine/src/replay.rs).
 
@@ -13,6 +13,9 @@ class TeamInfo(BaseModel):
 
 
 class SetResult(BaseModel):
+    # A response always has every field, defaults included; the schema says so.
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
     index: int
     first_team: int
     winner_team: int | None
@@ -48,6 +51,8 @@ class MatchReplay(BaseModel):
 
 class MatchConfig(BaseModel):
     """What `ucbc run` is told; the defaults are its own. The API does not import the engine."""
+
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
 
     sets: int = Field(default=3, ge=1)
     seed: int = 0

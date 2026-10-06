@@ -1,8 +1,11 @@
-# UCBC
+# UCalgary Battlecode 
 
-UCalgary Battlecode: Python bots, Rust engine. Work tracked in [Linear](https://linear.app/andrew-heschl/team/UCBC/overview).
+UCalgary Battlecode is a 1v1 game between participant implemented python bots.
 
-## Setup
+## Install
+`pip install ucbc` or `uv add ucbc`
+
+## Dev Setup
 
 Rust 1.96+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
@@ -13,9 +16,7 @@ make test       # rust, python, api (needs Docker), viewer; `make test-api` for 
 make lint
 make up         # the platform in compose
 ```
-
-`default` in `ucbc-games/Cargo.toml` picks the games a build includes, engine and viewer
-renderers both; `make test` builds every game.
+The engine is written to be game agnostic; `default` in `ucbc-games/Cargo.toml` picks the games a build includes.
 
 ## Run a match
 
@@ -33,15 +34,16 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | `--map FILE` | play on a map file, e.g. `games/ucbc2027/maps/standard.map`; once for every set, or repeated once per set |
 | `--view` | open replay in browser |
 
-`uv run ucbc view r.json` replays a saved file. `uv run ucbc editor my.map` opens the
-map editor on a file (new if missing); Save writes it, and `--map my.map` plays on it.
 
-### Develop Viewer Alone
+### Create Maps
 
-To work on the viewer or a game's look with Node alone, `npm ci && npm run dev -w @ucbc/viewer`
-opens it on the sample replays; [docs/viewer.md](docs/viewer.md) has more details
+`uv run ucbc editor my.map` opens the map editor on a file (new if missing)
 
-## Write a bot
+### Viewer Dev Setup
+
+To avoid the full build when working on the viewer: `npm ci && npm run dev -w @ucbc/viewer`
+
+## Write a participant bot
 
 A directory with a `main.py` defining `step`.
 
@@ -66,12 +68,6 @@ uv run ucbc-api-cli create-admin
 make down
 ```
 
-Have a Postgres already? In `.env.local` leave `COMPOSE_PROFILES` empty and set
-`POSTGRES_HOST` to it (the example file shows the block); compose then skips its own.
-
-`POST /submissions` uploads a zipped bot (main.py at the top, 1 MiB) to blob storage;
-`POST /matches/queue` queues a match between two submissions.
-
 From the checkout instead of compose:
 
 ```bash
@@ -81,9 +77,7 @@ uv run ucbc-worker                      # plays queued matches, UCBC_WORKER_SLOT
 npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
 ```
 
-`ENV=prod` reads `.env.prod` over `.env.local` (see `.env.prod.example`); serve it over
-HTTPS, the session cookie is `Secure`. Migrations: `uv run alembic revision -m "..."`,
-raw SQL in `op.execute`.
+`ENV=prod` reads `.env.prod` over `.env.local`
 
 ## Layout
 
@@ -101,18 +95,3 @@ raw SQL in `op.execute`.
 | `ucbc-web/` | platform frontend (React, Vite) | served by `ucbc-api` at `/`, `make web` |
 | `bots/<game>/` | sample bots | |
 | `tests/` | Python integration tests | `make test` |
-
-## Install and release
-
-```bash
-pip install ucbc        # Linux x86_64/aarch64, Windows x86_64
-```
-
-To release, set the same version in `Cargo.toml` and `ucbc-cli/pyproject.toml`, commit, then
-`make tag`: CI builds the wheels, publishes them to PyPI and attaches them to a GitHub
-release at `v<version>`. `make tag KIND=guest` or `KIND=cpython` rebuilds that artifact the
-same way, for the Makefile to pin.
-
-Engine internals and adding a game: [docs/engine.md](docs/engine.md). The bot runtime:
-[docs/wasm.md](docs/wasm.md). The API, queue, and worker: [docs/platform.md](docs/platform.md).
-The replay viewer: [docs/viewer.md](docs/viewer.md).

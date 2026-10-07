@@ -3,12 +3,12 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { Plugin } from "vite";
+import { normalizePath, type Plugin } from "vite";
 
 const PREFIX = "@ucbc/viewer-";
 const GAMES = new URL("../../games/", import.meta.url);
 const FEATURES = new URL("../../ucbc-games/Cargo.toml", import.meta.url);
-const TARGET = fileURLToPath(new URL("../src/games.ts", import.meta.url));
+const TARGET = normalizePath(fileURLToPath(new URL("../src/games.ts", import.meta.url)));
 
 /** The games in `default` in ucbc-games' Cargo.toml. */
 export function defaultGames(manifest: string): string[] {

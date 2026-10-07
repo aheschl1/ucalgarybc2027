@@ -10,7 +10,7 @@ import fossil from "./assets/fossil.png";
 
 const STEPS = [
   ["Develop", "Write a python program that defines step(handle)."],
-  ["Run", "Play your bot against an opponent locally."],
+  ["Run", "Play your bot against an opponent locally with the ucbc cli."],
   ["Submit", "Upload your bot, queue matches, and climb the ladder."],
 ] as const;
 
@@ -52,10 +52,9 @@ export default function Home({ user }: { user?: User }) {
       <section className="mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1fr_24rem]">
         <div>
           <ol className="grid gap-8 sm:grid-cols-3 sm:gap-6">
-            {STEPS.map(([title, text], i) => (
+            {STEPS.map(([title, text]) => (
               <li key={title}>
-                <span className="font-mono text-xs text-accent">0{i + 1}</span>
-                <h2 className="mt-2 font-semibold">{title}</h2>
+                <h2 className="font-semibold">{title}</h2>
                 <p className="mt-1 leading-relaxed text-muted">{text}</p>
               </li>
             ))}

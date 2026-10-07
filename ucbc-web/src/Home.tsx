@@ -37,8 +37,8 @@ export default function Home({ user }: { user?: User }) {
                some text or something
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to={user ? "/platform" : "/register"} className={cx(buttonClass(), "h-10 px-5")}>
-                {user ? "Open platform" : "Get started"}
+              <Link to="/platform" className={cx(buttonClass(), "h-10 px-5")}>
+                Open platform
               </Link>
               <Link to="/docs" className={cx(buttonClass("secondary"), "h-10 px-5")}>
                 Read the docs

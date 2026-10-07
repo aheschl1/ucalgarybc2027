@@ -20,12 +20,12 @@ setup: .env .env.local build  ## once: env files, then everything `make build` d
 build: gen viewer editor runtime  ## after any change: generated code, the viewer and editor pages, the bot runtime, dependencies and the engine in .venv
 	MATURIN_PEP517_ARGS="$(FEATURES)" uv sync --all-packages --reinstall-package ucbc
 
-test: build .env .env.local  ## rust, python, api (needs Docker), viewer
+test: .env .env.local build  ## rust, python, api (needs Docker), viewer
 	cargo test --workspace
 	uv run pytest
 	npm test --workspaces --if-present
 
-test-api: build .env .env.local
+test-api: .env .env.local build
 	uv run pytest tests/api
 
 lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale checkout shows in git status

@@ -206,13 +206,12 @@ export default function Docs() {
         <Section id="write" n={2} title="write a bot">
           <p>
             A bot is a folder with a <code>main.py</code> that defines{" "}
-            <code>step(handle)</code>. Nothing to extend or register.
+            <code>step(handle)</code>
           </p>
           <Code>{BOT}</Code>
           <p>
             The engine calls <code>step</code> on each of your bot's turns. The
-            handle is how it sees the game and acts; your editor lists what it
-            offers.
+            handle is how it sees the game and acts.
           </p>
           <Rule title="Every unit runs its own copy of main.py.">
             Each has its own globals. Units share nothing.
@@ -312,7 +311,7 @@ export default function Docs() {
 
         <Section id="watch" n={5} title="watch">
           <p>
-            A queued match appears under <strong>Queue</strong> on the platform, then under{" "}
+            A queued match appears under <strong>In progress</strong> on the platform, then under{" "}
             <strong>Matches</strong>:
           </p>
           <p className="states">

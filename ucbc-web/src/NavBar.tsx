@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { type User } from "./api";
-import { cx } from "./ui";
+import { buttonClass, cx } from "./ui";
 
 const TITLES: Record<string, string> = {
   "/": "Home",
@@ -16,10 +16,8 @@ const TITLES: Record<string, string> = {
 
 const link = ({ isActive }: { isActive: boolean }) =>
   cx(
-    "relative py-4 text-sm transition-colors hover:text-fg",
-    isActive
-      ? "font-medium text-fg after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-accent"
-      : "text-muted",
+    "rounded-md px-3 py-1.5 text-sm transition-colors hover:text-fg",
+    isActive ? "bg-hover font-medium text-fg" : "text-muted",
   );
 
 /** The bar on every page. Without a user it offers logging in instead of the account. */
@@ -73,12 +71,14 @@ export default function NavBar({
 
   return (
     <nav className="sticky top-0 z-20 border-b border-line bg-bg/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-8 px-4 sm:px-6">
-        <Link to="/" className="font-semibold tracking-tight whitespace-nowrap">
-          UCalgary Battlecode
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
+        <Link to="/" className="flex items-center font-semibold tracking-tight whitespace-nowrap">
+          <span>
+            UCBC<span className="ml-1.5 hidden font-normal text-muted lg:inline">UCalgary Battlecode</span>
+          </span>
         </Link>
 
-        <div className="hidden items-center gap-6 sm:flex">{links}</div>
+        <div className="hidden items-center gap-0.5 sm:flex">{links}</div>
 
         <div className="ml-auto flex items-center gap-1">
           {user ? (
@@ -106,12 +106,17 @@ export default function NavBar({
             </>
           ) : (
             !["/login", "/register"].includes(pathname) && (
-              <Link
-                to="/platform"
-                className="hidden rounded-lg bg-fg px-3 py-1.5 font-medium whitespace-nowrap text-bg hover:bg-fg/85 min-[360px]:block"
-              >
-                Go to platform
-              </Link>
+              <>
+                <Link
+                  to="/login"
+                  className="hidden rounded-lg px-3 py-1.5 text-muted hover:bg-hover hover:text-fg sm:block"
+                >
+                  Log in
+                </Link>
+                <Link to="/register" className={cx(buttonClass(), "hidden h-8 min-[360px]:inline-flex")}>
+                  Sign up
+                </Link>
+              </>
             )
           )}
           <button
@@ -128,17 +133,21 @@ export default function NavBar({
       </div>
 
       {open && (
-        <div className="flex flex-col border-t border-line px-4 pb-2 sm:hidden [&>a]:py-2.5 [&>a]:after:hidden">
+        <div className="flex flex-col gap-0.5 border-t border-line px-2 py-2 sm:hidden">
           {links}
-          {user && (
-            <NavLink to="/platform/profile" className={link}>
-              Profile
+          {user ? (
+            <>
+              <NavLink to="/platform/profile" className={link}>
+                Profile
+              </NavLink>
+              <button onClick={onLogOut} className="cursor-pointer rounded-md px-3 py-1.5 text-left text-muted hover:text-fg">
+                Log out
+              </button>
+            </>
+          ) : (
+            <NavLink to="/login" className={link}>
+              Log in
             </NavLink>
-          )}
-          {user && (
-            <button onClick={onLogOut} className="cursor-pointer py-2.5 text-left text-muted hover:text-fg">
-              Log out
-            </button>
           )}
         </div>
       )}

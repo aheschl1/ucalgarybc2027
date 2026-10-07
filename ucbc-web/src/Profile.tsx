@@ -11,7 +11,7 @@ import {
 import { rating } from "./Leaderboard";
 import { MatchList } from "./matches";
 import { SubmissionTable } from "./Tree";
-import { Button, Card, day, Empty, ErrorText, Field, Input, Page } from "./ui";
+import { Button, Card, Count, day, Empty, ErrorText, Field, Input, Page, useCopy } from "./ui";
 
 export default function Profile({
   user,
@@ -42,11 +42,11 @@ export default function Profile({
     <Page>
       <div className="flex flex-col gap-6">
         <div className="flex items-center gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-fg text-lg font-semibold text-bg uppercase">
+          <span className="grid size-14 shrink-0 place-items-center rounded-full bg-fg text-xl font-semibold text-bg uppercase">
             {user.display_name.slice(0, 1)}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-base font-semibold">{user.display_name}</p>
+            <h1 className="truncate text-2xl font-semibold tracking-tight">{user.display_name}</h1>
             <p className="truncate text-muted">
               {user.email} · {user.is_admin ? "Admin" : "Member"} · Joined{" "}
               {day(user.created_at)}
@@ -56,20 +56,26 @@ export default function Profile({
 
         <TeamSection api={api} onMove={moved} />
 
-        <Card title="Your bots" flush>
+        <Card title={<>Your bots <Count n={bots.length} /></>} flush>
           {error ? (
             <div className="p-4">
               <ErrorText>{error}</ErrorText>
             </div>
           ) : bots.length === 0 ? (
-            <Empty>No bots</Empty>
+            <Empty hint="Upload one from the platform page.">No bots yet</Empty>
           ) : (
             <SubmissionTable rows={bots} />
           )}
         </Card>
 
         <Card title="Matches" flush>
-          <MatchList api={api} version={version} query={{ mine: true }} />
+          <MatchList
+            api={api}
+            version={version}
+            query={{ mine: true }}
+            empty="No matches yet"
+            hint="Your team's matches show here once queued."
+          />
         </Card>
       </div>
     </Page>
@@ -88,6 +94,7 @@ function TeamSection({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [copied, copy] = useCopy();
 
   useEffect(() => {
     api.load<Team>("/teams/me").then(setTeam, (err) => setError(describe(err)));
@@ -161,25 +168,26 @@ function TeamSection({
                 {team.members.map((m) => (
                   <li
                     key={m}
-                    className="rounded-full border border-line bg-panel px-2.5 py-0.5"
+                    className="flex items-center gap-1.5 rounded-full border border-line bg-panel py-0.5 pr-2.5 pl-0.5"
                   >
+                    <span className="grid size-5 place-items-center rounded-full bg-hover text-[10px] font-semibold uppercase">
+                      {m.slice(0, 1)}
+                    </span>
                     {m}
                   </li>
                 ))}
               </ul>
             </div>
             <div>
-              <p className="mb-2 text-xs font-medium text-muted">Join code</p>
+              <p className="mb-2 text-xs font-medium text-muted">
+                Join code <span className="font-normal">· share it with teammates</span>
+              </p>
               <div className="flex flex-wrap items-center gap-2">
-                <code className="rounded-lg border border-line bg-panel px-3 py-1.5 font-mono tracking-wider">
+                <code className="h-9 rounded-lg border border-dashed border-muted/50 bg-panel px-3 font-mono text-base leading-9 tracking-[0.2em]">
                   {team.join_code}
                 </code>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(team.join_code)}
-                >
-                  Copy
+                <Button variant="secondary" type="button" onClick={() => copy(team.join_code)}>
+                  {copied ? "Copied" : "Copy"}
                 </Button>
                 <Button variant="ghost" type="button" disabled={busy} onClick={newCode}>
                   New code

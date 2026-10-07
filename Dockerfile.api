@@ -1,34 +1,33 @@
-# The web app, built once, with the renderer (`games/*/viewer`) of each game ucbc-games
-# builds by default.
+# syntax=docker/dockerfile:1
+
 FROM node:22-alpine AS web
 WORKDIR /src
 COPY package.json package-lock.json tsconfig.base.json ./
-COPY ucbc-web/package.json ucbc-web/
-COPY ucbc-viewer/package.json ucbc-viewer/
+COPY --parents ucbc-web/package.json ucbc-viewer/package.json games/*/*/package.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY games/ games/
 COPY ucbc-games/Cargo.toml ucbc-games/
-RUN npm ci
 COPY ucbc-viewer/ ucbc-viewer/
 COPY ucbc-web/ ucbc-web/
 RUN npm run build -w ucbc-web -- --outDir /out --emptyOutDir
 
-# The API, serving the web app at / and itself at /api.
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
 
 ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 PATH="/app/.venv/bin:$PATH"
+RUN useradd --create-home api
 WORKDIR /app
 
-# uv reads every workspace member's manifest; only ucbc-api is installed.
 COPY pyproject.toml uv.lock ./
-COPY ucbc-cli/pyproject.toml ucbc-cli/
-COPY ucbc-worker/pyproject.toml ucbc-worker/
+COPY --parents ucbc-cli/pyproject.toml ucbc-api/pyproject.toml ucbc-worker/pyproject.toml ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --package ucbc-api --no-install-workspace
 COPY ucbc-api/ ucbc-api/
 COPY alembic.ini ./
 COPY alembic/ alembic/
-RUN uv sync --frozen --no-dev --package ucbc-api
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --package ucbc-api
 COPY --from=web /out ucbc-api/api/static
 
-RUN useradd --create-home api && chown -R api:api /app
 USER api
 EXPOSE 8000
 CMD ["ucbc-api"]

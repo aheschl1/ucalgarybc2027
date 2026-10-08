@@ -193,7 +193,7 @@ class MatchRepo:
                 r.reason,
                 r.detail,
                 r.ticks,
-                replay_key, # store key which is string instead of the gzipped json
+                replay_key,  # store key which is string instead of the gzipped json
             ),
         )
 
@@ -207,15 +207,11 @@ class MatchRepo:
         )
         return [SetResult.model_validate(row) for row in await cur.fetchall()]
 
-    async def get_set_replay(
-        self, match_id: UUID, index: int
-    ) -> str | None:
+    async def get_set_replay(self, match_id: UUID, index: int) -> str | None:
         """Returns the replay blob key."""
         cur = await self._conn.execute(
             "select replay_key from sets where match_id = %s and index = %s",
             (match_id, index),
         )
         row = await cur.fetchone()
-        if row is None:
-            return None
-        return row["replay_key"]
+        return None if row is None else str(row["replay_key"])

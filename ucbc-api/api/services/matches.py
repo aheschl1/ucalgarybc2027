@@ -1,5 +1,5 @@
-from datetime import datetime, timedelta
 import gzip
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from api.blobs import BlobStore
@@ -55,7 +55,9 @@ async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
     return Match(**row.model_dump(), sets=sets)
 
 
-async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int, blobs: BlobStore) -> bytes:
+async def get_set_replay(
+    db: DBConnection, user: User, match_id: UUID, index: int, blobs: BlobStore
+) -> bytes:
     """The set's replay as stored: JSON, gzipped."""
     await _visible(db, user, match_id)
     replay = await db.match_repo.get_set_replay(match_id, index)
@@ -121,7 +123,9 @@ async def finish_match(
     for s in replay.sets:
         # this is my idea for the key, makes sense for this but can change later
         key = f"matches/{match.id}/attempts/{match.attempts}/sets/{s.index}.json.gz"
-        data = gzip.compress(s.model_dump_json(exclude_unset=True).encode(), 6) # please check this for zipping here
+        data = gzip.compress(
+            s.model_dump_json(exclude_unset=True).encode(), 6
+        )  # please check this for zipping here
         await blobs.put(key, data, "application/json")
         replay_keys[s.index] = key
 
@@ -129,7 +133,9 @@ async def finish_match(
         await db.match_repo.delete_sets(match.id)
         for s in replay.sets:
             await db.match_repo.add_set(
-                match.id, s, replay_keys[s.index] # i'm pretty sure it's s.index
+                match.id,
+                s,
+                replay_keys[s.index],  # i'm pretty sure it's s.index
             )
         done = await db.match_repo.complete(
             match.id,

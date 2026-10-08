@@ -15,6 +15,7 @@ from testcontainers.community.minio import MinioContainer
 from testcontainers.community.postgres import PostgresContainer
 
 from api.api import create_app
+from api.blobs import BlobStore
 from api.db import DBConnection
 from api.models.users import User
 from api.routes.auth import limiter
@@ -71,6 +72,13 @@ async def db(app: FastAPI) -> AsyncIterator[DBConnection]:
     async with app.state.pool.connection() as conn:
         await conn.set_autocommit(True)
         yield DBConnection(conn)
+
+
+@pytest.fixture
+def blobs(app: FastAPI) -> BlobStore:
+    """The app's blob store, for calling services that write replays directly."""
+    store: BlobStore = app.state.blobs
+    return store
 
 
 def anonymous(app: FastAPI) -> AsyncClient:

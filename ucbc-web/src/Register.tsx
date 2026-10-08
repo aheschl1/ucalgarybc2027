@@ -34,6 +34,7 @@ export default function Register({
   return (
     <AuthCard
       title="Create an account"
+      subtitle="You start on a team of your own; invite others later."
       footer={
         <>
           Have an account?{" "}
@@ -53,7 +54,7 @@ export default function Register({
             onChange={(e) => setEmail(e.target.value)}
           />
         </Field>
-        <Field label="Display name">
+        <Field label="Display name, shown to other teams">
           <Input
             autoComplete="nickname"
             maxLength={64}

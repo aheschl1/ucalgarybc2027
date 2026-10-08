@@ -29,7 +29,8 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
 
   return (
     <AuthCard
-      title="Log in"
+      title="Welcome back"
+      subtitle="Log in to submit bots and queue matches."
       footer={
         <>
           No account?{" "}
@@ -69,18 +70,22 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
 /** Logging in and signing up: one narrow card in the middle of the page. */
 export function AuthCard({
   title,
+  subtitle,
   footer,
   children,
 }: {
   title: string;
+  subtitle: string;
   footer: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <main className="flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="rounded-xl border border-line p-6 shadow-sm">
-          <h1 className="mb-5 text-lg font-semibold tracking-tight">{title}</h1>
+    <main className="relative flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center overflow-hidden px-4 py-12">
+      <div className="grid-bg pointer-events-none absolute inset-0" />
+      <div className="relative w-full max-w-sm animate-rise">
+        <div className="rounded-xl border border-line bg-bg p-6 shadow-xl shadow-fg/5">
+          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+          <p className="mt-1 mb-6 text-muted">{subtitle}</p>
           {children}
         </div>
         <p className="mt-6 text-center text-muted">{footer}</p>

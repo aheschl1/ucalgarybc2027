@@ -11,6 +11,7 @@ from ucbc.cli import main
 
 BotPath = Callable[[str], Path]
 
+
 def test_server_url_accepts_https_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
     urls = ["https://ucbc.andrewheschl.ca/api", "http://localhost:9", "http://127.0.0.1:9"]
     for url in urls:
@@ -37,13 +38,16 @@ def test_session_lifecycle(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
 
     monkeypatch.setenv("UCBC_SERVER", "http://localhost:8000/api")
     session.clear()
-    assert not session.SESSION_FILE.exists()    
+    assert not session.SESSION_FILE.exists()
     assert session.load() is None
 
-def test_not_logged_in_submit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, bot: BotPath) -> None:
+
+def test_not_logged_in_submit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, bot: BotPath
+) -> None:
     monkeypatch.setattr(session, "SESSION_FILE", tmp_path / "session.json")
     monkeypatch.setenv("UCBC_SERVER", "http://localhost:8000/api")
     args = ["submit", str(bot("first_empty")), "--game", "tictactoe"]
-    result = CliRunner().invoke(main, args)    
+    result = CliRunner().invoke(main, args)
     assert result.exit_code != 0, result.output
-    assert "not logged in" in result.output    
+    assert "not logged in" in result.output

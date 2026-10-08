@@ -214,4 +214,5 @@ class MatchRepo:
             (match_id, index),
         )
         row = await cur.fetchone()
-        return None if row is None else str(row["replay_key"])
+        key: str | None = None if row is None else row["replay_key"]
+        return key

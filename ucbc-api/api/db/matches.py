@@ -17,7 +17,6 @@ from api.models.matches import (
     SetResult,
     TeamInfo,
 )
-from api.db import DBConnection
 
 COLUMNS = (
     "id, origin, game, engine_version, teams, config, bots, maps, status, set_wins, winner_team, error, "
@@ -51,7 +50,6 @@ class MatchRepo:
         self,
         origin: MatchOrigin,
         game: str,
-        teams: list[TeamInfo],
         config: MatchConfig,
         bots: list[UUID],
         maps: list[UUID],
@@ -60,10 +58,10 @@ class MatchRepo:
         cur = await self._conn.execute(
             "insert into matches (origin, game, teams, config, bots, maps, priority, status) "
             "values (%s, %s, %s, %s, %s, %s, %s, 'queued') returning id",
+
             (
                 origin,
                 game,
-                Jsonb([t.model_dump() for t in teams]),
                 Jsonb(config.model_dump()),
                 Jsonb([str(b) for b in bots]),
                 Jsonb([str(m) for m in maps]),
@@ -122,7 +120,7 @@ class MatchRepo:
         # TODO: we should maybe(?) make a model for the columns being returned so it can be validated and cleaned up
         res = await self._conn.execute(
             f"""
-            select A.id as id_a, A.team_id as team_id_a, A.game as game_a, B.id as id_b, B.team_id as team_id_b, B.game as game_b
+            select A.id as id_a, A.team_id as team_id_a, A.name as name_a, A.game as game_a, B.id as id_b, B.team_id as team_id_b, B.name as name_b, B.game as game_b
             from submissions A, submissions B
             where (id_a, id_b) not in (
                 select (teams->>0, teams->>1)
@@ -141,8 +139,6 @@ class MatchRepo:
                 group by team_id;
             )
             and
-            id_a != id_b
-            and
             team_id_a != team_id_b
             and
             game_a = game_b;
@@ -156,13 +152,12 @@ class MatchRepo:
         # need bot UUIDs from query result
         bots = [data["id_a"], data["id_b"]]
         # need team info from query result
-        db = DBConnection(self._conn)
         team_a = TeamInfo()
         team_b = TeamInfo()
-        team_a.id = data["team_id_a"]
-        team_a.name = db.team_repo.get(data["team_id_a"])
-        team_b.id = data["team_id_b"]
-        team_b.name = db.team_repo.get(data["team_id_b"])
+        team_a.id = 0
+        team_a.name = data["name_a"]
+        team_b.id = 1
+        team_b.name = data["name_b"]
         teams = [team_a, team_b]
         return self.insert("platform", game, teams, MatchConfig(), bots, 0)
     

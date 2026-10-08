@@ -7,7 +7,9 @@ from ucbc.cli.run import run
 from ucbc.cli.submit import submit
 from ucbc.cli.view import view
 from ucbc.cli.whoami import whoami
+from ucbc.cli.env import load_env
 
+load_env()
 
 @click.group()
 def main() -> None:

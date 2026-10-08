@@ -5,8 +5,8 @@ from pathlib import Path
 import click
 import httpx
 
+from ucbc.cli.session import auth_headers, clear
 from ucbc.settings import server_url
-from ucbc.cli.session import clear, auth_headers
 
 MAX_ZIP = 1 << 20
 MAX_UNPACKED = 8 << 20

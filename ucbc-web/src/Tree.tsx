@@ -1,10 +1,12 @@
 import { type FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router";
 import {
   describe,
   type Api,
   type GameMap,
   type Match,
   type Submission,
+  type Team,
   type TeamElo,
   type User,
 } from "./api";
@@ -12,16 +14,19 @@ import { MatchBranch, MatchList, MatchNote, type MatchQuery } from "./matches";
 import {
   Button,
   Card,
-  cx,
-  day,
+  Chevron,
+  Count,
+  Dropzone,
   Empty,
   ErrorText,
   Field,
   Input,
   Mono,
   Page,
+  Segmented,
   Select,
   Table,
+  Time,
 } from "./ui";
 
 export default function Tree({
@@ -45,8 +50,11 @@ export default function Tree({
     setLookup("");
   };
 
+  // The queue's card shows only with something in it.
+  const [queued, setQueued] = useState(0);
+
   return (
-    <Page wide title="Platform">
+    <Page wide title={<TeamTitle api={api} />} subtitle={`Signed in as ${user.display_name}`}>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Submit a bot">
           <UploadForm api={api} onUploaded={refresh} />
@@ -55,8 +63,26 @@ export default function Tree({
           <QueueForm api={api} user={user} version={version} onQueued={refresh} />
         </Card>
 
-        <Card className="lg:col-span-2" title="Queue" flush>
-          <MatchList api={api} version={version} query={{ active: true }} empty="Empty" />
+        <Card
+          className={queued === 0 ? "hidden" : "lg:col-span-2"}
+          title={
+            <>
+              <span className="size-2 animate-pulse rounded-full bg-accent" />
+              In progress <Count n={queued} />
+            </>
+          }
+          flush
+        >
+          <MatchList
+            api={api}
+            version={version}
+            query={{ active: true }}
+            onLoad={(rows) => {
+              // A match leaving the queue has finished, so the full list has news.
+              if (rows.length < queued) refresh();
+              setQueued(rows.length);
+            }}
+          />
         </Card>
 
         <Card
@@ -66,8 +92,8 @@ export default function Tree({
           action={
             <form className="flex w-full gap-2 sm:w-auto" onSubmit={open}>
               <Input
-                className="sm:w-64"
-                placeholder="Match ID"
+                className="sm:w-56"
+                placeholder="Open a match by ID"
                 value={lookup}
                 onChange={(e) => setLookup(e.target.value)}
               />
@@ -82,7 +108,8 @@ export default function Tree({
             api={api}
             version={version}
             query={query}
-            empty="No matches"
+            empty="No matches yet"
+            hint="Queue one above, or wait for ranked matches to come round."
             before={opened.map((id) => (
               <LookupBranch key={id} id={id} api={api} />
             ))}
@@ -97,12 +124,40 @@ export default function Tree({
   );
 }
 
+/** The team's name, with its place on the board, for the page's heading. */
+function TeamTitle({ api }: { api: Api }) {
+  const [team, setTeam] = useState<Team | null>(null);
+  const [board, setBoard] = useState<TeamElo[]>([]);
+  useEffect(() => {
+    api.load<Team>("/teams/me").then(setTeam, () => {});
+    api.load<TeamElo[]>("/teams/elo").then(setBoard, () => {});
+  }, []);
+  if (!team) return <span className="inline-block h-8 w-48 animate-pulse rounded-lg bg-hover align-middle" />;
+  const i = board.findIndex((t) => t.id === team.id);
+  const mine = board[i];
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+      <Link to="/platform/profile" className="hover:underline hover:decoration-line hover:underline-offset-4">
+        {team.name}
+      </Link>
+      {mine && (
+        <Link
+          to="/leaderboard"
+          className="font-mono text-sm font-normal tracking-normal text-muted hover:text-fg"
+        >
+          {mine.matches === 0 ? "unrated" : `#${i + 1} of ${board.length} · ${mine.elo} elo`}
+        </Link>
+      )}
+    </span>
+  );
+}
+
 // Ranked matches are the platform's; unranked are the ones teams request.
-const KINDS: [string, MatchQuery["origin"]][] = [
-  ["All matches", undefined],
-  ["Ranked", "platform"],
-  ["Unranked", "user"],
-];
+const KINDS = [
+  ["all", "All"],
+  ["platform", "Ranked"],
+  ["user", "Unranked"],
+] as const;
 
 /** The match list's filters: ranked or not, and which team played. */
 function MatchFilters({
@@ -132,19 +187,13 @@ function MatchFilters({
     });
 
   return (
-    <div className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
-      <Select
-        className="sm:w-auto"
-        aria-label="Ranked"
-        value={KINDS.findIndex(([, origin]) => origin === query.origin)}
-        onChange={(e) => onChange({ ...query, origin: KINDS[Number(e.target.value)]?.[1] })}
-      >
-        {KINDS.map(([label], i) => (
-          <option key={label} value={i}>
-            {label}
-          </option>
-        ))}
-      </Select>
+    <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+      <Segmented
+        label="Ranked"
+        value={query.origin ?? "all"}
+        options={KINDS}
+        onChange={(k) => onChange({ ...query, origin: k === "all" ? undefined : k })}
+      />
       <Select
         className="sm:w-auto"
         aria-label="Team"
@@ -199,7 +248,7 @@ function SubmissionsBranch({
       {mine.length > 0 ? (
         <SubmissionTable rows={mine} />
       ) : (
-        <Empty>No submissions</Empty>
+        <Empty hint="Zip your bot folder and drop it in Submit a bot.">No bots yet</Empty>
       )}
       {others.length > 0 && (
         <div className="border-t border-line">
@@ -207,17 +256,7 @@ function SubmissionsBranch({
             className="flex w-full cursor-pointer items-center gap-2 px-4 py-3 text-left text-muted hover:text-fg"
             onClick={() => setShowOthers(!showOthers)}
           >
-            <svg
-              viewBox="0 0 16 16"
-              className={cx("size-3.5 transition-transform", showOthers && "rotate-90")}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M6 4l4 4-4 4" />
-            </svg>
+            <Chevron open={showOthers} />
             Other teams ({others.length})
           </button>
           {showOthers && <SubmissionTable rows={others} team />}
@@ -233,12 +272,12 @@ export function SubmissionTable({ rows, team }: { rows: Submission[]; team?: boo
     <Table head={["Name", "Game", ...(team ? ["Team"] : []), "By", "Uploaded", "ID"]}>
       {rows.map((s) => (
         <tr key={s.id}>
-          <td className="px-4 py-3 font-medium">{s.name}</td>
+          <td className="px-4 py-3 font-medium whitespace-nowrap">{s.name}</td>
           <td className="px-4 py-3 text-muted">{s.game}</td>
           {team && <td className="px-4 py-3">{s.team_name}</td>}
           <td className="px-4 py-3 text-muted">{s.display_name}</td>
-          <td className="px-4 py-3 whitespace-nowrap text-muted tabular-nums">
-            {day(s.created_at)}
+          <td className="px-4 py-3 text-muted">
+            <Time iso={s.created_at} />
           </td>
           <td className="px-4 py-3">
             <Mono value={s.id} />
@@ -280,26 +319,11 @@ function UploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }) {
 
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
-      <label
-        className={cx(
-          "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-6 text-center transition-colors hover:border-fg",
-          file ? "border-fg bg-panel" : "border-line",
-        )}
-      >
-        <input
-          className="sr-only"
-          type="file"
-          accept=".zip"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        <span className="font-medium">{file ? file.name : "Choose a .zip"}</span>
-        <span className="text-xs text-muted">
-          {file ? `${(file.size / 1024).toFixed(1)} KiB` : "Max 1 MiB"}
-        </span>
-      </label>
+      <Dropzone file={file} accept=".zip" hint="main.py at the top · max 1 MiB" onFile={setFile} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name">
           <Input
+            placeholder={file?.name.replace(/\.zip$/, "") ?? "Optional"}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -406,13 +430,15 @@ function QueueForm({
           {own.map(option)}
         </Select>
       </Field>
-      <div className="grid grid-cols-[1fr_7rem_5rem] gap-3">
-        <Field label="Opponent">
-          <Select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
-            <option value="">Choose…</option>
-            {all.map(option)}
-          </Select>
-        </Field>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_7rem_5rem]">
+        <div className="col-span-2 sm:col-span-1">
+          <Field label="Opponent">
+            <Select value={opponent} onChange={(e) => setOpponent(e.target.value)}>
+              <option value="">Choose…</option>
+              {all.map(option)}
+            </Select>
+          </Field>
+        </div>
         <Field label="Seed">
           <Input
             type="number"

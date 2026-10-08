@@ -8,9 +8,9 @@ import {
   type MatchRow,
   type SetResult,
 } from "./api";
-import { cx, Empty, ErrorText, Mono, StatusPill, Table } from "./ui";
+import { Chevron, cx, Empty, ErrorText, Loading, Mono, StatusPill, Table, Time } from "./ui";
 
-const HEAD = ["", "Match", "Status", "Teams", "Sets", ""];
+const HEAD = ["", "Match", "Score", "Status", "Queued", ""];
 const COLUMNS = HEAD.length;
 
 /** Filters for `GET /matches`; each one narrows the list. */
@@ -21,22 +21,33 @@ export type MatchQuery = {
   team?: number;
 };
 
-/** Matches as a table, narrowed by `query`; `before` puts rows of the caller's own on top. */
+// How often a list with a match still to play asks again.
+const POLL_MS = 3000;
+
+const live = (m: MatchRow) => m.status === "queued" || m.status === "running";
+
+/** Matches as a table, narrowed by `query`; `before` puts rows of the caller's own on top.
+ * While any is still to play it refetches on its own; `onLoad` hears each fetch. */
 export function MatchList({
   api,
   version,
   query = {},
   before,
   empty = "No matches",
+  hint,
+  onLoad,
 }: {
   api: Api;
   version: number;
   query?: MatchQuery;
   before?: ReactNode;
   empty?: string;
+  hint?: ReactNode;
+  onLoad?: (rows: MatchRow[]) => void;
 }) {
   const [rows, setRows] = useState<MatchRow[] | null>(null);
   const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== false) params.set(key, String(value));
@@ -48,13 +59,23 @@ export function MatchList({
     let current = true;
     setError("");
     api.load<MatchRow[]>(search ? `/matches?${search}` : "/matches").then(
-      (r) => current && setRows(r),
+      (r) => {
+        if (!current) return;
+        setRows(r);
+        onLoad?.(r);
+      },
       (err) => current && setError(describe(err)),
     );
     return () => {
       current = false;
     };
-  }, [version, search]);
+  }, [version, search, tick]);
+
+  useEffect(() => {
+    if (!rows?.some(live)) return;
+    const timer = setTimeout(() => setTick((t) => t + 1), POLL_MS);
+    return () => clearTimeout(timer);
+  }, [rows]);
 
   if (error) {
     return (
@@ -63,7 +84,8 @@ export function MatchList({
       </div>
     );
   }
-  if (rows?.length === 0 && !before) return <Empty>{empty}</Empty>;
+  if (!rows && !before) return <Loading />;
+  if (rows?.length === 0 && !before) return <Empty hint={hint}>{empty}</Empty>;
   return (
     <Table head={HEAD}>
       {before}
@@ -88,19 +110,23 @@ export function MatchNote({ id, children }: { id: string; children: ReactNode })
 }
 
 export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
-  // The list gives the row without its sets; those load when the branch opens.
   const [match, setMatch] = useState<MatchRow | Match>(row);
   const [open, setOpen] = useState(false);
   const [mapNames, setMapNames] = useState<string[] | null>(null);
   const [error, setError] = useState("");
-  useEffect(() => setMatch(row), [row]);
+  // A list refetching hands a new row; the sets already loaded hold while the status does.
+  useEffect(
+    () => setMatch((prev) => ("sets" in prev && prev.status === row.status ? prev : row)),
+    [row],
+  );
 
-  const fetchSets = () => {
-    if ("sets" in match || error) return;
+  // The list gives the row without its sets; those load when the branch opens.
+  useEffect(() => {
+    if (!open || "sets" in match || error) return;
     api
       .load<Match>(`/matches/${encodeURIComponent(row.id)}`)
       .then(setMatch, (err) => setError(describe(err)));
-  };
+  }, [open, match]);
   // The row names its maps by id; the names come from the map list.
   const fetchMapNames = () => {
     if (mapNames || row.maps.length === 0) return;
@@ -113,10 +139,7 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
     );
   };
   const toggle = () => {
-    if (!open) {
-      fetchSets();
-      fetchMapNames();
-    }
+    if (!open) fetchMapNames();
     setOpen(!open);
   };
 
@@ -127,47 +150,38 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
         className={cx("cursor-pointer transition-colors hover:bg-hover", open && "bg-panel")}
       >
         <td className="w-8 pl-4">
-          <svg
-            viewBox="0 0 16 16"
-            className={cx("size-3.5 text-muted transition-transform", open && "rotate-90")}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M6 4l4 4-4 4" />
-          </svg>
+          <Chevron open={open} />
         </td>
-        <td className="px-4 py-3 whitespace-nowrap">
-          <Mono value={match.id} />
-          {match.origin === "platform" && (
-            <span className="ml-2 rounded border border-line px-1.5 py-px text-[11px] text-muted">
-              ranked
-            </span>
-          )}
+        <td className="max-w-80 px-4 py-3">
+          <Teams match={match} />
+          <div className="mt-0.5 flex items-center gap-2 text-xs text-muted">
+            {match.game}
+            {match.origin === "platform" && (
+              <span className="rounded border border-line px-1.5 text-[11px]">ranked</span>
+            )}
+            <Mono value={match.id} />
+          </div>
+        </td>
+        <td className="px-4 py-3 font-mono whitespace-nowrap tabular-nums">
+          {match.set_wins ? match.set_wins.join(" – ") : <span className="text-muted">–</span>}
         </td>
         <td className="px-4 py-3">
           <StatusPill status={match.status} />
         </td>
-        <td className="max-w-72 px-4 py-3">
-          <Teams match={match} />
-          <div className="text-xs text-muted">{match.game}</div>
-        </td>
-        <td className="px-4 py-3 font-mono text-xs tabular-nums">
-          {match.set_wins ? match.set_wins.join(" – ") : <span className="text-muted">–</span>}
+        <td className="px-4 py-3 text-muted">
+          <Time iso={match.created_at} />
         </td>
         <td className="px-4 py-3 text-right">
           {match.status === "done" && (
             <Link
               to={`/platform/matches/${encodeURIComponent(match.id)}`}
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-bg hover:ring-1 hover:ring-line"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg px-2.5 py-1 text-xs font-medium transition hover:border-fg"
             >
-              Watch
-              <svg viewBox="0 0 16 16" className="size-3" fill="currentColor">
+              <svg viewBox="0 0 16 16" className="size-3" fill="currentColor" aria-hidden>
                 <path d="M5 3.5v9l7-4.5z" />
               </svg>
+              Watch
             </Link>
           )}
         </td>
@@ -191,10 +205,14 @@ export function MatchBranch({ row, api }: { row: MatchRow | Match; api: Api }) {
                   ))}
                 </ul>
               ) : (
-                !match.error && <p className="text-muted">No sets</p>
+                !match.error && (
+                  <p className="text-muted">
+                    {match.status === "done" ? "No sets" : "Sets show here once it finishes."}
+                  </p>
+                )
               )
             ) : (
-              !error && <p className="text-muted">…</p>
+              !error && <p className="animate-pulse text-muted">Loading sets…</p>
             )}
           </td>
         </tr>

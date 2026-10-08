@@ -1,6 +1,8 @@
+import gzip
 from datetime import datetime, timedelta
 from uuid import UUID
 
+from api.blobs import BlobMissing, BlobStore
 from api.db import DBConnection
 from api.errors import ApiError, Forbidden, NotFound
 from api.models.matches import (
@@ -20,10 +22,16 @@ LIST_LIMIT = 50
 
 
 class LostLease(Exception):
-    """Another worker took the match over; nothing was written."""
+    """Another worker took the match over; nothing was written to the database."""
 
     def __init__(self, match: MatchRow) -> None:
         super().__init__(f"match {match.id} is no longer held")
+
+
+def replay_key(match_id: UUID, attempt: int, index: int) -> str:
+    """Where a set's replay lives in the blob store. The attempt keeps a rerun after a lost
+    worker from overwriting what an earlier holder may still be writing."""
+    return f"matches/{match_id}/attempts/{attempt}/sets/{index}.json.gz"
 
 
 async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID:
@@ -53,13 +61,18 @@ async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
     return Match(**row.model_dump(), sets=sets)
 
 
-async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: int) -> bytes:
+async def get_set_replay(
+    db: DBConnection, user: User, match_id: UUID, index: int, blobs: BlobStore
+) -> bytes:
     """The set's replay as stored: JSON, gzipped."""
     await _visible(db, user, match_id)
-    replay = await db.match_repo.get_set_replay(match_id, index)
-    if replay is None:
+    key = await db.match_repo.get_set_replay(match_id, index)
+    if key is None:
         raise NotFound(f"no set {index} in match {match_id}")
-    return replay
+    try:
+        return await blobs.get(key)
+    except BlobMissing as e:
+        raise NotFound(f"replay of set {index} in match {match_id} is gone") from e
 
 
 async def list_matches(
@@ -106,14 +119,26 @@ async def claim_match(db: DBConnection, worker: str, lease: timedelta) -> MatchR
     return None
 
 
-async def finish_match(db: DBConnection, match: MatchRow, replay: MatchReplay) -> None:
+async def finish_match(
+    db: DBConnection, match: MatchRow, replay: MatchReplay, blobs: BlobStore
+) -> None:
     """Records the replay, marks the match done, and moves both teams' ratings. Sets from
     an earlier attempt are replaced, so a rerun after a lost worker leaves one consistent
-    replay, and a lost lease writes nothing."""
+    replay, and a lost lease writes nothing to the database. The replays go to the blob
+    store first, outside the transaction; a lost lease leaves them under their attempt."""
+    for s in replay.sets:
+        data = gzip.compress(s.model_dump_json(exclude_unset=True).encode(), 6)
+        await blobs.put(
+            replay_key(match.id, match.attempts, s.index),
+            data,
+            "application/json",
+            content_encoding="gzip",
+        )
+
     async with db.conn.transaction():
         await db.match_repo.delete_sets(match.id)
         for s in replay.sets:
-            await db.match_repo.add_set(match.id, s)
+            await db.match_repo.add_set(match.id, s, replay_key(match.id, match.attempts, s.index))
         done = await db.match_repo.complete(
             match.id,
             _claimed_at(match),

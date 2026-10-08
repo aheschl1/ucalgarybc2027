@@ -7,6 +7,7 @@ from uuid import UUID
 import pytest
 from httpx import AsyncClient
 
+from api.blobs import BlobStore
 from api.db import DBConnection
 from api.models.matches import MatchReplay
 from api.services import elo, matches
@@ -76,13 +77,17 @@ async def bots(
 
 
 async def play(
-    client: AsyncClient, db: DBConnection, bots: list[str], winners: list[int | None]
+    client: AsyncClient,
+    db: DBConnection,
+    blobs: BlobStore,
+    bots: list[str],
+    winners: list[int | None],
 ) -> None:
     """Queues the match, claims it, and finishes it with these set winners."""
     match_id = await enqueue(client, {"game": "tictactoe", "bots": bots})
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None and held.id == match_id
-    await matches.finish_match(db, held, replay(match_id, winners))
+    await matches.finish_match(db, held, replay(match_id, winners), blobs)
 
 
 async def test_new_teams_start_at_800(db: DBConnection, bots: dict[int, str]) -> None:
@@ -90,13 +95,13 @@ async def test_new_teams_start_at_800(db: DBConnection, bots: dict[int, str]) ->
 
 
 async def test_a_finished_match_moves_both_teams(
-    admin_client: AsyncClient, db: DBConnection, bots: dict[int, str]
+    admin_client: AsyncClient, db: DBConnection, blobs: BlobStore, bots: dict[int, str]
 ) -> None:
-    await play(admin_client, db, [bots[ROOT], bots[ALICE]], [0, 0, 0])
+    await play(admin_client, db, blobs, [bots[ROOT], bots[ALICE]], [0, 0, 0])
     assert await ratings(db) == {ROOT: (816, 1), ALICE: (784, 1)}
 
     # Alice in slot 0 wins 2-1, which scores her two thirds.
-    await play(admin_client, db, [bots[ALICE], bots[ROOT]], [0, 1, 0])
+    await play(admin_client, db, blobs, [bots[ALICE], bots[ROOT]], [0, 1, 0])
     alice, root = elo.step(784, 816, 2 / 3)
     after = await ratings(db)
     assert [after[ROOT][0], after[ALICE][0]] == pytest.approx([root, alice])
@@ -105,10 +110,10 @@ async def test_a_finished_match_moves_both_teams(
 
 
 async def test_an_even_split_lifts_the_lower_team(
-    admin_client: AsyncClient, db: DBConnection, bots: dict[int, str]
+    admin_client: AsyncClient, db: DBConnection, blobs: BlobStore, bots: dict[int, str]
 ) -> None:
     await db.conn.execute("update teams set elo = 1000 where id = %s", (ROOT,))
-    await play(admin_client, db, [bots[ROOT], bots[ALICE]], [0, None, 1])
+    await play(admin_client, db, blobs, [bots[ROOT], bots[ALICE]], [0, None, 1])
     root, alice = elo.step(1000, 800, 0.5)
     assert root < 1000 and alice > 800
     after = await ratings(db)
@@ -116,9 +121,9 @@ async def test_an_even_split_lifts_the_lower_team(
 
 
 async def test_self_play_and_errors_rate_nothing(
-    admin_client: AsyncClient, db: DBConnection, bots: dict[int, str]
+    admin_client: AsyncClient, db: DBConnection, blobs: BlobStore, bots: dict[int, str]
 ) -> None:
-    await play(admin_client, db, [bots[ROOT], bots[ROOT]], [0, 0, 0])
+    await play(admin_client, db, blobs, [bots[ROOT], bots[ROOT]], [0, 0, 0])
 
     match_id = await enqueue(admin_client, {"game": "tictactoe", "bots": list(bots.values())})
     held = await matches.claim_match(db, "w", LEASE)
@@ -129,7 +134,7 @@ async def test_self_play_and_errors_rate_nothing(
 
 
 async def test_a_lost_lease_rates_nothing(
-    admin_client: AsyncClient, db: DBConnection, bots: dict[int, str]
+    admin_client: AsyncClient, db: DBConnection, blobs: BlobStore, bots: dict[int, str]
 ) -> None:
     match_id = await enqueue(admin_client, {"game": "tictactoe", "bots": list(bots.values())})
     held = await matches.claim_match(db, "w1", LEASE)
@@ -141,18 +146,22 @@ async def test_a_lost_lease_rates_nothing(
     assert taken is not None
 
     with pytest.raises(matches.LostLease):
-        await matches.finish_match(db, held, replay(match_id, [0, 0, 0]))
+        await matches.finish_match(db, held, replay(match_id, [0, 0, 0]), blobs)
     assert await ratings(db) == {ROOT: (800, 0), ALICE: (800, 0)}
 
     # The holder's result counts once.
-    await matches.finish_match(db, taken, replay(match_id, [1, 1, 1]))
+    await matches.finish_match(db, taken, replay(match_id, [1, 1, 1]), blobs)
     assert await ratings(db) == {ROOT: (784, 1), ALICE: (816, 1)}
 
 
 async def test_anyone_reads_ratings(
-    admin_client: AsyncClient, client: AsyncClient, db: DBConnection, bots: dict[int, str]
+    admin_client: AsyncClient,
+    client: AsyncClient,
+    db: DBConnection,
+    blobs: BlobStore,
+    bots: dict[int, str],
 ) -> None:
-    await play(admin_client, db, [bots[ROOT], bots[ALICE]], [1, 1, 0])
+    await play(admin_client, db, blobs, [bots[ROOT], bots[ALICE]], [1, 1, 0])
     alice, root = elo.step(800, 800, 2 / 3)
 
     # `client` is signed out. Ratings are rounded; join codes stay hidden.

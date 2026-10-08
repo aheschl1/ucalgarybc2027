@@ -7,7 +7,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { describe, type Api, type Match } from "./api";
-import { ErrorText, Mono } from "./ui";
+import { cx, ErrorText, Mono } from "./ui";
 
 /** The replay file the engine would have written, from the match row and its sets. */
 function assemble(match: Match, sets: SetReplay[]): Replay {
@@ -83,8 +83,8 @@ export default function Viewer({ api }: { api: Api }) {
         <ErrorText>{error}</ErrorText>
       ) : (
         !replay && (
-          <p className="py-16 text-center text-muted">
-            {status === "loading" ? "…" : status}
+          <p className={cx("py-24 text-center text-muted", status === "loading" && "animate-pulse")}>
+            {status === "loading" ? "Loading replay…" : `No replay yet · ${status}`}
           </p>
         )
       )}

@@ -48,14 +48,27 @@ class BlobStore:
 
         await asyncio.to_thread(go)
 
-    async def put(self, key: str, data: bytes, content_type: str) -> None:
-        await asyncio.to_thread(
-            self._client.put_object,
-            Bucket=self.bucket,
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-        )
+    async def put(
+        self, key: str, data: bytes, content_type: str, content_encoding: str | None = None
+    ) -> None:
+        """Stores `data` under `key`. `content_encoding` names a compression applied on top
+        of the type, as gzip is to a JSON replay."""
+
+        def go() -> None:
+            if content_encoding is None:
+                self._client.put_object(
+                    Bucket=self.bucket, Key=key, Body=data, ContentType=content_type
+                )
+            else:
+                self._client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=data,
+                    ContentType=content_type,
+                    ContentEncoding=content_encoding,
+                )
+
+        await asyncio.to_thread(go)
 
     async def get(self, key: str) -> bytes:
         def go() -> bytes:

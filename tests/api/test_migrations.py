@@ -9,6 +9,7 @@ import psycopg
 import pytest
 from psycopg.types.json import Jsonb
 
+from api.blobs import BlobStore
 from tests.api.conftest import alembic
 
 
@@ -21,8 +22,8 @@ def fresh_url(database_url: str) -> Iterator[str]:
     yield database_url.rsplit("/", 1)[0] + "/migrations"
 
 
-def test_teams_backfill(fresh_url: str) -> None:
-    alembic(fresh_url, "upgrade", "0006")
+def test_teams_backfill(fresh_url: str, blob_url: str) -> None:
+    alembic(fresh_url, blob_url, "upgrade", "0006")
     with psycopg.connect(fresh_url, autocommit=True) as conn:
         ids: dict[str, int] = {}
         for name in ["Ann", "Cal", "Bob", "bob", "BOB"]:
@@ -41,7 +42,7 @@ def test_teams_backfill(fresh_url: str) -> None:
                 (uuid4(), ids[name]),
             )
 
-    alembic(fresh_url, "upgrade", "0007")
+    alembic(fresh_url, blob_url, "upgrade", "0007")
     with psycopg.connect(fresh_url) as conn:
         teams = conn.execute(
             "select u.display_name, t.name, t.id from users u join teams t on t.id = u.team_id "
@@ -72,19 +73,19 @@ def test_teams_backfill(fresh_url: str) -> None:
         assert nullable == [("submissions", "NO"), ("users", "NO")]
 
     # Every team gets its own join code.
-    alembic(fresh_url, "upgrade", "0008")
+    alembic(fresh_url, blob_url, "upgrade", "0008")
     with psycopg.connect(fresh_url) as conn:
         codes = conn.execute("select count(distinct join_code) from teams").fetchone()
         assert codes == (5,)
 
-    alembic(fresh_url, "downgrade", "0006")
+    alembic(fresh_url, blob_url, "downgrade", "0006")
     with psycopg.connect(fresh_url) as conn:
         assert conn.execute("select to_regclass('teams')").fetchone() == (None,)
         assert conn.execute("select count(*) from submissions").fetchone() == (3,)
 
 
-def test_submission_bots(fresh_url: str) -> None:
-    alembic(fresh_url, "upgrade", "0008")
+def test_submission_bots(fresh_url: str, blob_url: str) -> None:
+    alembic(fresh_url, blob_url, "upgrade", "0008")
     a, b = str(uuid4()), str(uuid4())
 
     def source(bot: str) -> dict[str, str]:
@@ -112,21 +113,21 @@ def test_submission_bots(fresh_url: str) -> None:
         )
 
     # Matches with a directory go, sets and all; the rest name their submissions in order.
-    alembic(fresh_url, "upgrade", "0009")
+    alembic(fresh_url, blob_url, "upgrade", "0009")
     with psycopg.connect(fresh_url) as conn:
         rows = conn.execute("select id, bots from matches order by created_at").fetchall()
         assert rows == [(ids["submissions"], [b, a]), (ids["empty"], [])]
         assert conn.execute("select count(*) from sets").fetchone() == (0,)
 
-    alembic(fresh_url, "downgrade", "0008")
+    alembic(fresh_url, blob_url, "downgrade", "0008")
     with psycopg.connect(fresh_url) as conn:
         rows = conn.execute("select bots from matches order by created_at").fetchall()
         assert rows == [([source(b), source(a)],), ([],)]
 
 
-def test_replays_gzipped(fresh_url: str) -> None:
+def test_replays_gzipped(fresh_url: str, blob_url: str) -> None:
     replay = {"index": 0, "first_team": 0, "initial_state": {"cells": ["empty"] * 9}, "ticks": []}
-    alembic(fresh_url, "upgrade", "0009")
+    alembic(fresh_url, blob_url, "upgrade", "0009")
     with psycopg.connect(fresh_url, autocommit=True) as conn:
         row = conn.execute(
             "insert into matches (origin, game, teams, config, bots, status) "
@@ -140,7 +141,7 @@ def test_replays_gzipped(fresh_url: str) -> None:
         )
 
     # Existing rows are compressed in place and come back as the same JSON.
-    alembic(fresh_url, "upgrade", "0010")
+    alembic(fresh_url, blob_url, "upgrade", "0010")
     with psycopg.connect(fresh_url) as conn:
         (stored,) = conn.execute("select replay from sets").fetchone() or (None,)
         assert isinstance(stored, bytes)
@@ -151,12 +152,12 @@ def test_replays_gzipped(fresh_url: str) -> None:
         ).fetchone() or (None,)
         assert kind == "bytea"
 
-    alembic(fresh_url, "downgrade", "0009")
+    alembic(fresh_url, blob_url, "downgrade", "0009")
     with psycopg.connect(fresh_url) as conn:
         assert conn.execute("select replay from sets").fetchone() == (replay,)
 
 
-def test_replay_vision(fresh_url: str) -> None:
+def test_replay_vision(fresh_url: str, blob_url: str) -> None:
     def unit(kind: str, **fields: object) -> dict[str, object]:
         return {"type": kind, "team": 0, "health": 10, **fields}
 
@@ -181,7 +182,7 @@ def test_replay_vision(fresh_url: str) -> None:
         ],
     }
     other = {"index": 0, "first_team": 0, "initial_state": {"cells": []}, "ticks": []}
-    alembic(fresh_url, "upgrade", "0012")
+    alembic(fresh_url, blob_url, "upgrade", "0012")
     with psycopg.connect(fresh_url, autocommit=True) as conn:
         for game, replay in [("ucbc2027", old), ("tictactoe", other)]:
             row = conn.execute(
@@ -198,7 +199,7 @@ def test_replay_vision(fresh_url: str) -> None:
 
     # Each ucbc2027 unit gets the vision its kind and level gave it; one that has a
     # vision keeps it, and other games are untouched.
-    alembic(fresh_url, "upgrade", "0013")
+    alembic(fresh_url, blob_url, "upgrade", "0013")
     with psycopg.connect(fresh_url) as conn:
         rows = conn.execute(
             "select m.game, s.replay from sets s join matches m on m.id = s.match_id"
@@ -209,4 +210,37 @@ def test_replay_vision(fresh_url: str) -> None:
     assert [u["vision"] for u in migrated["ticks"][0]["state_after"]["units"]] == [2, 3, 4, 9]
     assert replays["tictactoe"] == other
 
-    alembic(fresh_url, "downgrade", "0012")
+    alembic(fresh_url, blob_url, "downgrade", "0012")
+
+
+async def test_replay_blob_keys(fresh_url: str, blob_url: str) -> None:
+    replay = {"index": 0, "first_team": 0, "initial_state": {"cells": []}, "ticks": []}
+    alembic(fresh_url, blob_url, "upgrade", "0013")
+    with psycopg.connect(fresh_url, autocommit=True) as conn:
+        row = conn.execute(
+            "insert into matches (origin, game, teams, config, bots, maps, status, attempts) "
+            "values ('user', 'tictactoe', '[]', '{}', '[]', '[]', 'done', 2) returning id"
+        ).fetchone()
+        assert row is not None
+        conn.execute(
+            "insert into sets (match_id, index, first_team, reason, ticks, replay) "
+            "values (%s, 0, 0, 'draw', 1, %s)",
+            (row[0], gzip.compress(json.dumps(replay).encode())),
+        )
+
+    # The replay moves to the blob store under its match's attempt; the row keeps the key.
+    alembic(fresh_url, blob_url, "upgrade", "0014")
+    key = f"matches/{row[0]}/attempts/2/sets/0.json.gz"
+    with psycopg.connect(fresh_url) as conn:
+        assert conn.execute("select replay_key from sets").fetchone() == (key,)
+        columns = conn.execute(
+            "select column_name from information_schema.columns where table_name = 'sets'"
+        ).fetchall()
+        assert ("replay",) not in columns
+    assert json.loads(gzip.decompress(await BlobStore(blob_url).get(key))) == replay
+
+    # Downgrading reads it back into the row.
+    alembic(fresh_url, blob_url, "downgrade", "0013")
+    with psycopg.connect(fresh_url) as conn:
+        (stored,) = conn.execute("select replay from sets").fetchone() or (None,)
+        assert json.loads(gzip.decompress(stored)) == replay

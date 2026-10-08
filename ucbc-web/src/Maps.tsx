@@ -5,13 +5,16 @@ import {
   Card,
   cx,
   day,
+  Dropzone,
   Empty,
   ErrorText,
   Field,
   Input,
   Mono,
+  Loading,
   Page,
   Table,
+  Time,
 } from "./ui";
 
 /** Admins upload map files and archive them. The API does not read a file, so a bad one
@@ -40,7 +43,7 @@ export default function Maps({ api }: { api: Api }) {
   };
 
   return (
-    <Page wide>
+    <Page wide title="Maps" subtitle="Admin only. Teams pick from the unarchived ones when they queue a match.">
       <div className="flex flex-col gap-6">
         <Card title="Upload a map">
           <MapUploadForm api={api} onUploaded={refresh} />
@@ -51,7 +54,8 @@ export default function Maps({ api }: { api: Api }) {
               <ErrorText>{error}</ErrorText>
             </div>
           )}
-          {maps?.length === 0 && <Empty>No maps</Empty>}
+          {!maps && !error && <Loading />}
+          {maps?.length === 0 && <Empty hint="Matches use the standard map until one is uploaded.">No maps yet</Empty>}
           {maps && maps.length > 0 && (
             <Table head={["Name", "Game", "Size", "Uploaded", "ID", ""]}>
               {maps.map((m) => (
@@ -68,8 +72,8 @@ export default function Maps({ api }: { api: Api }) {
                   <td className="px-4 py-3 text-muted tabular-nums">
                     {(m.size / 1024).toFixed(1)} KiB
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-muted tabular-nums">
-                    {day(m.created_at)}
+                  <td className="px-4 py-3 text-muted">
+                    <Time iso={m.created_at} />
                   </td>
                   <td className="px-4 py-3">
                     <Mono value={m.id} />
@@ -120,27 +124,11 @@ function MapUploadForm({ api, onUploaded }: { api: Api; onUploaded: () => void }
 
   return (
     <form className="flex flex-col gap-4" onSubmit={submit}>
-      <label
-        className={cx(
-          "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-4 py-6 text-center transition-colors hover:border-fg",
-          file ? "border-fg bg-panel" : "border-line",
-        )}
-      >
-        <input
-          className="sr-only"
-          type="file"
-          accept=".map"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        <span className="font-medium">{file ? file.name : "Choose a .map"}</span>
-        {file && (
-          <span className="text-xs text-muted">{(file.size / 1024).toFixed(1)} KiB</span>
-        )}
-      </label>
+      <Dropzone file={file} accept=".map" hint="From ucbc editor" onFile={setFile} />
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Name">
           <Input
-            placeholder="The file's name"
+            placeholder={file?.name.replace(/\.map$/, "") ?? "The file's name"}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />

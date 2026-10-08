@@ -15,6 +15,7 @@ from testcontainers.community.minio import MinioContainer
 from testcontainers.community.postgres import PostgresContainer
 
 from api.api import create_app
+from api.blobs import BlobStore
 from api.db import DBConnection
 from api.models.users import User
 from api.routes.auth import limiter
@@ -26,22 +27,16 @@ MEMBER = ("alice@example.com", "alice-pw")
 TEAMMATE = ("carol@example.com", "carol-pw")
 
 
-def alembic(url: str, *args: str) -> None:
+def alembic(url: str, blob_url: str, *args: str) -> None:
+    """Runs alembic against this database; the blob store is where a migration moves
+    replays."""
     subprocess.run(
         [sys.executable, "-m", "alembic", *args],
         cwd=ROOT,
-        env={**os.environ, "UCBC_DATABASE_URL": url},
+        env={**os.environ, "UCBC_DATABASE_URL": url, "UCBC_BLOB_URL": blob_url},
         check=True,
         capture_output=True,
     )
-
-
-@pytest.fixture(scope="session")
-def database_url() -> Iterator[str]:
-    with PostgresContainer("postgres:17", driver=None) as pg:
-        url = pg.get_connection_url()
-        alembic(url, "upgrade", "head")
-        yield url
 
 
 @pytest.fixture(scope="session")
@@ -49,6 +44,14 @@ def blob_url() -> Iterator[str]:
     with MinioContainer("pgsty/minio") as minio:
         cfg = minio.get_config()
         yield f"http://{cfg['access_key']}:{cfg['secret_key']}@{cfg['endpoint']}/test"
+
+
+@pytest.fixture(scope="session")
+def database_url(blob_url: str) -> Iterator[str]:
+    with PostgresContainer("postgres:17", driver=None) as pg:
+        url = pg.get_connection_url()
+        alembic(url, blob_url, "upgrade", "head")
+        yield url
 
 
 @pytest.fixture
@@ -71,6 +74,13 @@ async def db(app: FastAPI) -> AsyncIterator[DBConnection]:
     async with app.state.pool.connection() as conn:
         await conn.set_autocommit(True)
         yield DBConnection(conn)
+
+
+@pytest.fixture
+def blobs(app: FastAPI) -> BlobStore:
+    """The app's blob store, for calling services that write replays directly."""
+    store: BlobStore = app.state.blobs
+    return store
 
 
 def anonymous(app: FastAPI) -> AsyncClient:

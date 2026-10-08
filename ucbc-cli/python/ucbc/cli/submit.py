@@ -6,6 +6,7 @@ import click
 import httpx
 
 from ucbc.settings import server_url
+from ucbc.cli.session import clear, auth_headers
 
 MAX_ZIP = 1 << 20
 MAX_UNPACKED = 8 << 20
@@ -65,16 +66,21 @@ def submit(bot: Path, game: str, name: str | None, test_run: bool) -> None:
     form = {"game": game}
     if name:
         form["name"] = name
-
+    headers = auth_headers()
+    if not headers:
+        raise click.ClickException("not logged in: run ucbc login")
     try:
         response = httpx.post(
             f"{server_url()}/submissions",
+            headers=headers,
             files={"file": (f"{bot.name}.zip", zipped, "application/zip")},
             data=form,
         )
     except httpx.HTTPError as e:
         raise click.ClickException(f"could not reach {server_url()}: {e}") from e
-
+    if response.status_code == 401:
+        clear()
+        raise click.ClickException("session expired: run ucbc login")
     if response.status_code != 201:
         raise click.ClickException(response.json().get("detail", response.text))
     body = response.json()

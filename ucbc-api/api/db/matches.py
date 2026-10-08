@@ -50,6 +50,7 @@ class MatchRepo:
         self,
         origin: MatchOrigin,
         game: str,
+        teams: list[TeamInfo],
         config: MatchConfig,
         bots: list[UUID],
         maps: list[UUID],
@@ -58,10 +59,10 @@ class MatchRepo:
         cur = await self._conn.execute(
             "insert into matches (origin, game, teams, config, bots, maps, priority, status) "
             "values (%s, %s, %s, %s, %s, %s, %s, 'queued') returning id",
-
             (
                 origin,
                 game,
+                Jsonb([t.model_dump() for t in teams]),
                 Jsonb(config.model_dump()),
                 Jsonb([str(b) for b in bots]),
                 Jsonb([str(m) for m in maps]),

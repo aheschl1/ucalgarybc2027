@@ -38,10 +38,10 @@ def check_zip(data: bytes) -> None:
 @click.command()
 @click.argument(
     "bot", type=click.Path(exists=True, file_okay=False, path_type=Path)
-)  # makes sure the input is a directory, not a file
+)  
 @click.option(
     "--game", type=click.Choice(["tictactoe", "ucbc2027"]), help="Defaults to the only game this install has",
-)  # works for now, may need to change later (*)
+) 
 @click.option("--name", help="Defaults to folder name")
 @click.option("--test-run", is_flag=True, help="Zip and check without sending.")
 def submit(bot: Path, game: str | None, name: str | None, test_run: bool) -> None:

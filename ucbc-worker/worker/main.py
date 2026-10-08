@@ -97,7 +97,7 @@ async def _serve() -> None:
     try:
         async with self.pool.connection() as conn:
             db = DBConnection(conn)
-            scheduler = asyncio.create_task(db.match_repo.run_scheduler(stop))
+            scheduler = asyncio.create_task(db.match_repo.run_scheduler(stop, settings.sets_per_match))
     except Exception:
         log.exception("scheduler failed")
 

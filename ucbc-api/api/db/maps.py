@@ -4,6 +4,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
 from api.models.maps import Map
+from api.errors import ApiError
 
 COLUMNS = "id, game, name, size, sha256, uploaded_by, created_at, archived_at"
 
@@ -45,3 +46,20 @@ class MapRepo:
             (archived, id),
         )
         return cur.rowcount == 1
+
+    async def get_map_uuids(self, game: str, n: int) -> list[UUID]:
+        result = await self._conn.execute(
+            """
+            select id from maps
+            order by RAND()
+            where game = %s
+            limit %s;
+            """,
+            (game, n,)
+        )
+        maps = result.fetchall()
+        if len(maps) == 0:
+            raise ApiError()
+        elif len(maps) < n:
+            maps = maps[:-1] + maps[-1] * (n - len(maps) + 1)
+        return [row["id"] for row in maps]

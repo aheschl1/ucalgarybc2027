@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 
+from api.blobs import BlobStore
 from api.db import DBConnection
 from api.models.matches import MatchReplay, SetReplay
 from api.services import matches
@@ -123,7 +124,11 @@ async def test_permissions_and_validation(
 
 
 async def test_claim_is_exclusive(
-    admin_client: AsyncClient, db: DBConnection, other: DBConnection, body: dict[str, Any]
+    admin_client: AsyncClient,
+    db: DBConnection,
+    other: DBConnection,
+    blobs: BlobStore,
+    body: dict[str, Any],
 ) -> None:
     match_id = await enqueue(admin_client, body)
 
@@ -135,7 +140,7 @@ async def test_claim_is_exclusive(
     assert await matches.claim_match(other, "w2", LEASE) is None
     assert (await get(admin_client, match_id))["status"] == "running"
 
-    await matches.finish_match(db, held, replay(match_id))
+    await matches.finish_match(db, held, replay(match_id), blobs)
     assert await matches.claim_match(other, "w2", LEASE) is None
 
     match = await get(admin_client, match_id)
@@ -147,15 +152,21 @@ async def test_claim_is_exclusive(
     expected = [{"detail": "", **set_replay(i, w)["result"]} for i, w in enumerate([None, 0, 0])]
     assert match["sets"] == expected
 
-    # Set replays are stored gzipped and come back as the JSON that went in.
-    stored = await db.match_repo.get_set_replay(match_id, 0)
-    assert stored is not None and json.loads(gzip.decompress(stored)) == set_replay(0, None)
+    # Set replays are stored gzipped in the blob store, under the key the row keeps, and
+    # come back as the JSON that went in.
+    key = await db.match_repo.get_set_replay(match_id, 0)
+    assert key == matches.replay_key(match_id, 1, 0)
+    assert json.loads(gzip.decompress(await blobs.get(key))) == set_replay(0, None)
     r = await admin_client.get(f"/matches/{match_id}/sets/0")
     assert r.status_code == 200
     assert r.headers["content-encoding"] == "gzip"
     assert r.json() == set_replay(0, None)
     assert (await admin_client.get(f"/matches/{match_id}/sets/1")).json() == set_replay(1, 0)
     assert (await admin_client.get(f"/matches/{match_id}/sets/3")).status_code == 404
+
+    # A set whose replay left the blob store is not found rather than an error.
+    await blobs.delete(key)
+    assert (await admin_client.get(f"/matches/{match_id}/sets/0")).status_code == 404
 
 
 async def test_priority_and_order(
@@ -170,7 +181,11 @@ async def test_priority_and_order(
 
 
 async def test_stale_lease_is_reclaimed(
-    admin_client: AsyncClient, db: DBConnection, other: DBConnection, body: dict[str, Any]
+    admin_client: AsyncClient,
+    db: DBConnection,
+    other: DBConnection,
+    blobs: BlobStore,
+    body: dict[str, Any],
 ) -> None:
     match_id = await enqueue(admin_client, body)
     held = await matches.claim_match(db, "w1", LEASE)
@@ -188,7 +203,7 @@ async def test_stale_lease_is_reclaimed(
     # The first holder can no longer write anything.
     assert not await matches.heartbeat(db, held)
     with pytest.raises(matches.LostLease):
-        await matches.finish_match(db, held, replay(match_id))
+        await matches.finish_match(db, held, replay(match_id), blobs)
     with pytest.raises(matches.LostLease):
         await matches.fail_match(db, held, "boom")
     await matches.requeue_match(db, held)
@@ -198,8 +213,8 @@ async def test_stale_lease_is_reclaimed(
     assert match["sets"] == []
 
     # The new holder finishes; sets from a partial earlier attempt are replaced.
-    await other.match_repo.add_set(match_id, SetReplay.model_validate(set_replay(0, 1)))
-    await matches.finish_match(other, taken, replay(match_id))
+    await other.match_repo.add_set(match_id, SetReplay.model_validate(set_replay(0, 1)), "x")
+    await matches.finish_match(other, taken, replay(match_id), blobs)
     match = await get(admin_client, match_id)
     assert match["status"] == "done"
     assert [s["winner_team"] for s in match["sets"]] == [None, 0, 0]

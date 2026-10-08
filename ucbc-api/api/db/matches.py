@@ -1,4 +1,3 @@
-import gzip
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -180,13 +179,12 @@ class MatchRepo:
         )
         return cur.rowcount == 1
 
-    async def add_set(self, match_id: UUID, replay: SetReplay) -> None:
-        """Stores the set's JSON gzipped. Raises `psycopg.errors.UniqueViolation` when the
-        set index exists."""
+    async def add_set(self, match_id: UUID, replay: SetReplay, replay_key: str) -> None:
+        """Stores the set summary and its replay object key."""
         r = replay.result
         await self._conn.execute(
             "insert into sets (match_id, index, first_team, winner_team, reason, detail, ticks, "
-            "replay) values (%s, %s, %s, %s, %s, %s, %s, %s)",
+            "replay_key) values (%s, %s, %s, %s, %s, %s, %s, %s)",
             (
                 match_id,
                 r.index,
@@ -195,7 +193,7 @@ class MatchRepo:
                 r.reason,
                 r.detail,
                 r.ticks,
-                gzip.compress(replay.model_dump_json(exclude_unset=True).encode(), 6),
+                replay_key,
             ),
         )
 
@@ -209,10 +207,12 @@ class MatchRepo:
         )
         return [SetResult.model_validate(row) for row in await cur.fetchall()]
 
-    async def get_set_replay(self, match_id: UUID, index: int) -> bytes | None:
-        """The set's JSON, gzipped, as stored."""
+    async def get_set_replay(self, match_id: UUID, index: int) -> str | None:
+        """The key the set's replay is stored under in the blob store."""
         cur = await self._conn.execute(
-            "select replay from sets where match_id = %s and index = %s", (match_id, index)
+            "select replay_key from sets where match_id = %s and index = %s",
+            (match_id, index),
         )
         row = await cur.fetchone()
-        return None if row is None else bytes(row["replay"])
+        key: str | None = None if row is None else row["replay_key"]
+        return key

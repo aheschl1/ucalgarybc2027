@@ -74,7 +74,7 @@ class Worker:
                 log.error("match %s: could not start the engine: %s", match.id, e)
                 await matches.requeue_match(db, match)
             else:
-                await matches.finish_match(db, match, replay)
+                await matches.finish_match(db, match, replay, self.blobs)
                 log.info("match %s: done", match.id)
         except LostLease as e:
             log.warning("%s", e)

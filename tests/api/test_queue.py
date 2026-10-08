@@ -155,7 +155,7 @@ async def test_claim_is_exclusive(
     # Set replays are stored gzipped in the blob store, under the key the row keeps, and
     # come back as the JSON that went in.
     key = await db.match_repo.get_set_replay(match_id, 0)
-    assert key == f"matches/{match_id}/attempts/1/sets/0.json.gz"
+    assert key == matches.replay_key(match_id, 1, 0)
     assert json.loads(gzip.decompress(await blobs.get(key))) == set_replay(0, None)
     r = await admin_client.get(f"/matches/{match_id}/sets/0")
     assert r.status_code == 200
@@ -163,6 +163,10 @@ async def test_claim_is_exclusive(
     assert r.json() == set_replay(0, None)
     assert (await admin_client.get(f"/matches/{match_id}/sets/1")).json() == set_replay(1, 0)
     assert (await admin_client.get(f"/matches/{match_id}/sets/3")).status_code == 404
+
+    # A set whose replay left the blob store is not found rather than an error.
+    await blobs.delete(key)
+    assert (await admin_client.get(f"/matches/{match_id}/sets/0")).status_code == 404
 
 
 async def test_priority_and_order(

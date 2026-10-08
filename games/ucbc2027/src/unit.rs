@@ -30,6 +30,27 @@ impl Unit {
             Unit::Lab(_) => None,
         }
     }
+
+    /// How far it can see.
+    pub fn vision(&self) -> usize {
+        match self {
+            Unit::Lab(_) => Lab::VISION,
+            Unit::Dino(dino) => dino.stats().vision,
+        }
+    }
+
+    /// Whether `at` is within its vision
+    pub fn sees(&self, at: Coord) -> bool {
+        let dist = match self {
+            Unit::Lab(lab) => lab_footprint(lab.origin)
+                .into_iter()
+                .map(|c| c.dist(at))
+                .min()
+                .expect("a lab has tiles"),
+            Unit::Dino(dino) => dino.pos.dist(at),
+        };
+        dist <= self.vision()
+    }
 }
 
 /// A team's base. Its tiles are environment; the lab bot spawns dinos.
@@ -39,6 +60,8 @@ pub struct Lab {
 }
 
 impl Lab {
+    pub const VISION: usize = 2;
+
     pub fn new(origin: Coord) -> Self {
         Self {
             origin,
@@ -62,6 +85,8 @@ pub struct Dino {
 }
 
 impl Dino {
+    pub const VISION: usize = 3;
+
     /// A fresh level 1 dino.
     pub fn new(pos: Coord) -> Self {
         Self {
@@ -72,11 +97,12 @@ impl Dino {
         }
     }
 
-    /// The same for every dino until levels and artifacts change it.
     pub fn stats(&self) -> Stats {
         Stats {
             move_range: rules::MOVE_RANGE,
             action_range: rules::ACTION_RANGE,
+            attack_range: rules::ATTACK_RANGE,
+            vision: Self::VISION + (self.level as usize - 1) / 2,
         }
     }
 }
@@ -87,6 +113,10 @@ pub struct Stats {
     pub move_range: usize,
     /// How far away a grab or drop may reach.
     pub action_range: usize,
+    /// How far away an attack may reach.
+    pub attack_range: usize,
+    /// How far away a tile may be queried.
+    pub vision: usize,
 }
 
 #[cfg(test)]
@@ -105,5 +135,35 @@ mod tests {
         assert!(lab.borders(Coord::new(3, 3)));
         assert!(!lab.borders(Coord::new(2, 2)));
         assert!(!lab.borders(Coord::new(4, 1)));
+    }
+
+    #[test]
+    fn a_lab_sees_from_every_tile_of_its_footprint() {
+        let lab = Unit::Lab(Lab::new(Coord::new(3, 3)));
+        assert!(lab.sees(Coord::new(1, 1)));
+        assert!(lab.sees(Coord::new(6, 6)));
+        assert!(!lab.sees(Coord::new(0, 4)));
+        assert!(!lab.sees(Coord::new(7, 4)));
+    }
+
+    #[test]
+    fn dino_vision_grows_every_two_levels() {
+        let mut dino = Dino::new(Coord::new(0, 0));
+        for (level, vision) in [(1, 3), (2, 3), (3, 4), (4, 4), (5, 5)] {
+            dino.level = level;
+            assert_eq!(dino.stats().vision, vision, "level {level}");
+        }
+        let dino = Unit::Dino(Dino::new(Coord::new(5, 5)));
+        assert!(dino.sees(Coord::new(8, 2)));
+        assert!(!dino.sees(Coord::new(9, 5)));
+    }
+
+    /// Nothing can act on a tile it cannot see.
+    #[test]
+    fn vision_covers_every_reach() {
+        let stats = Dino::new(Coord::new(0, 0)).stats();
+        let reach = [stats.move_range, stats.action_range, stats.attack_range];
+        assert!(reach.iter().all(|&r| r <= stats.vision));
+        const { assert!(Lab::VISION >= 1, "a lab must see its spawn ring") };
     }
 }

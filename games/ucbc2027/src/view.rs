@@ -11,7 +11,7 @@ use crate::map::Environment;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ItemView {
-    Dino { team: u32, level: u32 },
+    Dino { id: u64, team: u32, level: u32 },
     Fossil,
 }
 
@@ -20,15 +20,19 @@ pub enum ItemView {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UnitView {
     Lab {
+        id: u64,
         /// Top-left of its four tiles.
         origin: Coord,
         health: u32,
+        vision: usize,
     },
     Dino {
+        id: u64,
         pos: Coord,
         level: u32,
         health: u32,
         held: Option<ItemView>,
+        vision: usize,
     },
 }
 
@@ -51,7 +55,6 @@ pub struct Spawned {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct UnitEntry {
-    pub id: u64,
     pub team: u32,
     #[serde(flatten)]
     pub unit: UnitView,

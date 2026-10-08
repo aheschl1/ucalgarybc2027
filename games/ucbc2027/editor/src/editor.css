@@ -3,10 +3,7 @@
   --ed-fg: #1c1917;
   --ed-muted: #78716c;
   --ed-line: #d6d3d1;
-  --ed-empty: #f5f5f4;
-  --ed-wall: #57534e;
-  --ed-lab: #a855f7;
-  --ed-fossil: #a16207;
+  --ed-broken: #dc2626;
 
   box-sizing: border-box;
   display: flex;
@@ -25,9 +22,7 @@
     --ed-fg: #f5f5f4;
     --ed-muted: #a8a29e;
     --ed-line: #44403c;
-    --ed-empty: #292524;
-    --ed-wall: #a8a29e;
-    --ed-fossil: #fbbf24;
+    --ed-broken: #f87171;
   }
 }
 
@@ -95,22 +90,82 @@
   touch-action: none;
 }
 
+/* The viewer's pictures (games/ucbc2027/viewer/assets), each filling its tile, unsmoothed. */
 .ed-tile {
   min-width: 0;
   min-height: 0;
-  background: var(--ed-empty);
+  background: url("../../viewer/assets/map/environment/dirt.png") center / 100% 100%;
+  image-rendering: pixelated;
   cursor: crosshair;
 }
 
-.ed-wall {
-  background: var(--ed-wall);
+.ed-tile.ed-wall {
+  background-image: url("../../viewer/assets/map/environment/wall.png");
 }
 
-.ed-lab {
-  background: var(--ed-lab);
+/* A lab tile shows its quarter of its team's lab. */
+.ed-tile.ed-lab {
+  background-size: 200% 200%;
 }
 
-/* A dot that scales with the tile. */
-.ed-fossil {
-  background-image: radial-gradient(circle, var(--ed-fossil) 35%, transparent 40%);
+.ed-tile.ed-team-0 {
+  background-image: url("../../viewer/assets/map/labs/aLab64.png");
+}
+
+.ed-tile.ed-team-1 {
+  background-image: url("../../viewer/assets/map/labs/bLab64.png");
+}
+
+.ed-top-left {
+  background-position: left top;
+}
+
+.ed-top-right {
+  background-position: right top;
+}
+
+.ed-bottom-left {
+  background-position: left bottom;
+}
+
+.ed-bottom-right {
+  background-position: right bottom;
+}
+
+/* A lab tile the engine rejects the map for: in no lab, or in a lab past the second. */
+.ed-tile.ed-broken {
+  outline: 2px solid var(--ed-broken);
+  outline-offset: -2px;
+}
+
+.ed-tile.ed-fossil {
+  background-image: url("../../viewer/assets/map/items/fossil.png"), url("../../viewer/assets/map/environment/dirt.png");
+}
+
+/* Each brush shows what it paints. */
+.ed-brush::before {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.35em;
+  vertical-align: -0.15em;
+  background: center / contain no-repeat;
+  image-rendering: pixelated;
+}
+
+.ed-brush.ed-empty::before {
+  background-image: url("../../viewer/assets/map/environment/dirt.png");
+}
+
+.ed-brush.ed-wall::before {
+  background-image: url("../../viewer/assets/map/environment/wall.png");
+}
+
+.ed-brush.ed-lab::before {
+  background-image: url("../../viewer/assets/map/labs/aLab.png");
+}
+
+.ed-brush.ed-fossil::before {
+  background-image: url("../../viewer/assets/map/items/fossil.png");
 }

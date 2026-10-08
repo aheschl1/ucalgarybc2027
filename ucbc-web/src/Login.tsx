@@ -1,12 +1,15 @@
-import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { Link, useLocation } from "react-router";
 import { ApiError, logIn, type User } from "./api";
+import { Button, ErrorText, Field, Input } from "./ui";
 
 export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Carries `next` across, so signing up instead still lands where you were going.
+  const { search } = useLocation();
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -17,36 +20,71 @@ export default function Login({ onLogIn }: { onLogIn: (user: User) => void }) {
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401
-          ? "wrong email or password"
-          : "could not reach the api",
+          ? "Wrong email or password"
+          : "Could not reach the API",
       );
       setBusy(false);
     }
   };
 
   return (
-    <form className="login" onSubmit={submit}>
-      <input
-        type="email"
-        placeholder="email"
-        autoComplete="email"
-        autoFocus
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-      />
-      <input
-        type="password"
-        placeholder="password"
-        autoComplete="current-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      <button disabled={busy || !email || !password}>log in</button>
-      {error && <p className="error">{error}</p>}
-      <p className="dim center">
-        <Link to="/register">create an account</Link> ·{" "}
-        <Link to="/docs">docs</Link>
-      </p>
-    </form>
+    <AuthCard
+      title="Log in"
+      footer={
+        <>
+          No account?{" "}
+          <Link to={`/register${search}`} className="font-medium text-fg hover:underline">
+            Sign up
+          </Link>
+        </>
+      }
+    >
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <Field label="Email">
+          <Input
+            type="email"
+            autoComplete="email"
+            autoFocus
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </Field>
+        <Field label="Password">
+          <Input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </Field>
+        {error && <ErrorText>{error}</ErrorText>}
+        <Button className="mt-1 w-full" disabled={busy || !email || !password}>
+          Log in
+        </Button>
+      </form>
+    </AuthCard>
+  );
+}
+
+/** Logging in and signing up: one narrow card in the middle of the page. */
+export function AuthCard({
+  title,
+  footer,
+  children,
+}: {
+  title: string;
+  footer: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <main className="flex min-h-[calc(100dvh-3.5rem)] flex-col items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm">
+        <div className="rounded-xl border border-line p-6 shadow-sm">
+          <h1 className="mb-5 text-lg font-semibold tracking-tight">{title}</h1>
+          {children}
+        </div>
+        <p className="mt-6 text-center text-muted">{footer}</p>
+      </div>
+    </main>
   );
 }

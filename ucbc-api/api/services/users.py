@@ -1,7 +1,7 @@
-from psycopg.errors import UniqueViolation
+from psycopg.errors import ForeignKeyViolation, UniqueViolation
 
 from api.db import DBConnection
-from api.errors import Conflict
+from api.errors import ApiError, Conflict, NotFound
 from api.models.teams import Team
 from api.models.users import User
 from api.passwords import hash_password, verify_password
@@ -26,6 +26,19 @@ async def create_user(
     except UniqueViolation as e:
         raise Conflict(f"{email} already has an account") from e
     return stored.public()
+
+
+async def delete_user(db: DBConnection, actor: User, user_id: int) -> None:
+    """Their sessions go with them; their team and the maps they uploaded stay."""
+    if user_id == actor.id:
+        raise ApiError("you cannot delete yourself")
+    try:
+        async with db.conn.transaction():
+            deleted = await db.user_repo.delete(user_id)
+    except ForeignKeyViolation as e:
+        raise Conflict(f"user {user_id} uploaded submissions") from e
+    if not deleted:
+        raise NotFound(f"no user {user_id}")
 
 
 async def _solo_team(db: DBConnection, name: str) -> Team:

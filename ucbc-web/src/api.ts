@@ -1,3 +1,5 @@
+import type { User } from "./api.gen";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -43,6 +45,14 @@ export function post<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export function patch<T>(path: string, body: unknown): Promise<T> {
+  return send(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export function upload<T>(path: string, form: FormData): Promise<T> {
   return send(path, { method: "POST", body: form });
 }
@@ -66,6 +76,7 @@ export function signUp(
 export type Api = {
   load: <T>(path: string) => Promise<T>;
   post: <T>(path: string, body: unknown) => Promise<T>;
+  patch: <T>(path: string, body: unknown) => Promise<T>;
   upload: <T>(path: string, form: FormData) => Promise<T>;
 };
 
@@ -82,6 +93,7 @@ export function makeApi(onLogOut: () => void): Api {
   return {
     load: (path) => guard(get(path)),
     post: (path, body) => guard(post(path, body)),
+    patch: (path, body) => guard(patch(path, body)),
     upload: (path, form) => guard(upload(path, form)),
   };
 }
@@ -92,59 +104,14 @@ export function describe(err: unknown): string {
     : "could not reach the api";
 }
 
-export type User = {
-  id: number;
-  email: string;
-  display_name: string;
-  is_admin: boolean;
-  team_id: number;
-  created_at: string;
-};
-
-// A participant team, not the engine's in-game teams. Only its members are sent one.
-export type Team = {
-  id: number;
-  name: string;
-  join_code: string;
-  members: string[];
-  created_at: string;
-};
-
-// Mirrors SetResult and TeamInfo in ucbc-engine.
-export type SetResult = {
-  index: number;
-  first_team: number;
-  winner_team: number | null;
-  reason: "win" | "draw" | "forfeit";
-  detail: string;
-  ticks: number;
-};
-
-export type Submission = {
-  id: string;
-  user_id: number;
-  display_name: string;
-  team_id: number;
-  team_name: string;
-  name: string;
-  game: string;
-  size: number;
-  sha256: string;
-  created_at: string;
-};
-
-export type Match = {
-  id: string;
-  origin: "user" | "platform";
-  game: string;
-  bots: string[];
-  engine_version: string | null;
-  teams: { id: number; name: string }[];
-  config: { sets: number; seed: number; step_ms: number; memory_bytes: number };
-  status: "queued" | "running" | "done" | "error";
-  set_wins: number[] | null;
-  winner_team: number | null;
-  error: string | null;
-  created_at: string;
-  sets?: SetResult[];
-};
+// The API's own models, generated from its OpenAPI schema by `make api-types`.
+export type {
+  Map as GameMap,
+  Match,
+  MatchRow,
+  MyTeam as Team,
+  SetResult,
+  Submission,
+  TeamElo,
+  User,
+} from "./api.gen";

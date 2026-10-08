@@ -42,13 +42,16 @@ proxy, uvicorn must be told to trust the forwarded address for that to be per cl
 A user is `email`, `display_name`, `password_hash`, `is_admin`. The email is the login
 credential and is never shown to anyone but its owner; the display name is the only thing
 another user sees, next to a submission. `POST /api/users` is open: anyone signs up, always
-as a non-admin, and the app logs in straight after. Admins are made only by
-`ucbc-api-cli create-admin`. Nothing about a user can be changed once it exists.
+as a non-admin, and the app logs in straight after. Admins create, list and delete users
+under `/api/admin/users`; a user who uploaded submissions cannot be deleted. `ucbc-api-cli`
+calls these as an admin (`--email`/`--password`/`--url`, defaulting to `UCBC_ADMIN_EMAIL`,
+`UCBC_ADMIN_PASSWORD`, `UCBC_API_URL`); its `create-admin` writes the first admin straight
+to the database. Nothing about a user can be changed once it exists.
 
 The web app is a single page with client-side routes. `api/api.py::APP_ROUTES` lists the
 paths it owns, each served the app shell so a reload of one works; anything else under `/`
-is a built file or a 404. Signed out, every path is the login form except `/register` and
-`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`.
+is a built file or a 404. Signed out, every path is the login form except `/register`,
+`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`, and `/leaderboard`.
 
 ## Teams
 
@@ -68,6 +71,25 @@ paths that escape the directory. The row (`submissions`: uploader, the uploader'
 game, size, sha256) is in Postgres; the zip is in the bucket at `submissions/<id>.zip`
 (`api/blobs.py`, one boto3 client behind `UCBC_BLOB_URL`). Metadata is visible to every logged-in user, the code is not; `?mine=true` narrows the
 list to the caller's team's.
+
+## Maps
+
+An admin uploads a map file for a game (`POST /api/maps`, at most 64 KiB); the row (`maps`:
+game, name, size, sha256, uploader) is in Postgres and the file in the bucket at
+`maps/<id>.map`. Names are unique per game, ignoring case. `ucbc-api-cli upload-map <file> --game <game>`
+uploads one; `ucbc-api-cli import-maps <dir> --game <game>` uploads every `*.map` in a
+directory, such as `games/ucbc2027/maps`.
+Every logged-in user lists the metadata; only admins download a file. A map is archived
+(`PATCH /api/maps/<id>`), never deleted, since matches name it: the web app stops offering
+it, and the matches played on it keep its name. `/admin/maps` in the web app is the admin
+page.
+
+`matches.maps` is the map ids a match plays, in set order: none is the game's standard map,
+one plays every set, otherwise one per set. Anyone queuing a match picks them. The API reads
+neither the file nor the pick: it trusts what it stored. The worker downloads each file and
+passes `--map` once per map, so a file the game refuses, a count that is neither 1 nor the
+number of sets, or a file missing from the bucket fails that match, with the reason as its
+error.
 
 ## Queue
 
@@ -107,9 +129,22 @@ sets through these endpoints and hands the assembled replay to the viewer (`ucbc
 it shows exactly the matches the API shows the caller. It bundles every game's renderer
 (`ucbc-viewer/vite/games.ts`).
 
+## Elo
+
+Each participant team has a rating, `teams.elo`, starting at 800, and `teams.elo_matches`,
+the number of matches that moved it. When the worker finishes a match it steps both slots'
+teams in the transaction that marks the match done (`services/matches.py::finish_match`), so
+a lost lease rates nothing. The score is a team's share of the sets, a drawn set worth half;
+K is 32 (`services/elo.py`). Every done match counts, user matches included; a team in both
+slots is skipped. One rating covers every game.
+
+`GET /api/teams/elo` (every team, highest first) and `GET /api/teams/{id}/elo` need no login
+and show the rating rounded, with the match count. `/leaderboard` in the web app lists the first, and the
+profile shows the caller's team's rating and place.
+
 ## Settings
 
 `UCBC_` variables from `.env`, then `.env.local` or `.env.prod`: `DATABASE_URL`,
 `BLOB_URL` (`scheme://access:secret@host[:port]/bucket[?region=]`), `API_HOST`,
-`API_PORT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
+`API_PORT`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `API_URL` (the last three for `ucbc-api-cli`), `WORKER_SLOTS`, `WORKER_POLL_S`, `WORKER_HEARTBEAT_S`, `WORKER_LEASE_S`,
 `WORKER_NAME`.

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { blank, decode, encode, paint } from "./map.ts";
+import { blank, decode, encode, labs, paint } from "./map.ts";
 import { Environment, Item, type Map } from "./map_pb.ts";
 
 const SYMBOL = { [Environment.EMPTY]: ".", [Environment.WALL]: "#", [Environment.LAB]: "L" };
@@ -61,5 +61,25 @@ describe("encode and decode", () => {
     expect([map.width, map.height]).toEqual([16, 16]);
     expect(rows(map)[7]).toBe(".LL...f..f...LL.");
     expect(rows(map).join("").split("f")).toHaveLength(7);
+  });
+});
+
+describe("labs", () => {
+  it("reads labs as the engine does, leaving a broken square's tiles out", () => {
+    const map = blank(5, 4);
+    paint(map, 3, 0, "lab", "none");
+    paint(map, 0, 1, "lab", "none");
+    paint(map, 4, 3, "wall", "none");
+    map.tiles[3 * 5 + 4]!.environment = Environment.LAB;
+    expect(rows(map)).toEqual(["...LL", "LL.LL", "LL...", "....L"]);
+    const at = labs(map);
+    const short = (i: number) => {
+      const lab = at[i];
+      return lab ? `${lab.team} ${lab.quarter}` : undefined;
+    };
+    expect([3, 4, 8, 9].map(short)).toEqual(["0 top-left", "0 top-right", "0 bottom-left", "0 bottom-right"]);
+    expect([5, 6, 10, 11].map(short)).toEqual(["1 top-left", "1 top-right", "1 bottom-left", "1 bottom-right"]);
+    expect(short(19)).toBeUndefined();
+    expect(at.filter(Boolean)).toHaveLength(8);
   });
 });

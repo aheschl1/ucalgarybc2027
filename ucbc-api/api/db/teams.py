@@ -1,9 +1,10 @@
 from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
-from api.models.teams import Team
+from api.models.teams import Team, TeamElo
 
 COLUMNS = "id, name, join_code, created_at"
+ELO_COLUMNS = "id, name, round(elo)::integer as elo, elo_matches as matches"
 
 
 class TeamRepo:
@@ -34,6 +35,33 @@ class TeamRepo:
 
     async def set_code(self, id: int, join_code: str) -> None:
         await self._conn.execute("update teams set join_code = %s where id = %s", (join_code, id))
+
+    async def list_elos(self) -> list[TeamElo]:
+        """Highest first."""
+        cur = await self._conn.execute(
+            f"select {ELO_COLUMNS} from teams order by teams.elo desc, id"
+        )
+        return [TeamElo.model_validate(row) for row in await cur.fetchall()]
+
+    async def get_elo(self, id: int) -> TeamElo | None:
+        cur = await self._conn.execute(f"select {ELO_COLUMNS} from teams where id = %s", (id,))
+        row = await cur.fetchone()
+        return None if row is None else TeamElo.model_validate(row)
+
+    async def lock_elos(self, ids: list[int]) -> dict[int, float]:
+        """The teams' ratings, locked until the transaction ends. Rows lock in id order, so
+        two transactions locking the same teams cannot deadlock; `no key` lets foreign key
+        checks, such as an upload to the team, go ahead meanwhile."""
+        cur = await self._conn.execute(
+            "select id, elo from teams where id = any(%s) order by id for no key update", (ids,)
+        )
+        return {row["id"]: row["elo"] for row in await cur.fetchall()}
+
+    async def record_elo(self, id: int, elo: float) -> None:
+        """The rating after one more rated match."""
+        await self._conn.execute(
+            "update teams set elo = %s, elo_matches = elo_matches + 1 where id = %s", (elo, id)
+        )
 
     async def members(self, id: int) -> list[str]:
         """Display names, oldest account first."""

@@ -367,6 +367,57 @@ async def test_teams_share_matches(
     assert match_id in await ids(teammate_client, mine=True)
 
 
+async def test_list_filters(
+    app: FastAPI,
+    db: DBConnection,
+    admin_client: AsyncClient,
+    member_client: AsyncClient,
+    bot: Callable[[str], Path],
+) -> None:
+    """`origin`, `team` and `active` narrow the list, and never past what the caller may see."""
+    code = zip_dir(bot("random"))
+
+    async def uploaded(client: AsyncClient, name: str) -> dict[str, Any]:
+        r = await upload(client, code, form={"name": name})
+        submission: dict[str, Any] = r.json()
+        return submission
+
+    async def queue(client: AsyncClient, bots: list[dict[str, Any]]) -> str:
+        body = {"game": "tictactoe", "bots": [b["id"] for b in bots], "config": {"seed": 1}}
+        r = await client.post("/matches/queue", json=body)
+        assert r.status_code == 201, r.text
+        id: str = r.json()["id"]
+        return id
+
+    async def ids(client: AsyncClient, **params: Any) -> list[str]:
+        r = await client.get("/matches", params=params)
+        assert r.status_code == 200, r.text
+        return [m["id"] for m in r.json()]
+
+    alices = await uploaded(member_client, "alices")
+    admins = await uploaded(admin_client, "admins")
+    await create_user(db, "dave@example.com", "Dave", "dave-pw", is_admin=False)
+    async with log_in(app, ("dave@example.com", "dave-pw")) as dave:
+        daves = await uploaded(dave, "daves")
+        scrim = await queue(member_client, [alices, admins])
+        daves_match = await queue(dave, [daves, alices])
+        platform = await queue(admin_client, [admins, admins])
+        await db.conn.execute("update matches set origin = 'platform' where id = %s", (platform,))
+        await db.conn.execute("update matches set status = 'done' where id = %s", (scrim,))
+
+        assert await ids(member_client, origin="platform") == [platform]
+        assert await ids(member_client, origin="user") == [daves_match, scrim]
+        assert await ids(member_client, team=daves["team_id"]) == [daves_match]
+        assert await ids(member_client, team=admins["team_id"]) == [platform, scrim]
+        assert await ids(member_client, team=admins["team_id"], origin="user") == [scrim]
+        assert await ids(member_client, active="true") == [platform, daves_match]
+        # Dave asks after Alice's team, but sees only what he is in or what is public.
+        assert await ids(dave, team=alices["team_id"]) == [daves_match]
+        assert await ids(dave, team=admins["team_id"]) == [platform]
+        assert await ids(admin_client, team=daves["team_id"]) == [daves_match]
+        assert (await member_client.get("/matches", params={"origin": "x"})).status_code == 422
+
+
 async def test_one_team_in_both_slots(
     member_client: AsyncClient, teammate_client: AsyncClient, bot: Callable[[str], Path]
 ) -> None:

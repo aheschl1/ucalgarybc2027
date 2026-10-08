@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from api.auth import CurrentUser
 from api.db import DB
-from api.models.teams import MyTeam, TeamCreate, TeamJoin
+from api.models.teams import MyTeam, TeamCreate, TeamElo, TeamJoin
 from api.services import teams
 
 router = APIRouter(prefix="/teams", tags=["teams"])
@@ -29,3 +29,15 @@ async def join(body: TeamJoin, db: DB, user: CurrentUser) -> MyTeam:
 async def replace_code(db: DB, user: CurrentUser) -> MyTeam:
     """A new join code; the old one stops working."""
     return await teams.replace_code(db, user)
+
+
+@router.get("/elo")
+async def list_elos(db: DB) -> list[TeamElo]:
+    """Every team's rating, highest first. Public."""
+    return await teams.list_elos(db)
+
+
+@router.get("/{team_id}/elo")
+async def get_elo(team_id: int, db: DB) -> TeamElo:
+    """One team's rating. Public."""
+    return await teams.get_elo(db, team_id)

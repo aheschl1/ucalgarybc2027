@@ -18,27 +18,31 @@ export type Environment =
  * A bot: in `me` replies and the snapshot.
  */
 export type UnitEntry = {
-  id: number;
   team: number;
 } & UnitEntry1;
 export type UnitEntry1 =
   | {
       health: number;
+      id: number;
       origin: Coord1;
       type: "lab";
+      vision: number;
     }
   | {
       health: number;
       held?: ItemView | null;
+      id: number;
       level: number;
       pos: Coord;
       type: "dino";
+      vision: number;
     };
 /**
  * What is on a tile.
  */
 export type ItemView =
   | {
+      id: number;
       level: number;
       team: number;
       type: "dino";
@@ -69,6 +73,14 @@ export type Action =
       type: "drop";
       x: number;
       y: number;
+    }
+  | {
+      bot_id: number;
+      type: "merge";
+    }
+  | {
+      bot_id: number;
+      type: "attack";
     };
 
 export interface Ucbc2027Api {

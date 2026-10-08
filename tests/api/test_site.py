@@ -24,10 +24,12 @@ async def test_site_routes(database_url: str, blob_url: str, tmp_path: Path) -> 
         r = await c.get("/api/users/me")
         assert r.status_code == 401
         assert "www-authenticate" not in r.headers
+        # Ratings are public.
+        assert (await c.get("/api/teams/elo")).status_code == 200
 
         # Every route the app owns is served the shell, so reloading one works.
         for path in APP_ROUTES:
-            path = path.format(match_id=uuid4())
+            path = path.replace("{rest:path}", f"matches/{uuid4()}")
             assert (await c.get(path)).text == "<h1>ucbc</h1>", path
 
         # Nothing else is: a missing file is a missing file.

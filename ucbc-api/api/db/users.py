@@ -34,3 +34,8 @@ class UserRepo:
     async def list(self) -> list[StoredUser]:
         cur = await self._conn.execute(f"select {COLUMNS} from users order by id")
         return [StoredUser.model_validate(row) for row in await cur.fetchall()]
+
+    async def delete(self, id: int) -> bool:
+        """Raises `psycopg.errors.ForeignKeyViolation` when the user uploaded submissions."""
+        cur = await self._conn.execute("delete from users where id = %s", (id,))
+        return cur.rowcount == 1

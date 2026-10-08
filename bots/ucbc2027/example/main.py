@@ -18,9 +18,6 @@ from ucbc.games.ucbc2027 import (
 from ucbc.handle import ActionError
 
 DINOS = 4
-LOOK = 3
-"""How far around itself a dino looks for fossils. Every tile looked at is a query,
-and queries are what a step's time goes on."""
 
 
 bot: "Lab | Dino | None" = None
@@ -67,7 +64,7 @@ class Dino:
             else:
                 self.go(handle, self.home)
             return
-        fossil = nearest_fossil(handle, me.pos)
+        fossil = nearest_fossil(handle, me.pos, me.vision)
         if fossil is None:
             self.wander(handle)
         elif dist(fossil, me.pos) <= 1:
@@ -103,11 +100,14 @@ def home_tile(handle: Ucbc2027Handle, pos: Coord) -> Coord:
     raise RuntimeError("spawned away from the lab")
 
 
-def nearest_fossil(handle: Ucbc2027Handle, pos: Coord) -> Coord | None:
+def nearest_fossil(handle: Ucbc2027Handle, pos: Coord, look: int) -> Coord | None:
+    """The closest fossil within `look` tiles: the dino's vision, since a tile any
+    further is refused. Every tile looked at is a query, and queries are what a
+    step's time goes on."""
     width, height = handle.width(), handle.height()
     best: Coord | None = None
-    for y in range(max(pos.y - LOOK, 0), min(pos.y + LOOK + 1, height)):
-        for x in range(max(pos.x - LOOK, 0), min(pos.x + LOOK + 1, width)):
+    for y in range(max(pos.y - look, 0), min(pos.y + look + 1, height)):
+        for x in range(max(pos.x - look, 0), min(pos.x + look + 1, width)):
             if isinstance(handle.item(x, y), ItemViewFossil):
                 here = Coord(x, y)
                 if best is None or dist(here, pos) < dist(best, pos):

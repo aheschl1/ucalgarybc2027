@@ -1,12 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-type Os = "linux" | "windows";
-
 const STEPS = [
   ["install", "install"],
   ["write", "write a bot"],
-  ["run", "run it locally"],
+  ["run", "run the game locally"],
   ["submit", "submit"],
   ["watch", "watch"],
 ] as const;
@@ -98,19 +96,11 @@ const UV = `uv init ucbc-bots
 cd ucbc-bots
 uv add ucbc`;
 
-const pip = {
-  linux: `python3 -m venv .venv
-source .venv/bin/activate
-pip install ucbc`,
-  windows: `py -m venv .venv
-.venv\\Scripts\\Activate.ps1
-pip install ucbc`,
-};
+const PIP = `python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\Activate.ps1
+pip install ucbc`;
 
-const zip = {
-  linux: `cd mybot && zip -r ../mybot.zip .`,
-  windows: `Compress-Archive -Path mybot\\* -DestinationPath mybot.zip`,
-};
+const ZIP = `cd mybot && zip -r ../mybot.zip .`;
 
 const BOT = `# mybot/main.py
 from ucbc.games.ucbc2027 import Ucbc2027Handle
@@ -145,55 +135,39 @@ def step(handle):
     bot.step(handle)`;
 
 export default function Docs() {
-  const [os, setOs] = useState<Os>(
-    navigator.userAgent.includes("Windows") ? "windows" : "linux",
-  );
   const [tool, setTool] = useState<"uv" | "pip">("uv");
-  const shell = os === "windows" ? "PowerShell" : "terminal";
 
   return (
-    <main className="docs">
-      <nav>
-        <Link to="/" className="home">
-          ucbc
-        </Link>
-        <p className="dim">get started</p>
-        <ol>
-          {STEPS.map(([id, title]) => (
+    <main className="docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
+      <nav className="text-sm md:sticky md:top-24 md:self-start">
+        <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+          Get started
+        </p>
+        <ol className="mb-6 flex flex-col gap-0.5">
+          {STEPS.map(([id, title], i) => (
             <li key={id}>
-              <a href={`#${id}`}>{title}</a>
+              <a href={`#${id}`} className="flex gap-2 rounded-md px-2 py-1 text-muted hover:bg-hover hover:text-fg">
+                <span className="w-3 tabular-nums">{i + 1}</span>
+                {title}
+              </a>
             </li>
           ))}
         </ol>
-        <p className="dim">reference</p>
-        <ul>
+        <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
+          Reference
+        </p>
+        <ul className="flex flex-col gap-0.5">
           {REFERENCE.map(([id, title]) => (
             <li key={id}>
-              <a href={`#${id}`}>{title}</a>
+              <a href={`#${id}`} className="block rounded-md px-2 py-1 text-muted hover:bg-hover hover:text-fg">
+                {title}
+              </a>
             </li>
           ))}
         </ul>
       </nav>
 
       <article>
-        <h1>docs</h1>
-        <p className="lede">
-          Write a bot in Python, play it on your machine, upload it here, and
-          queue matches against anyone's bot.
-        </p>
-
-        <div className="os">
-          <span className="dim">commands for</span>
-          <Tabs
-            value={os}
-            options={[
-              ["linux", "Linux"],
-              ["windows", "Windows"],
-            ]}
-            onChange={setOs}
-          />
-        </div>
-
         <Section id="install" n={1} title="install">
           <table>
             <tbody>
@@ -226,7 +200,7 @@ export default function Docs() {
             ]}
             onChange={setTool}
           />
-          <Code label={shell}>{tool === "uv" ? UV : pip[os]}</Code>
+          <Code label="terminal">{tool === "uv" ? UV : PIP}</Code>
         </Section>
 
         <Section id="write" n={2} title="write a bot">
@@ -246,18 +220,11 @@ export default function Docs() {
           <Rule title="Keep state in a global.">
             Globals last from step to step within a set. Each set starts fresh.
           </Rule>
-          <Rule title="A refused action raises ActionError.">
-            Nothing is forfeited; catch it and try something else.
-          </Rule>
-          <Rule title="Seed randomness from handle.seed.">
-            It differs per unit and per set but is fixed by the match seed, so
-            matches replay exactly.
-          </Rule>
           <Code>{STATE}</Code>
         </Section>
 
-        <Section id="run" n={3} title="run it locally">
-          <Code label={shell}>ucbc run mybot mybot --view</Code>
+        <Section id="run" n={3} title="run the game locally">
+          <Code label="terminal">ucbc run mybot mybot --view</Code>
           <p>
             Plays one bot folder against another (here, against itself),
             prints each set's result, and opens the replay in your browser.
@@ -295,7 +262,8 @@ export default function Docs() {
                   <code>--map FILE</code>
                 </td>
                 <td>
-                  play on your own <a href="#maps">map</a>
+                  play on your own <a href="#maps">map</a>; repeat it to give
+                  each set its own
                 </td>
               </tr>
               <tr>
@@ -306,31 +274,28 @@ export default function Docs() {
               </tr>
             </tbody>
           </table>
-          <Rule title="Local matches are site matches.">
-            Same engine, same <a href="#limits">limits</a>. Same bots and seed
-            give the same result on any machine.
-          </Rule>
         </Section>
 
         <Section id="submit" n={4} title="submit">
           <ol className="numbered">
             <li>
-              <Link to="/register">Create an account</Link>, or log in.
+              <Link to="/register">Create an account</Link>, or{" "}
+              <Link to="/login">log in</Link>.
             </li>
             <li>
               Zip the <em>contents</em> of your bot folder:
-              <Code label={shell}>{zip[os]}</Code>
+              <Code label="terminal">{ZIP}</Code>
             </li>
             <li>
-              On the <Link to="/">home page</Link>, under{" "}
-              <strong>submissions</strong>, choose the zip, optionally name it,
+              On the <Link to="/platform">platform</Link> home page, under{" "}
+              <strong>Submit a bot</strong>, choose the zip, optionally name it,
               leave the game as <code>ucbc2027</code>, and press{" "}
-              <strong>upload zip</strong>.
+              <strong>Upload</strong>.
             </li>
             <li>
-              Under <strong>matches</strong>, pick one of your team's
+              Under <strong>Request a match</strong>, pick one of your team's
               submissions and an opponent (any submission, yours included), set
-              a seed if you like, and press <strong>queue match</strong>.
+              a seed if you like, and press <strong>Queue match</strong>.
             </li>
           </ol>
           <Rule title="main.py must be at the top of the zip, not in a folder.">
@@ -347,20 +312,21 @@ export default function Docs() {
 
         <Section id="watch" n={5} title="watch">
           <p>
-            A queued match appears under <strong>matches</strong>:
+            A queued match appears under <strong>Queue</strong> on the platform, then under{" "}
+            <strong>Matches</strong>:
           </p>
           <p className="states">
             <code>queued</code> → <code>running</code> → <code>done</code>
           </p>
           <p>
-            Expand it to see who won each set and why. Press{" "}
-            <strong>watch</strong> to step through the replay. Your bots and
-            matches are also on your <Link to="/profile">profile</Link>.
+            Click it to see who won each set and why. Press{" "}
+            <strong>Watch</strong> to step through the replay. Your bots and
+            matches are also on your <Link to="/platform/profile">profile</Link>.
           </p>
         </Section>
 
         <Section id="limits" title="limits">
-          <p>The same for every bot, locally and on the site.</p>
+          <p>The same for every bot, locally and on the platform.</p>
           <div className="stats">
             <div>
               <b>3 ms</b>
@@ -406,18 +372,21 @@ export default function Docs() {
         </Section>
 
         <Section id="maps" title="maps">
-          <Code label={shell}>{`ucbc editor my.map
-ucbc run mybot mybot --map my.map --view`}</Code>
+          <Code label="terminal">{`ucbc editor my.map
+ucbc run mybot mybot --map my.map --view
+ucbc run mybot mybot --sets 2 --map a.map --map b.map`}</Code>
           <p>
             The editor opens in your browser; <strong>Save</strong> writes the
-            file. Site matches use the standard map.
+            file. Give <code>--map</code> once to play every set on that map, or
+            once per set, in order. When you queue a site match, pick one of the
+            site&apos;s maps for each set, or none for the standard map.
           </p>
         </Section>
 
         <Section id="teams" title="teams">
           <p>
             Every account starts on a team of its own. To play as a group, one
-            of you starts a team on the <Link to="/profile">profile</Link> page
+            of you starts a team on the <Link to="/platform/profile">profile</Link> page
             and the others paste its join code into <strong>join</strong>.
           </p>
           <ul>

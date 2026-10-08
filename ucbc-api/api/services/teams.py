@@ -7,7 +7,7 @@ from psycopg.errors import UniqueViolation
 
 from api.db import DBConnection
 from api.errors import Conflict, NotFound
-from api.models.teams import MyTeam
+from api.models.teams import MyTeam, TeamElo
 from api.models.users import User
 
 
@@ -43,3 +43,14 @@ async def replace_code(db: DBConnection, user: User) -> MyTeam:
     """A new join code for the caller's team; the old one stops working."""
     await db.team_repo.set_code(user.team_id, new_code())
     return await my_team(db, user.team_id)
+
+
+async def list_elos(db: DBConnection) -> list[TeamElo]:
+    return await db.team_repo.list_elos()
+
+
+async def get_elo(db: DBConnection, team_id: int) -> TeamElo:
+    team = await db.team_repo.get_elo(team_id)
+    if team is None:
+        raise NotFound(f"no team {team_id}")
+    return team

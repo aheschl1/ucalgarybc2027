@@ -45,9 +45,22 @@ it("paints by clicking and dragging, with the picked brush and mirror", () => {
   mirror.value = "left-right";
   mirror.dispatchEvent(new Event("change"));
   pointer("pointerdown", tiles()[16 * 7 + 1]!);
-  for (const [x, y] of [[1, 7], [2, 8], [13, 7], [14, 8]]) {
-    expect(tiles()[16 * y! + x!]!.className).toBe("ed-tile ed-lab");
+  // Read as the engine does: the first lab in reading order is team 0's.
+  for (const [x, y, place] of [
+    [1, 7, "team-0 ed-top-left"],
+    [2, 8, "team-0 ed-bottom-right"],
+    [13, 7, "team-1 ed-top-left"],
+    [14, 8, "team-1 ed-bottom-right"],
+  ] as const) {
+    expect(tiles()[16 * y + x]!.className).toBe(`ed-tile ed-lab ed-${place}`);
   }
+  // A third lab is one too many.
+  mirror.value = "none";
+  mirror.dispatchEvent(new Event("change"));
+  pointer("pointerdown", tiles()[16 * 12 + 7]!);
+  expect(tiles()[16 * 12 + 7]!.className).toBe("ed-tile ed-lab ed-broken");
+  mirror.value = "left-right";
+  mirror.dispatchEvent(new Event("change"));
 
   pick("fossil");
   pointer("pointerdown", tiles()[3]!);
@@ -90,11 +103,11 @@ it("opens a map file, and refuses one whose tiles do not fit its size", () => {
   paint(map, 2, 1, "fossil", "none");
   editor.open(encode(map));
   expect(tiles().map((t) => t.className)).toEqual([
-    "ed-tile ed-lab",
-    "ed-tile ed-lab",
+    "ed-tile ed-lab ed-team-0 ed-top-left",
+    "ed-tile ed-lab ed-team-0 ed-top-right",
     "ed-tile ed-empty",
-    "ed-tile ed-lab",
-    "ed-tile ed-lab",
+    "ed-tile ed-lab ed-team-0 ed-bottom-left",
+    "ed-tile ed-lab ed-team-0 ed-bottom-right",
     "ed-tile ed-empty ed-fossil",
   ]);
   map.tiles.pop();

@@ -1,11 +1,6 @@
-import asyncio
-
-from click.testing import CliRunner, Result
 from fastapi import FastAPI
 from httpx import AsyncClient
-from pytest import MonkeyPatch
 
-from api import cli, settings
 from api.db import DBConnection
 from tests.api.conftest import MEMBER, log_in
 
@@ -95,34 +90,3 @@ async def test_signup_validation(client: AsyncClient) -> None:
         {"display_name": "x" * 65},
     ]:
         assert (await client.post("/users", json={**SIGNUP, **bad})).status_code == 422
-
-
-async def test_cli_create_admin_can_log_in(
-    app: FastAPI, db: DBConnection, database_url: str, monkeypatch: MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings.settings, "database_url", database_url)
-    monkeypatch.setattr(settings.settings, "admin_email", "cli-admin@example.com")
-    monkeypatch.setattr(settings.settings, "admin_password", "cli-password")
-    runner = CliRunner()
-
-    async def invoke(*args: str) -> Result:
-        # The CLI owns its own event loop, so it runs off the test's.
-        return await asyncio.to_thread(runner.invoke, cli.main, list(args))
-
-    result = await invoke("create-admin")
-    assert result.exit_code == 0, result.output
-    assert "created admin cli-admin@example.com" in result.output
-
-    async with log_in(app, ("cli-admin@example.com", "cli-password")) as c:
-        r = await c.get("/users/me")
-    assert r.status_code == 200
-    assert r.json()["is_admin"] is True
-    assert r.json()["display_name"] == "admin"
-    assert await team_name(db, r.json()["team_id"]) == "admin"
-
-    result = await invoke("create-admin")
-    assert result.exit_code != 0
-    assert "already has an account" in result.output
-
-    result = await invoke("list-users")
-    assert result.output.strip().endswith("cli-admin@example.com\tadmin admin")

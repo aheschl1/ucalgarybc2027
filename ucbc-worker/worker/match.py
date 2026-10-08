@@ -16,8 +16,9 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from api.blobs import BlobStore
+from api.blobs import BlobMissing, BlobStore
 from api.models.matches import MatchReplay, MatchRow
+from api.services import maps
 from api.services.submissions import check_member_name, key_for
 
 log = logging.getLogger(__name__)
@@ -49,8 +50,19 @@ async def fetch(submission: UUID, scratch: Path, blobs: BlobStore) -> Path:
     return scratch
 
 
-def command(match: MatchRow, bots: list[Path], replay: Path) -> list[str]:
-    """The engine process, described in one place."""
+async def fetch_map(map_id: UUID, path: Path, blobs: BlobStore) -> Path:
+    """The map file downloaded to `path`."""
+    try:
+        data = await blobs.get(maps.key_for(map_id))
+    except BlobMissing as e:
+        raise MatchFailed(f"map {map_id} is missing from blob storage") from e
+    path.write_bytes(data)
+    return path
+
+
+def command(match: MatchRow, bots: list[Path], map_files: list[Path], replay: Path) -> list[str]:
+    """The engine process, described in one place. `map_files` are in set order, as the
+    match names them."""
     c = match.config
     return [
         str(UCBC),
@@ -69,6 +81,7 @@ def command(match: MatchRow, bots: list[Path], replay: Path) -> list[str]:
         str(c.step_ms),
         "--memory-mb",
         str(c.memory_bytes >> 20),
+        *(arg for m in map_files for arg in ("--map", str(m))),
         "--replay",
         str(replay),
         "--no-verbose",
@@ -87,6 +100,9 @@ async def play(
         scratch = Path(tmp)
         fetching = time.monotonic()
         bots = [await fetch(s, scratch / f"bot{i}", blobs) for i, s in enumerate(match.bots)]
+        map_files = [
+            await fetch_map(m, scratch / f"map{i}.map", blobs) for i, m in enumerate(match.maps)
+        ]
         log.debug(
             "match %s: bots ready in %.2fs: %s",
             match.id,
@@ -94,7 +110,7 @@ async def play(
             ", ".join(str(b) for b in bots),
         )
         replay = scratch / "replay.json"
-        argv = command(match, bots, replay)
+        argv = command(match, bots, map_files, replay)
         log.debug("match %s: %s", match.id, shlex.join(argv))
         started = time.monotonic()
         try:

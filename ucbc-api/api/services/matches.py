@@ -6,11 +6,14 @@ from api.errors import ApiError, Forbidden, NotFound
 from api.models.matches import (
     Match,
     MatchEnqueue,
+    MatchOrigin,
     MatchReplay,
+    MatchResult,
     MatchRow,
     TeamInfo,
 )
 from api.models.users import User
+from api.services import elo
 from api.services.submissions import get_submission
 
 LIST_LIMIT = 50
@@ -25,7 +28,8 @@ class LostLease(Exception):
 
 async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID:
     """Admins queue any submissions at any priority. A member needs one of their team's
-    submissions in the match, at normal priority."""
+    submissions in the match, at normal priority. Anyone picks the maps; they are not read
+    here, so a bad pick fails the match when it is played."""
     names: list[str] = []
     owned = False
     for bot in req.bots:
@@ -38,7 +42,9 @@ async def enqueue_match(db: DBConnection, user: User, req: MatchEnqueue) -> UUID
         raise Forbidden("one of the bots must be your team's submission")
     priority = req.priority if user.is_admin else 0
     teams = [TeamInfo(id=i, name=name) for i, name in enumerate(names)]
-    return await db.match_repo.insert("user", req.game, teams, req.config, req.bots, priority)
+    return await db.match_repo.insert(
+        "user", req.game, teams, req.config, req.bots, req.maps, priority
+    )
 
 
 async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
@@ -56,12 +62,26 @@ async def get_set_replay(db: DBConnection, user: User, match_id: UUID, index: in
     return replay
 
 
-async def list_matches(db: DBConnection, user: User, mine: bool = False) -> list[MatchRow]:
+async def list_matches(
+    db: DBConnection,
+    user: User,
+    mine: bool = False,
+    origin: MatchOrigin | None = None,
+    team: int | None = None,
+    active: bool = False,
+) -> list[MatchRow]:
     """Platform matches and matches with one of the caller's team's submissions, newest
-    first; every match for an admin. `mine` narrows to the team's own, admin or not."""
-    if mine:
-        return await db.match_repo.list_recent(user.team_id, LIST_LIMIT, owned_only=True)
-    return await db.match_repo.list_recent(None if user.is_admin else user.team_id, LIST_LIMIT)
+    first; every match for an admin. `mine` narrows to the team's own, admin or not; `team`
+    to another team's, of those the caller may see; `origin` to user or platform matches;
+    `active` to matches queued or running."""
+    return await db.match_repo.list_recent(
+        user.team_id if mine or not user.is_admin else None,
+        LIST_LIMIT,
+        owned_only=mine,
+        origin=origin,
+        involving=team,
+        active=active,
+    )
 
 
 async def _visible(db: DBConnection, user: User, match_id: UUID) -> MatchRow:
@@ -87,8 +107,9 @@ async def claim_match(db: DBConnection, worker: str, lease: timedelta) -> MatchR
 
 
 async def finish_match(db: DBConnection, match: MatchRow, replay: MatchReplay) -> None:
-    """Records the replay and marks the match done. Sets from an earlier attempt are
-    replaced, so a rerun after a lost worker leaves one consistent replay."""
+    """Records the replay, marks the match done, and moves both teams' ratings. Sets from
+    an earlier attempt are replaced, so a rerun after a lost worker leaves one consistent
+    replay, and a lost lease writes nothing."""
     async with db.conn.transaction():
         await db.match_repo.delete_sets(match.id)
         for s in replay.sets:
@@ -102,6 +123,25 @@ async def finish_match(db: DBConnection, match: MatchRow, replay: MatchReplay) -
         )
         if not done:
             raise LostLease(match)
+        await _rate(db, match, replay.result)
+
+
+async def _rate(db: DBConnection, match: MatchRow, result: MatchResult) -> None:
+    """Steps both slots' teams by slot 0's share of the sets. A team in both slots plays
+    itself, which rates nothing."""
+    teams = []
+    for bot in match.bots:
+        submission = await db.submission_repo.get(bot)
+        if submission is None:
+            raise ValueError(f"match {match.id}: no submission {bot}")
+        teams.append(submission.team_id)
+    a, b = teams
+    if a == b:
+        return
+    elos = await db.team_repo.lock_elos([a, b])
+    new_a, new_b = elo.step(elos[a], elos[b], elo.score(result.set_wins, len(result.sets)))
+    await db.team_repo.record_elo(a, new_a)
+    await db.team_repo.record_elo(b, new_b)
 
 
 async def fail_match(db: DBConnection, match: MatchRow, error: str) -> None:

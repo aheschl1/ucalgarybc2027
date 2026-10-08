@@ -7,6 +7,7 @@ import {
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { describe, type Api, type Match } from "./api";
+import { ErrorText, Mono } from "./ui";
 
 /** The replay file the engine would have written, from the match row and its sets. */
 function assemble(match: Match, sets: SetReplay[]): Replay {
@@ -52,7 +53,7 @@ export default function Viewer({ api }: { api: Api }) {
           return match.error ? `${match.status}: ${match.error}` : match.status;
         }
         const sets = await Promise.all(
-          (match.sets ?? []).map((s) =>
+          match.sets.map((s) =>
             api.load<SetReplay>(`/matches/${id}/sets/${s.index}`),
           ),
         );
@@ -69,14 +70,23 @@ export default function Viewer({ api }: { api: Api }) {
   }, [matchId]);
 
   return (
-    <main className="viewer">
-      <p className="dim">
-        <Link to="/">ucbc</Link> · match {matchId}
+    <main className="mx-auto w-full max-w-[84rem] px-4 py-6 sm:px-6">
+      <p className="mb-4 flex items-center gap-2 text-sm text-muted">
+        <Link to="/platform" className="hover:text-fg">
+          Platform
+        </Link>
+        <span>/</span>
+        <span>Match</span>
+        <Mono value={matchId} short={36} />
       </p>
       {error ? (
-        <p className="error">{error}</p>
+        <ErrorText>{error}</ErrorText>
       ) : (
-        !replay && <p className="dim">{status}</p>
+        !replay && (
+          <p className="py-16 text-center text-muted">
+            {status === "loading" ? "…" : status}
+          </p>
+        )
       )}
       {replay && <ReplayViewer replay={replay} renderers={renderers} />}
     </main>

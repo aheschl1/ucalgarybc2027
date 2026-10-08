@@ -62,6 +62,11 @@ def _sign(n: int) -> int:
     return (n > 0) - (n < 0)
 
 
+def _gap(n: int, start: int) -> int:
+    """How far n is from the two tiles start and start + 1."""
+    return max(start - n, n - (start + 1), 0)
+
+
 class Ucbc2027Handle(Ucbc2027Api):
     def pos(self) -> Coord:
         """Where this dino stands. A lab has no position: TypeError."""
@@ -69,6 +74,19 @@ class Ucbc2027Handle(Ucbc2027Api):
         if not isinstance(me, UnitViewDino):
             raise TypeError("only a dino has a position")
         return me.pos
+
+    def can_see(self, x: int, y: int) -> bool:
+        """Whether ``item`` and ``environment`` answer for (x, y) rather than refuse it
+        as out of vision: within ``me().vision`` tiles of a dino, or of the nearest
+        of a lab's four. Off the board still raises. Costs a ``me`` query."""
+        me = self.me()
+        if isinstance(me, UnitViewDino):
+            near = max(abs(x - me.pos.x), abs(y - me.pos.y))
+        else:
+            # The nearest lab tile is the origin's 2x2 square, clamped to it.
+            ox, oy = me.origin.x, me.origin.y
+            near = max(_gap(x, ox), _gap(y, oy))
+        return near <= me.vision
 
     def move_dir(self, direction: Direction) -> Coord:
         """Move one tile in ``direction``."""

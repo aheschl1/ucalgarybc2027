@@ -16,6 +16,16 @@
   pointer-events: none;
 }
 
+/* What the selected unit can query: a tint and a dashed edge, under the selection box. */
+.u27-vision {
+  fill: var(--ucbc-fg, #1c1917);
+  fill-opacity: 0.08;
+  stroke: var(--ucbc-fg, #1c1917);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  pointer-events: none;
+}
+
 .u27-unit th {
   position: static;
   width: 5rem;

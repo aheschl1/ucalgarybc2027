@@ -17,39 +17,33 @@ use crate::view::{Dropped, ItemView, Snapshot, Spawned, TeamView, UnitEntry, Uni
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    /// This bot.
     Me(Request<(), UnitView>),
-    /// Your team's bones.
     Bones(Request<(), u32>),
-    /// Fossils your team has deposited at its lab.
     Fossils(Request<(), u32>),
-    /// What is on a tile; None if nothing.
     Item(Request<Coord, Option<ItemView>>),
-    /// What a tile is made of.
     Environment(Request<Coord, Environment>),
-    /// Tiles across the board.
     Width(Request<(), usize>),
-    /// Tiles down the board.
     Height(Request<(), usize>),
+    CanMerge(Request<Target, bool>),
+    CanAttack(Request<Target, bool>),
 }
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// Does nothing.
     Noop(Request<(), ()>),
-    /// Lab only, once per turn, for bones: a level 1 dino on a free tile next to the
-    /// lab. It steps from the next tick.
     Spawn(Request<Coord, Spawned>),
-    /// Dino only, once per turn: to a free tile within move range. Replies with the
-    /// new position.
     Move(Request<Coord, Coord>),
-    /// Dino only: pick up the fossil on a tile within action range. A dino holds one
-    /// thing at a time. Free, as often as you like.
     Grab(Request<Coord, ItemView>),
-    /// Dino only: put down what it holds, on a free tile within action range or on
-    /// your own lab to deposit it. Free, as often as you like.
     Drop(Request<Coord, Dropped>),
+    Merge(Request<Target, UnitView>),
+    Attack(Request<Target, ()>),
+}
+
+/// Another bot, by the id `item` shows on its tile.
+#[derive(Deserialize, JsonSchema)]
+pub struct Target {
+    pub bot_id: u64,
 }
 
 pub struct Ucbc2027 {
@@ -64,6 +58,8 @@ pub struct Ucbc2027 {
 pub(crate) struct Turn {
     pub spawned: bool,
     pub moved: bool,
+    pub merges: u32,
+    pub attacks: u32,
 }
 
 impl Ucbc2027 {
@@ -75,6 +71,7 @@ impl Ucbc2027 {
                     unreachable!("bot {id} on the board is not a dino")
                 };
                 ItemView::Dino {
+                    id: id.0,
                     team: bot.team().0,
                     level: dino.level,
                 }
@@ -83,17 +80,22 @@ impl Ucbc2027 {
         }
     }
 
-    fn unit_view(&self, bot: BotId) -> UnitView {
-        match &*self.bots[bot] {
+    pub(crate) fn unit_view(&self, bot: BotId) -> UnitView {
+        let unit = &*self.bots[bot];
+        match unit {
             Unit::Lab(lab) => UnitView::Lab {
+                id: bot.0,
                 origin: lab.origin,
                 health: lab.health,
+                vision: unit.vision(),
             },
             Unit::Dino(dino) => UnitView::Dino {
+                id: bot.0,
                 pos: dino.pos,
                 level: dino.level,
                 health: dino.health,
                 held: dino.held.map(|item| self.item_view(item)),
+                vision: unit.vision(),
             },
         }
     }
@@ -121,12 +123,28 @@ fn most(field: Vec<TeamId>, score: impl Fn(TeamId) -> u32) -> Vec<TeamId> {
         .collect()
 }
 
-/// The map in `game_config`, `{"map": "<a map file in base64>"}`, or the standard one.
-fn map_from(config: Option<&Value>) -> Result<Map, EngineError> {
-    let Some(map) = config.and_then(|c| c.get("map")) else {
+/// The set's map from `game_config`, `{"maps": ["<a map file in base64>", ...]}`: one map
+/// plays every set, otherwise set `i` plays `maps[i]`. Without `maps`, the standard one.
+fn map_from(config: Option<&Value>, set_index: u32) -> Result<Map, EngineError> {
+    let Some(maps) = config.and_then(|c| c.get("maps")) else {
         return Ok(Map::standard());
     };
-    let bad = |why: String| EngineError::Config(format!("game_config.map: {why}"));
+    let bad = |why: String| EngineError::Config(format!("game_config.maps: {why}"));
+    let maps = maps
+        .as_array()
+        .ok_or_else(|| bad("expected a list of base64 strings".into()))?;
+    let i = if maps.len() == 1 {
+        0
+    } else {
+        set_index as usize
+    };
+    let map = maps.get(i).ok_or_else(|| {
+        bad(format!(
+            "set {set_index} has no map; give 1 map or one per set, got {}",
+            maps.len()
+        ))
+    })?;
+    let bad = |why: String| EngineError::Config(format!("game_config.maps[{i}]: {why}"));
     let bytes = map
         .as_str()
         .ok_or_else(|| bad("expected a base64 string".into()))
@@ -148,7 +166,7 @@ impl Game for Ucbc2027 {
                 setup.teams.len()
             )));
         }
-        let map = map_from(setup.game_config.as_ref())?;
+        let map = map_from(setup.game_config.as_ref(), setup.set_index)?;
         let mut bots = BotManager::new();
         // In step order, so the first team's lab steps first.
         for &team in &setup.teams {
@@ -172,20 +190,30 @@ impl Game for Ucbc2027 {
 
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         let off_board = |at: Coord| QueryError::Rejected(format!("{at} is off the board"));
+        let unseen = |at: Coord| QueryError::Rejected(format!("{at} is out of vision"));
+        let sees = |at: Coord| self.bots[bot].sees(at);
         match query {
             Queries::Me(q) => Ok(q.reply(self.unit_view(bot))),
             Queries::Bones(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).bones)),
             Queries::Fossils(q) => Ok(q.reply(self.state.team(self.bots[bot].team()).fossils)),
             Queries::Item(q) => {
                 let item = self.state.items.get(*q).ok_or_else(|| off_board(*q))?;
+                if !sees(*q) {
+                    return Err(unseen(*q));
+                }
                 Ok(q.reply(item.map(|item| self.item_view(item))))
             }
             Queries::Environment(q) => {
                 let env = self.state.map.env(*q).ok_or_else(|| off_board(*q))?;
+                if !sees(*q) {
+                    return Err(unseen(*q));
+                }
                 Ok(q.reply(env))
             }
             Queries::Width(q) => Ok(q.reply(self.state.map.width())),
             Queries::Height(q) => Ok(q.reply(self.state.map.height())),
+            Queries::CanMerge(q) => Ok(q.reply(self.check_merge(bot, BotId(q.bot_id)).is_ok())),
+            Queries::CanAttack(q) => Ok(q.reply(self.check_attack(bot, BotId(q.bot_id)).is_ok())),
         }
     }
 
@@ -196,6 +224,8 @@ impl Game for Ucbc2027 {
             Action::Move(a) => Ok(a.reply(self.move_to(bot, *a)?)),
             Action::Grab(a) => Ok(a.reply(self.grab(bot, *a)?)),
             Action::Drop(a) => Ok(a.reply(self.drop(bot, *a)?)),
+            Action::Merge(a) => Ok(a.reply(self.merge(bot, BotId(a.bot_id))?)),
+            Action::Attack(a) => Ok(a.reply(self.attack(bot, BotId(a.bot_id))?)),
         }
     }
 
@@ -251,7 +281,6 @@ impl Game for Ucbc2027 {
                 .ids()
                 .into_iter()
                 .map(|id| UnitEntry {
-                    id: id.0,
                     team: self.bots[id].team().0,
                     unit: self.unit_view(id),
                 })

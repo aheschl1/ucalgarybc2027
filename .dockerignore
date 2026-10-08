@@ -10,3 +10,9 @@ tests/
 ucbc-api/api/static/
 ucbc-cli/python/ucbc/viewer/static/
 .cache/
+# Tool caches and local env files; nothing in an image reads them.
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.env*
+docs/

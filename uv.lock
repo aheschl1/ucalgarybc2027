@@ -1575,7 +1575,7 @@ wheels = [
 
 [[package]]
 name = "ucbc"
-version = "0.1.6"
+version = "0.1.8"
 source = { editable = "ucbc-cli" }
 dependencies = [
     { name = "click" },
@@ -1598,6 +1598,7 @@ dependencies = [
     { name = "boto3" },
     { name = "click" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-settings" },
@@ -1614,6 +1615,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.35" },
     { name = "click", specifier = ">=8.1" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.9" },
     { name = "pydantic-settings", specifier = ">=2.6" },

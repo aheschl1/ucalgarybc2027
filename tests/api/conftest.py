@@ -24,6 +24,7 @@ from api.services.users import create_user
 ROOT = Path(__file__).resolve().parents[2]
 ADMIN = ("root@example.com", "root-pw")
 MEMBER = ("alice@example.com", "alice-pw")
+MEMBER_B = ("bob@example.com", "bob-pw")
 TEAMMATE = ("carol@example.com", "carol-pw")
 
 
@@ -114,6 +115,11 @@ async def member(db: DBConnection) -> User:
 
 
 @pytest.fixture
+async def member_b(db: DBConnection) -> User:
+    return await create_user(db, MEMBER_B[0], "Bob", MEMBER_B[1], is_admin=False)
+
+
+@pytest.fixture
 async def admin_client(app: FastAPI, admin: User) -> AsyncIterator[AsyncClient]:
     async with log_in(app, ADMIN) as c:
         yield c
@@ -124,6 +130,10 @@ async def member_client(app: FastAPI, member: User) -> AsyncIterator[AsyncClient
     async with log_in(app, MEMBER) as c:
         yield c
 
+@pytest.fixture
+async def member_b_client(app: FastAPI, member_b: User) -> AsyncIterator[AsyncClient]:
+    async with log_in(app, MEMBER_B) as c:
+        yield c
 
 @pytest.fixture
 async def teammate_client(

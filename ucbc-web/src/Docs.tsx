@@ -100,6 +100,9 @@ const PIP = `python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\\Scripts\\Activate.ps1
 pip install ucbc`;
 
+const SUBMIT = `ucbc login
+ucbc submit mybot/`;
+
 const ZIP = `cd mybot && zip -r ../mybot.zip .`;
 
 const BOT = `# mybot/main.py
@@ -282,22 +285,27 @@ export default function Docs() {
               <Link to="/login">log in</Link>.
             </li>
             <li>
-              Zip the <em>contents</em> of your bot folder:
-              <Code label="terminal">{ZIP}</Code>
+              Sign in from the terminal, then submit your bot folder:
+              <Code label="terminal">{SUBMIT}</Code>
+              <p>
+                <code>ucbc login</code> saves creds to ~/.config/ucbc and
+                <code>ucbc submit bot/</code> zips the bot an uploads it for you.
+              </p>
+              <p className="dim">
+                Or, use the web <Link to="/platform">platform</Link>: zip the{" "}
+                <em>contents</em> of your bot folder with{" "}
+                <code>{ZIP}</code> and upload it under{" "}
+                <strong>Submit a bot</strong> on the home page.
+              </p>
             </li>
             <li>
-              On the <Link to="/platform">platform</Link> home page, under{" "}
-              <strong>Submit a bot</strong>, choose the zip, optionally name it,
-              leave the game as <code>ucbc2027</code>, and press{" "}
-              <strong>Upload</strong>.
-            </li>
-            <li>
-              Under <strong>Request a match</strong>, pick one of your team's
+              On the <Link to="/platform">platform</Link>, under{" "}
+              <strong>Request a match</strong>, pick one of your team's
               submissions and an opponent (any submission, yours included), set
               a seed if you like, and press <strong>Queue match</strong>.
             </li>
           </ol>
-          <Rule title="main.py must be at the top of the zip, not in a folder.">
+          <Rule title="main.py must be at the top of the bot folder, not in a subfolder.">
             At most 1 MiB zipped, 8 MiB unpacked.
           </Rule>
           <Rule title="Submissions never change.">

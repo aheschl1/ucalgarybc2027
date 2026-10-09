@@ -99,3 +99,19 @@ def test_run_prints_progress_unless_no_verbose(
     result = CliRunner().invoke(main, [*args, "--sets", "1", "--no-verbose"])
     assert result.exit_code == 0, result.output
     assert "done tick" not in capfd.readouterr().err
+
+
+def test_submit_lists_zip(bot: BotPath) -> None:
+    args = ["submit", str(bot("first_empty")), "--game", "tictactoe"]
+    result = CliRunner().invoke(main, [*args, "--test-run"])
+    assert result.exit_code == 0, result.output
+    assert "main.py" in result.output
+
+
+def test_no_main_in_bot(tmp_path: Path) -> None:
+    empty = tmp_path / "empty_bot"
+    empty.mkdir()
+    args = ["submit", str(empty), "--game", "tictactoe"]
+    result = CliRunner().invoke(main, [*args, "--test-run"])
+    assert result.exit_code != 0
+    assert "no main.py" in result.output

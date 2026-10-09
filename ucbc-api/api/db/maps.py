@@ -29,7 +29,7 @@ class MapRepo:
         row = await cur.fetchone()
         return None if row is None else Map.model_validate(row)
 
-    async def list(self, game: str | None) -> list[Map]:
+    async def list_maps(self, game: str | None) -> list[Map]:
         """By game, then name; every game's when `game` is None."""
         cur = await self._conn.execute(
             f"select {COLUMNS} from maps where %s::text is null or game = %s "

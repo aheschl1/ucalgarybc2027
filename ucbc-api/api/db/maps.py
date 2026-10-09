@@ -4,6 +4,7 @@ from psycopg import AsyncConnection
 from psycopg.rows import DictRow
 
 from api.models.maps import Map
+from api.errors import ApiError
 
 COLUMNS = "id, game, name, size, sha256, uploaded_by, created_at, archived_at"
 
@@ -28,7 +29,7 @@ class MapRepo:
         row = await cur.fetchone()
         return None if row is None else Map.model_validate(row)
 
-    async def list(self, game: str | None) -> list[Map]:
+    async def list_maps(self, game: str | None) -> list[Map]:
         """By game, then name; every game's when `game` is None."""
         cur = await self._conn.execute(
             f"select {COLUMNS} from maps where %s::text is null or game = %s "
@@ -45,3 +46,20 @@ class MapRepo:
             (archived, id),
         )
         return cur.rowcount == 1
+
+    async def get_map_uuids(self, game: str, n: int) -> list[UUID]:
+        result = await self._conn.execute(
+            """
+            select id from maps
+            order by RAND()
+            where game = %s
+            limit %s;
+            """,
+            (game, n,)
+        )
+        maps = result.fetchall()
+        if len(maps) == 0:
+            raise ApiError()
+        elif len(maps) < n:
+            maps = maps[:-1] + maps[-1] * (n - len(maps) + 1)
+        return [row["id"] for row in maps]

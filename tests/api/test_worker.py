@@ -20,6 +20,7 @@ from tests.api.test_queue import LEASE, get
 from tests.api.test_submissions import upload, zip_dir
 from worker import match as engine
 from worker.main import Worker
+from api.db.matches import MatchRepo
 
 BotPath = Callable[[str], Path]
 UCBC2027_BOTS = Path(__file__).resolve().parents[2] / "bots" / "ucbc2027"
@@ -199,3 +200,16 @@ async def test_serve_runs_slots_and_drains(
     await wait_for(admin_client, second, status="done")
     stop.set()
     await asyncio.wait_for(serving, 5)
+
+async def test_scheduler_schedules_new_games(
+    member_client: AsyncClient,
+    member_b_client: AsyncClient,
+    db: DBConnection,
+    bot: BotPath
+) -> None:
+    r = await upload(member_client, zip_dir(bot("random")), form={"name": bot("random").name, "game": "tictactoe"})
+    assert r.status_code == 201, r.text
+    r_b = await upload(member_b_client, zip_dir(bot("first_empty")), form={"name": bot("first_empty").name, "game": "tictactoe"})
+    assert r.status_code == 201, r_b.text
+    match_id = db.match_repo.auto_schedule(3)
+    await wait_for(member_client, match_id, status="queued")

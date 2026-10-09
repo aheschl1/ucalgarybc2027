@@ -1,3 +1,5 @@
+import gzip
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -8,12 +10,15 @@ from psycopg.types.json import Jsonb
 
 from api.models.matches import (
     MatchConfig,
+    MatchEnqueue,
     MatchOrigin,
     MatchRow,
     SetReplay,
     SetResult,
     TeamInfo,
 )
+
+from api.db.maps import MapRepo
 
 COLUMNS = (
     "id, origin, game, engine_version, teams, config, bots, maps, status, set_wins, winner_team, error, "
@@ -112,6 +117,76 @@ class MatchRepo:
             (*args, limit),
         )
         return [MatchRow.model_validate(row) for row in await cur.fetchall()]
+
+    async def auto_schedule(self, sets_per_match: int) -> UUID | None:
+        """Tries to find 2 most recent submissions (that haven't already faced each other) from different teams and queues a match between them."""
+        # TODO: we should maybe(?) make a model for the columns being returned so it can be validated and cleaned up
+        res = await self._conn.execute(
+            f"""
+            WITH latest_submissions AS (
+                SELECT DISTINCT ON (team_id)
+                    id,
+                    team_id,
+                    name,
+                    game,
+                    created_at
+                FROM submissions
+                ORDER BY team_id, created_at DESC
+            )
+            SELECT
+                A.id      AS id_a,
+                A.team_id AS team_id_a,
+                A.name    AS name_a,
+                A.game    AS game_a,
+                A.origin  AS origin_a,
+                B.id      AS id_b,
+                B.team_id AS team_id_b,
+                B.name    AS name_b,
+                B.game    AS game_b,
+                B.origin  AS origin_b
+            FROM latest_submissions A
+            JOIN latest_submissions B
+                ON A.team_id < B.team_id
+                AND A.game = B.game
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM matches M
+                WHERE
+                    ((M.bots->>0)::bigint = A.id
+                    AND (M.bots->>1)::bigint = B.id
+                    OR
+                    (M.bots->>0)::bigint = B.id
+                    AND (M.bots->>1)::bigint = A.id)
+                    AND
+                    M.origin = "platform"
+            )
+            LIMIT 1;
+            """
+        )
+        data = res.fetchone()
+        if data is None:
+            return None
+        # need game from query result
+        game = data["game_a"]
+        # need bot UUIDs from query result
+        bots = [data["id_a"], data["id_b"]]
+        # need team info from query result
+        team_a = TeamInfo()
+        team_b = TeamInfo()
+        team_a.id = 0
+        team_a.name = data["name_a"]
+        team_b.id = 1
+        team_b.name = data["name_b"]
+        teams = [team_a, team_b]
+        map_repo = MapRepo(self._conn)
+        maps = map_repo.get_map_uuids(sets_per_match)
+        return self.insert("platform", game, teams, MatchConfig(), bots, maps, 0)
+    
+    async def run_scheduler(self, stop: asyncio.Event, sets_per_match: int):
+        """Runs the auto scheduler periodically to queue new matches between new submissions automatically."""
+        while not stop.is_set():
+            match_id = self.auto_schedule(sets_per_match)
+            asyncio.sleep(10)
 
     async def claim(self, worker: str, lease: timedelta) -> MatchRow | None:
         """The next queued match, or a running one whose heartbeat is older than `lease`."""

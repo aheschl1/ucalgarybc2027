@@ -19,7 +19,7 @@ export default function Leaderboard({ teamId }: { teamId?: number }) {
   const hi = Math.max(...rated);
 
   return (
-    <Page title="Leaderboard" subtitle="Elo from ranked matches, updated as each one finishes.">
+    <Page title="Leaderboard">
       <Card flush>
         {error && (
           <div className="p-4">

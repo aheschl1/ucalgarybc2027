@@ -2,8 +2,9 @@ from fastapi import APIRouter, status
 
 from api.auth import CurrentUser
 from api.db import DB
-from api.models.teams import MyTeam, TeamCreate, TeamElo, TeamJoin
+from api.models.teams import MyTeam, TeamCreate, TeamElo, TeamJoin, TeamRename
 from api.services import teams
+
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -41,3 +42,7 @@ async def list_elos(db: DB) -> list[TeamElo]:
 async def get_elo(team_id: int, db: DB) -> TeamElo:
     """One team's rating. Public."""
     return await teams.get_elo(db, team_id)
+
+@router.patch("/me")
+async def rename(body: TeamRename, db: DB, user: CurrentUser) -> MyTeam:
+    return await teams.rename_team(db, user, body.name)

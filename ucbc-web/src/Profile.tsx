@@ -95,16 +95,24 @@ function TeamSection({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, copy] = useCopy();
+  const [renameName, setRenameName] = useState("");
+
 
   useEffect(() => {
-    api.load<Team>("/teams/me").then(setTeam, (err) => setError(describe(err)));
-  }, []);
+  api.load<Team>("/teams/me").then(
+    (loadedTeam) => {
+      setTeam(loadedTeam);
+      setRenameName(loadedTeam.name);
+    },
+    (err) => setError(describe(err)),
+  );
+}, []);
 
   // The whole board, for the team's place on it; refetched when the team changes.
   const [board, setBoard] = useState<TeamElo[]>([]);
   useEffect(() => {
     if (team) api.load<TeamElo[]>("/teams/elo").then(setBoard, () => {});
-  }, [team?.id]);
+  }, [team?.id, team?.name]);
   const mine = board.find((t) => t.id === team?.id);
 
   const act = async (call: () => Promise<Team>, moves: boolean) => {
@@ -142,6 +150,23 @@ function TeamSection({
     if (leave())
       act(() => api.post<Team>("/teams", { name: name.trim() }), true);
   };
+
+  const rename = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+
+    try {
+      const updatedTeam = await api.patch<Team>("/teams/me", { name: renameName.trim() });
+      setTeam(updatedTeam);
+      setRenameName(updatedTeam.name);
+    } catch (err) {
+      setError(describe(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const newCode = () =>
     act(() => api.post<Team>("/teams/me/code", undefined), false);
 
@@ -219,6 +244,20 @@ function TeamSection({
             </Field>
             <Button variant="secondary" disabled={busy || !name.trim()}>
               Start
+            </Button>
+          </form>
+
+          <form className="grid grid-cols-[1fr_auto] items-end gap-2" onSubmit={rename}>
+            <Field label="Rename your team">
+              <Input
+              maxLength={64}
+              value={renameName}
+              onChange={(e) => setRenameName(e.target.value)}
+              />
+            </Field>
+            <Button variant="secondary" disabled={busy || !renameName.trim() || renameName.trim() === team?.name}
+            >
+              Rename
             </Button>
           </form>
         </div>

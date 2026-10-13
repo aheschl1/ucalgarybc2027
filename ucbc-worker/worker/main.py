@@ -1,4 +1,4 @@
-"""`ucbc-worker`: plays queued matches until told to stop."""
+"""`ucbc-worker`: queues the platform's matches and plays queued matches until told to stop."""
 
 import asyncio
 import logging
@@ -12,7 +12,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from api.blobs import BlobStore
 from api.db import DBConnection, create_pool
-from api.services import matches
+from api.services import matches, scheduling
 from api.services.matches import LostLease
 from worker.match import MatchFailed, StartFailed, play
 from worker.settings import settings
@@ -31,6 +31,8 @@ class Worker:
         poll_s: float,
         heartbeat_s: float,
         lease: timedelta,
+        schedule_s: float,
+        schedule_sets: int,
     ) -> None:
         self.pool = pool
         self.blobs = blobs
@@ -39,10 +41,25 @@ class Worker:
         self.poll_s = poll_s
         self.heartbeat_s = heartbeat_s
         self.lease = lease
+        self.schedule_s = schedule_s
+        self.schedule_sets = schedule_sets
 
     async def serve(self, stop: asyncio.Event) -> None:
-        """Plays `slots` matches at a time until `stop` is set; running matches finish."""
-        await asyncio.gather(*(self._slot(stop) for _ in range(self.slots)))
+        """Plays `slots` matches at a time, queueing the platform's pending pairings every
+        `schedule_s` seconds meanwhile, until `stop` is set; running matches finish."""
+        await asyncio.gather(*(self._slot(stop) for _ in range(self.slots)), self._schedule(stop))
+
+    async def _schedule(self, stop: asyncio.Event) -> None:
+        while not stop.is_set():
+            try:
+                async with self.pool.connection() as conn:
+                    await conn.set_autocommit(True)
+                    ids = await scheduling.schedule_pending(DBConnection(conn), self.schedule_sets)
+                for id in ids:
+                    log.info("match %s: scheduled", id)
+            except Exception:
+                log.exception("scheduling failed")
+            await _wait(stop, self.schedule_s)
 
     async def _slot(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
@@ -89,17 +106,10 @@ async def _wait(stop: asyncio.Event, seconds: float) -> None:
 
 
 async def _serve() -> None:
-    pool = create_pool(settings.database_url, size=settings.worker_slots)
+    pool = create_pool(settings.database_url, size=settings.worker_slots + 1)
     await pool.open()
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-
-    try:
-        async with self.pool.connection() as conn:
-            db = DBConnection(conn)
-            scheduler = asyncio.create_task(db.match_repo.run_scheduler(stop, settings.sets_per_match))
-    except Exception:
-        log.exception("scheduler failed")
 
     def request_stop() -> None:
         log.info("stopping after the running matches")
@@ -118,6 +128,8 @@ async def _serve() -> None:
         poll_s=settings.worker_poll_s,
         heartbeat_s=settings.worker_heartbeat_s,
         lease=timedelta(seconds=settings.worker_lease_s),
+        schedule_s=settings.worker_schedule_s,
+        schedule_sets=settings.worker_schedule_sets,
     )
     log.info("%s: %d slots", worker.name, worker.slots)
     try:
@@ -128,6 +140,7 @@ async def _serve() -> None:
 
 @click.command()
 def main() -> None:
-    """Play queued matches until SIGTERM; running matches finish first."""
+    """Queue the platform's matches and play queued matches until SIGTERM; running
+    matches finish first."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     asyncio.run(_serve())

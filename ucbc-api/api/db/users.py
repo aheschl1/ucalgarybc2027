@@ -31,7 +31,7 @@ class UserRepo:
         row = await cur.fetchone()
         return None if row is None else StoredUser.model_validate(row)
 
-    async def list(self) -> list[StoredUser]:
+    async def list_users(self) -> list[StoredUser]:
         cur = await self._conn.execute(f"select {COLUMNS} from users order by id")
         return [StoredUser.model_validate(row) for row in await cur.fetchall()]
 

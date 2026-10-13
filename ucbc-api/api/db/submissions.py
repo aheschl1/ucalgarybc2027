@@ -38,3 +38,14 @@ class SubmissionRepo:
             (team_id, team_id),
         )
         return [Submission.model_validate(row) for row in await cur.fetchall()]
+
+    async def list_latest_per_team(self, game: str | None) -> list[Submission]:
+        """Each team's newest submission, by game then team; every game's when `game` is
+        None, one per team and game."""
+        cur = await self._conn.execute(
+            f"select distinct on (s.game, s.team_id) {COLUMNS} "
+            "where %s::text is null or s.game = %s "
+            "order by s.game, s.team_id, s.created_at desc",
+            (game, game),
+        )
+        return [Submission.model_validate(row) for row in await cur.fetchall()]

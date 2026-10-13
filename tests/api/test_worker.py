@@ -20,7 +20,6 @@ from tests.api.test_queue import LEASE, get
 from tests.api.test_submissions import upload, zip_dir
 from worker import match as engine
 from worker.main import Worker
-from api.db.matches import MatchRepo
 
 BotPath = Callable[[str], Path]
 UCBC2027_BOTS = Path(__file__).resolve().parents[2] / "bots" / "ucbc2027"
@@ -36,6 +35,8 @@ def worker(app: FastAPI) -> Worker:
         poll_s=0.05,
         heartbeat_s=0.1,
         lease=LEASE,
+        schedule_s=0.05,
+        schedule_sets=1,
     )
 
 
@@ -201,15 +202,24 @@ async def test_serve_runs_slots_and_drains(
     stop.set()
     await asyncio.wait_for(serving, 5)
 
-async def test_scheduler_schedules_new_games(
-    member_client: AsyncClient,
-    member_b_client: AsyncClient,
-    db: DBConnection,
-    bot: BotPath
+
+async def test_serve_schedules_platform_matches(
+    member_client: AsyncClient, member_b_client: AsyncClient, worker: Worker, bot: BotPath
 ) -> None:
-    r = await upload(member_client, zip_dir(bot("random")), form={"name": bot("random").name, "game": "tictactoe"})
-    assert r.status_code == 201, r.text
-    r_b = await upload(member_b_client, zip_dir(bot("first_empty")), form={"name": bot("first_empty").name, "game": "tictactoe"})
-    assert r.status_code == 201, r_b.text
-    match_id = db.match_repo.auto_schedule(3)
-    await wait_for(member_client, match_id, status="queued")
+    """Two teams' submissions are paired by the worker and played, with no one queueing."""
+    for client, name in [(member_client, "random"), (member_b_client, "first_empty")]:
+        r = await upload(client, zip_dir(bot(name)), form={"name": name, "game": "tictactoe"})
+        assert r.status_code == 201, r.text
+    stop = asyncio.Event()
+
+    serving = asyncio.create_task(worker.serve(stop))
+    for _ in range(200):
+        platform = (await member_client.get("/matches", params={"origin": "platform"})).json()
+        if platform and platform[0]["status"] == "done":
+            break
+        await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(serving, 5)
+    assert len(platform) == 1, platform
+    assert platform[0]["status"] == "done", platform[0]["error"]
+    assert [t["name"] for t in platform[0]["teams"]] == ["random", "first_empty"]

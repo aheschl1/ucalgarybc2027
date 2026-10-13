@@ -73,7 +73,7 @@ From the checkout instead of compose:
 ```bash
 make db && uv run alembic upgrade head 
 uv run ucbc-api                         # API on :8000; `make web` builds the frontend into it
-uv run ucbc-worker                      # plays queued matches, UCBC_WORKER_SLOTS at a time
+uv run ucbc-worker                      # queues platform matches, plays queued ones UCBC_WORKER_SLOTS at a time
 npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
 ```
 

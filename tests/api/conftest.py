@@ -130,10 +130,13 @@ async def member_client(app: FastAPI, member: User) -> AsyncIterator[AsyncClient
     async with log_in(app, MEMBER) as c:
         yield c
 
+
 @pytest.fixture
 async def member_b_client(app: FastAPI, member_b: User) -> AsyncIterator[AsyncClient]:
+    """Bob, on a team of his own."""
     async with log_in(app, MEMBER_B) as c:
         yield c
+
 
 @pytest.fixture
 async def teammate_client(

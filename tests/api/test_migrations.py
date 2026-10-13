@@ -244,3 +244,35 @@ async def test_replay_blob_keys(fresh_url: str, blob_url: str) -> None:
     with psycopg.connect(fresh_url) as conn:
         (stored,) = conn.execute("select replay from sets").fetchone() or (None,)
         assert json.loads(gzip.decompress(stored)) == replay
+
+
+def test_reset_elo(fresh_url: str, blob_url: str) -> None:
+    alembic(fresh_url, blob_url, "upgrade", "0014")
+    with psycopg.connect(fresh_url, autocommit=True) as conn:
+        for name, elo, matches in [("Ann", 950.5, 3), ("Bob", 649.5, 3)]:
+            conn.execute(
+                "insert into teams (name, join_code, elo, elo_matches) values (%s, %s, %s, %s)",
+                (name, name, elo, matches),
+            )
+        ids = {}
+        for origin in ["platform", "user"]:
+            row = conn.execute(
+                "insert into matches (origin, game, teams, config, bots, maps, status) "
+                "values (%s, 'tictactoe', '[]', '{}', '[]', '[]', 'done') returning id",
+                (origin,),
+            ).fetchone()
+            assert row is not None
+            ids[origin] = row[0]
+            conn.execute(
+                "insert into sets (match_id, index, first_team, reason, ticks, replay_key) "
+                "values (%s, 0, 0, 'draw', 1, 'x')",
+                (row[0],),
+            )
+
+    # Every team is unrated again; the platform matches go, sets and all, and user matches stay.
+    alembic(fresh_url, blob_url, "upgrade", "0015")
+    with psycopg.connect(fresh_url) as conn:
+        teams = conn.execute("select name, elo, elo_matches from teams order by name").fetchall()
+        assert teams == [("Ann", 800.0, 0), ("Bob", 800.0, 0)]
+        assert conn.execute("select id from matches").fetchall() == [(ids["user"],)]
+        assert conn.execute("select match_id from sets").fetchall() == [(ids["user"],)]

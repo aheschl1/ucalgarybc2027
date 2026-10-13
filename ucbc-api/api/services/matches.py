@@ -148,7 +148,8 @@ async def finish_match(
         )
         if not done:
             raise LostLease(match)
-        await _rate(db, match, replay.result)
+        if match.origin == "platform": # only elo the platform matches, not user ones
+            await _rate(db, match, replay.result)
 
 
 async def _rate(db: DBConnection, match: MatchRow, result: MatchResult) -> None:

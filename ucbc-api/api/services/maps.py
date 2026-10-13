@@ -57,7 +57,7 @@ async def get_map(db: DBConnection, id: UUID) -> Map:
 
 
 async def list_maps(db: DBConnection, game: str | None) -> list[Map]:
-    return await db.map_repo.list(game)
+    return await db.map_repo.list_maps(game)
 
 
 async def set_archived(db: DBConnection, id: UUID, archived: bool) -> Map:

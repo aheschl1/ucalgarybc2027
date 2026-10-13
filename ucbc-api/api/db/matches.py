@@ -32,6 +32,8 @@ OWNED = """
 """
 # What a team may see on top of that: platform matches. A null team sees everything.
 VISIBLE = f"%s::bigint is null or matches.origin = 'platform' or {OWNED}"
+# The advisory lock key the scheduler takes; any constant, as long as it is this one.
+SCHEDULING_LOCK = 1
 
 
 class MatchRepo:
@@ -112,6 +114,21 @@ class MatchRepo:
             (*args, limit),
         )
         return [MatchRow.model_validate(row) for row in await cur.fetchall()]
+
+    async def list_bots_among(
+        self, submissions: list[UUID], origin: MatchOrigin
+    ) -> list[list[UUID]]:
+        """The bot slots of every match of `origin`, whatever its status, whose bots are all
+        in `submissions`."""
+        cur = await self._conn.execute(
+            "select bots from matches where origin = %s and bots <@ %s",
+            (origin, Jsonb([str(s) for s in submissions])),
+        )
+        return [[UUID(b) for b in row["bots"]] for row in await cur.fetchall()]
+
+    async def lock_scheduling(self) -> None:
+        """Held until the transaction ends, so two schedulers cannot queue the same pair."""
+        await self._conn.execute("select pg_advisory_xact_lock(%s)", (SCHEDULING_LOCK,))
 
     async def claim(self, worker: str, lease: timedelta) -> MatchRow | None:
         """The next queued match, or a running one whose heartbeat is older than `lease`."""

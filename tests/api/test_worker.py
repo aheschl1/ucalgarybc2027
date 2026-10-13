@@ -35,6 +35,8 @@ def worker(app: FastAPI) -> Worker:
         poll_s=0.05,
         heartbeat_s=0.1,
         lease=LEASE,
+        schedule_s=0.05,
+        schedule_sets=1,
     )
 
 
@@ -199,3 +201,25 @@ async def test_serve_runs_slots_and_drains(
     await wait_for(admin_client, second, status="done")
     stop.set()
     await asyncio.wait_for(serving, 5)
+
+
+async def test_serve_schedules_platform_matches(
+    member_client: AsyncClient, member_b_client: AsyncClient, worker: Worker, bot: BotPath
+) -> None:
+    """Two teams' submissions are paired by the worker and played, with no one queueing."""
+    for client, name in [(member_client, "random"), (member_b_client, "first_empty")]:
+        r = await upload(client, zip_dir(bot(name)), form={"name": name, "game": "tictactoe"})
+        assert r.status_code == 201, r.text
+    stop = asyncio.Event()
+
+    serving = asyncio.create_task(worker.serve(stop))
+    for _ in range(200):
+        platform = (await member_client.get("/matches", params={"origin": "platform"})).json()
+        if platform and platform[0]["status"] == "done":
+            break
+        await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(serving, 5)
+    assert len(platform) == 1, platform
+    assert platform[0]["status"] == "done", platform[0]["error"]
+    assert [t["name"] for t in platform[0]["teams"]] == ["random", "first_empty"]

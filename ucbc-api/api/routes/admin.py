@@ -10,7 +10,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/users")
 async def list_users(db: DB, _user: AdminUser) -> list[User]:
-    return [u.public() for u in await db.user_repo.list()]
+    return [u.public() for u in await db.user_repo.list_users()]
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)

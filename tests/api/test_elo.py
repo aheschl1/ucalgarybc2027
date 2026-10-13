@@ -76,6 +76,14 @@ async def bots(
     return ids
 
 
+async def enqueue_platform(client: AsyncClient, db: DBConnection, bots: list[str]) -> UUID:
+    """A queued platform match. The API only queues user matches, which rate nothing, so
+    the origin is set by hand."""
+    match_id = await enqueue(client, {"game": "tictactoe", "bots": bots})
+    await db.conn.execute("update matches set origin = 'platform' where id = %s", (match_id,))
+    return match_id
+
+
 async def play(
     client: AsyncClient,
     db: DBConnection,
@@ -83,8 +91,8 @@ async def play(
     bots: list[str],
     winners: list[int | None],
 ) -> None:
-    """Queues the match, claims it, and finishes it with these set winners."""
-    match_id = await enqueue(client, {"game": "tictactoe", "bots": bots})
+    """Queues a platform match, claims it, and finishes it with these set winners."""
+    match_id = await enqueue_platform(client, db, bots)
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None and held.id == match_id
     await matches.finish_match(db, held, replay(match_id, winners), blobs)
@@ -125,7 +133,7 @@ async def test_self_play_and_errors_rate_nothing(
 ) -> None:
     await play(admin_client, db, blobs, [bots[ROOT], bots[ROOT]], [0, 0, 0])
 
-    match_id = await enqueue(admin_client, {"game": "tictactoe", "bots": list(bots.values())})
+    match_id = await enqueue_platform(admin_client, db, list(bots.values()))
     held = await matches.claim_match(db, "w", LEASE)
     assert held is not None and held.id == match_id
     await matches.fail_match(db, held, "boom")
@@ -133,10 +141,22 @@ async def test_self_play_and_errors_rate_nothing(
     assert await ratings(db) == {ROOT: (800, 0), ALICE: (800, 0)}
 
 
+async def test_user_matches_rate_nothing(
+    admin_client: AsyncClient, db: DBConnection, blobs: BlobStore, bots: dict[int, str]
+) -> None:
+    """Only the platform's matches count; a match a user queued is a scrimmage."""
+    match_id = await enqueue(admin_client, {"game": "tictactoe", "bots": list(bots.values())})
+    held = await matches.claim_match(db, "w", LEASE)
+    assert held is not None and held.origin == "user"
+    await matches.finish_match(db, held, replay(match_id, [0, 0, 0]), blobs)
+    assert (await admin_client.get(f"/matches/{match_id}")).json()["status"] == "done"
+    assert await ratings(db) == {ROOT: (800, 0), ALICE: (800, 0)}
+
+
 async def test_a_lost_lease_rates_nothing(
     admin_client: AsyncClient, db: DBConnection, blobs: BlobStore, bots: dict[int, str]
 ) -> None:
-    match_id = await enqueue(admin_client, {"game": "tictactoe", "bots": list(bots.values())})
+    match_id = await enqueue_platform(admin_client, db, list(bots.values()))
     held = await matches.claim_match(db, "w1", LEASE)
     assert held is not None
     await db.conn.execute(

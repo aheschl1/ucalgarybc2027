@@ -39,7 +39,7 @@ class TeamRepo:
     async def list_elos(self) -> list[TeamElo]:
         """Highest first."""
         cur = await self._conn.execute(
-            f"select {ELO_COLUMNS} from teams order by teams.elo desc, id"
+            f"select {ELO_COLUMNS} from teams order by (elo_matches=0), teams.elo desc, id"
         )
         return [TeamElo.model_validate(row) for row in await cur.fetchall()]
 

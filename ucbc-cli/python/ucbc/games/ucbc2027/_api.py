@@ -238,6 +238,10 @@ class Ucbc2027Api(Handle):
         reply: bool = self._query({"type": "can_merge", "bot_id": bot_id})
         return reply
 
+    def can_split(self, x: int, y: int, level: int) -> bool:
+        reply: bool = self._query({"type": "can_split", "x": x, "y": y, "level": level})
+        return reply
+
     def can_attack(self, bot_id: int) -> bool:
         reply: bool = self._query({"type": "can_attack", "bot_id": bot_id})
         return reply
@@ -259,6 +263,9 @@ class Ucbc2027Api(Handle):
 
     def merge(self, bot_id: int) -> UnitView:
         return _from_UnitView(self._act({"type": "merge", "bot_id": bot_id}))
+
+    def split(self, x: int, y: int, level: int) -> UnitView:
+        return _from_UnitView(self._act({"type": "split", "x": x, "y": y, "level": level}))
 
     def attack(self, bot_id: int) -> None:
         self._act({"type": "attack", "bot_id": bot_id})

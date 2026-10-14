@@ -25,6 +25,7 @@ pub enum Queries {
     Width(Request<(), usize>),
     Height(Request<(), usize>),
     CanMerge(Request<Target, bool>),
+    CanSplit(Request<SplitTarget, bool>),
     CanAttack(Request<Target, bool>),
 }
 
@@ -37,6 +38,7 @@ pub enum Action {
     Grab(Request<Coord, ItemView>),
     Drop(Request<Coord, Dropped>),
     Merge(Request<Target, UnitView>),
+    Split(Request<SplitTarget, UnitView>),
     Attack(Request<Target, ()>),
 }
 
@@ -44,6 +46,20 @@ pub enum Action {
 #[derive(Deserialize, JsonSchema)]
 pub struct Target {
     pub bot_id: u64,
+}
+
+/// A split: the tile the new dino appears on and the levels it takes.
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+pub struct SplitTarget {
+    pub x: usize,
+    pub y: usize,
+    pub level: u32,
+}
+
+impl SplitTarget {
+    pub fn at(self) -> Coord {
+        Coord::new(self.x, self.y)
+    }
 }
 
 pub struct Ucbc2027 {
@@ -58,7 +74,8 @@ pub struct Ucbc2027 {
 pub(crate) struct Turn {
     pub spawned: bool,
     pub moved: bool,
-    pub merges: u32,
+    /// Merges and splits together.
+    pub merges_or_splits: u32,
     pub attacks: u32,
 }
 
@@ -213,6 +230,7 @@ impl Game for Ucbc2027 {
             Queries::Width(q) => Ok(q.reply(self.state.map.width())),
             Queries::Height(q) => Ok(q.reply(self.state.map.height())),
             Queries::CanMerge(q) => Ok(q.reply(self.check_merge(bot, BotId(q.bot_id)).is_ok())),
+            Queries::CanSplit(q) => Ok(q.reply(self.check_split(bot, *q).is_ok())),
             Queries::CanAttack(q) => Ok(q.reply(self.check_attack(bot, BotId(q.bot_id)).is_ok())),
         }
     }
@@ -225,6 +243,7 @@ impl Game for Ucbc2027 {
             Action::Grab(a) => Ok(a.reply(self.grab(bot, *a)?)),
             Action::Drop(a) => Ok(a.reply(self.drop(bot, *a)?)),
             Action::Merge(a) => Ok(a.reply(self.merge(bot, BotId(a.bot_id))?)),
+            Action::Split(a) => Ok(a.reply(self.split(bot, *a)?)),
             Action::Attack(a) => Ok(a.reply(self.attack(bot, BotId(a.bot_id))?)),
         }
     }

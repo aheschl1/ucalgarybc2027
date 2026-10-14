@@ -6,7 +6,7 @@ use prost::Message;
 use serde_json::{Value, json};
 use ucbc_2027::rules::{
     ATTACK_COST, ATTACKS_PER_TURN, BASE_INCOME, DINO_HEALTH, DINO_MAX_HEALTH, EQUAL_LEVEL_DAMAGE,
-    INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_PER_TURN, SPAWN_COST, START_BONES, damage,
+    INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_OR_SPLITS_PER_TURN, SPAWN_COST, START_BONES, damage,
 };
 use ucbc_2027::{Coord, Ucbc2027, UnitView, proto};
 use ucbc_engine::{
@@ -101,6 +101,47 @@ fn merge(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, Act
 #[track_caller]
 fn attack(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, ActionError> {
     checked(game, "attack", bot, target)
+}
+
+/// Asks `can_split` first and checks the action agrees.
+#[track_caller]
+fn split(
+    game: &mut dyn DynGame,
+    bot: BotId,
+    x: u64,
+    y: u64,
+    level: u64,
+) -> Result<Value, ActionError> {
+    let can = game
+        .handle_query(
+            bot,
+            &json!({"type": "can_split", "x": x, "y": y, "level": level}),
+        )
+        .unwrap();
+    let result = game.apply_action(
+        bot,
+        &json!({"type": "split", "x": x, "y": y, "level": level}),
+    );
+    assert_eq!(
+        can,
+        json!(result.is_ok()),
+        "can_split disagrees: {result:?}"
+    );
+    result
+}
+
+/// A team 0 dino at (3, 8) of level `level`, built by merging fresh spawns, with its
+/// turn ended.
+fn stacked(game: &mut dyn DynGame, level: u32) -> BotId {
+    let dino = dino_at(game, 3, 8);
+    for _ in 1..level {
+        let other = dino_at(game, 3, 7);
+        merge(game, dino, other).unwrap();
+        game.end_step(dino);
+        go(game, dino, 3, 8).unwrap();
+        game.end_step(dino);
+    }
+    dino
 }
 
 /// A team 0 dino at (9, 6) facing a team 1 dino at (10, 6) that holds the fossil
@@ -540,10 +581,10 @@ fn a_merge_adds_levels_and_takes_the_target_tile() {
 fn merges_per_turn_are_limited() {
     let mut g = game();
     let dino = dino_at(g.as_mut(), 0, 8);
-    let others: Vec<BotId> = (0..=MERGES_PER_TURN)
+    let others: Vec<BotId> = (0..=MERGES_OR_SPLITS_PER_TURN)
         .map(|i| dino_at(g.as_mut(), 0, 7 - u64::from(i)))
         .collect();
-    for &other in &others[..MERGES_PER_TURN as usize] {
+    for &other in &others[..MERGES_OR_SPLITS_PER_TURN as usize] {
         merge(g.as_mut(), dino, other).unwrap();
     }
     let last = *others.last().unwrap();
@@ -571,6 +612,71 @@ fn a_merge_refuses_what_the_rules_forbid() {
     // None of that used the merge.
     walk(g.as_mut(), far, &[(3, 8)]);
     merge(g.as_mut(), dino, far).unwrap();
+}
+
+#[test]
+fn a_split_divides_levels_copies_health_and_queues_the_new_dino() {
+    let mut g = game();
+    let dino = stacked(g.as_mut(), 3);
+    assert_eq!(me(g.as_ref(), dino)["health"], json!(3 * DINO_HEALTH));
+    let new = split(g.as_mut(), dino, 3, 7, 1).unwrap();
+    let id = new["id"].as_u64().unwrap();
+    assert_eq!(
+        new,
+        json!({"type": "dino", "id": id, "pos": {"x": 3, "y": 7}, "level": 1, "health": 3 * DINO_HEALTH, "held": null, "vision": 3})
+    );
+    let rest = me(g.as_ref(), dino);
+    assert_eq!(rest["level"], json!(2));
+    assert_eq!(rest["health"], json!(3 * DINO_HEALTH));
+    assert_eq!(rest["pos"], json!({"x": 3, "y": 8}));
+    assert_eq!(
+        item(g.as_ref(), dino, 3, 7),
+        json!({"type": "dino", "id": id, "team": 0, "level": 1})
+    );
+    assert_eq!(g.team_of(BotId(id)), Some(TeamId(0)));
+    let ids: Vec<Value> = g.snapshot()["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| u["id"].clone())
+        .collect();
+    assert_eq!(*ids.last().unwrap(), json!(id));
+    // The move is still unused.
+    go(g.as_mut(), dino, 4, 8).unwrap();
+}
+
+#[test]
+fn merges_and_splits_share_one_budget() {
+    let mut g = game();
+    let dino = stacked(g.as_mut(), 2);
+    let other = dino_at(g.as_mut(), 3, 9);
+    split(g.as_mut(), dino, 3, 7, 1).unwrap();
+    refused(merge(g.as_mut(), dino, other), "already merged or split");
+    g.end_step(dino);
+    merge(g.as_mut(), dino, other).unwrap();
+    refused(split(g.as_mut(), dino, 3, 8, 1), "already merged or split");
+    g.end_step(dino);
+    split(g.as_mut(), dino, 3, 8, 1).unwrap();
+}
+
+#[test]
+fn a_split_refuses_what_the_rules_forbid() {
+    let mut g = game();
+    let small = dino_at(g.as_mut(), 0, 7);
+    refused(split(g.as_mut(), small, 0, 6, 1), "level 1 dino");
+    let dino = stacked(g.as_mut(), 2);
+    let other = dino_at(g.as_mut(), 3, 9);
+    refused(split(g.as_mut(), LAB0, 3, 7, 1), "only a dino");
+    refused(split(g.as_mut(), dino, 3, 7, 0), "level must be");
+    refused(split(g.as_mut(), dino, 3, 7, 2), "level must be");
+    refused(split(g.as_mut(), dino, 3, 6, 1), "out of range");
+    refused(split(g.as_mut(), dino, 3, 9, 1), "not free");
+    refused(split(g.as_mut(), dino, 2, 8, 1), "not free");
+    refused(split(g.as_mut(), dino, 99, 8, 1), "out of range");
+    assert_eq!(me(g.as_ref(), dino)["level"], json!(2));
+    assert_eq!(item(g.as_ref(), dino, 3, 9)["id"], json!(other.0));
+    // None of that used the split.
+    split(g.as_mut(), dino, 3, 7, 1).unwrap();
 }
 
 #[test]

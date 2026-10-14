@@ -79,6 +79,12 @@ export type Action =
       type: "merge";
     }
   | {
+      level: number;
+      type: "split";
+      x: number;
+      y: number;
+    }
+  | {
       bot_id: number;
       type: "attack";
     };

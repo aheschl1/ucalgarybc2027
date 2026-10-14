@@ -21,7 +21,7 @@ make up         # the full platform in compose. do not run for modular dev testi
 The engine is written to be game agnostic; `default` in `ucbc-games/Cargo.toml` picks the games a build includes.
 Tests build all games.
 
-To work on one piece without the full build, see [Run one piece alone](#run-one-piece-alone).
+To work on one piece without the full build, see section on [modular execution](#modular-execution).
 
 ### Run a match
 
@@ -80,7 +80,7 @@ npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
 
 `ENV=prod` reads `.env.prod` over `.env.local`
 
-### Modular testing
+### Modular execution
 
 Each platform chunk has a dev loop that skips `make build`. 
 

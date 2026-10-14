@@ -11,7 +11,7 @@ WORKDIR /src
 COPY rust-toolchain.toml ./
 RUN rustup toolchain install
 
-COPY Cargo.toml Cargo.lock Makefile ./
+COPY Cargo.toml Cargo.lock Makefile Makefile.build ./
 COPY ucbc-engine/ ucbc-engine/
 COPY ucbc-games/ ucbc-games/
 COPY games/ games/

@@ -32,7 +32,7 @@ jobs:
       - run: npm run build -w @ucbc/editor-ucbc2027 -- --outDir ../../../ucbc-cli/python/ucbc/editor/static --emptyOutDir
       # The pinned guest and stdlib, as make build fetches them.
       - run: |
-          eval "$(sed -n 's/^\(GUEST_RELEASE\|GUEST_SHA256\|STDLIB_SHA256\) := /\1=/p' Makefile)"
+          eval "$(sed -n 's/^\(GUEST_RELEASE\|GUEST_SHA256\|STDLIB_SHA256\) := /\1=/p' Makefile.build)"
           mkdir -p .cache ucbc-cli/python/ucbc/runtime/lib
           curl -fsSL -o .cache/guest.wasm "$GUEST_RELEASE/guest.wasm"
           curl -fsSL -o ucbc-cli/python/ucbc/runtime/lib/python314.zip "$GUEST_RELEASE/stdlib.zip"

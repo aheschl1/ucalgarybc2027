@@ -48,6 +48,7 @@ export type ItemView =
       type: "dino";
     }
   | {
+      id: number;
       type: "fossil";
     };
 export type Action =

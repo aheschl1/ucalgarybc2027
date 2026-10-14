@@ -45,7 +45,8 @@ function LabTile({ tile }: { tile: Of<Environment, "lab"> }) {
   return <Picture href={forTeam(assets.labTile, tile.team)} />;
 }
 
-function Fossil() {
+/** Also drawn on its own for the fossils lying on the board, which have no item view. */
+export function FossilSprite() {
   return <Picture href={assets.fossil} />;
 }
 
@@ -78,7 +79,7 @@ function Dino({ unit }: { unit: Of<UnitEntry, "dino"> }) {
 }
 
 const tiles: Sprites<Environment, "tile"> = { empty: EmptyTile, wall: WallTile, lab: LabTile };
-const items: Sprites<ItemView, "item"> = { fossil: Fossil, dino: HeldDino };
+const items: Sprites<ItemView, "item"> = { fossil: FossilSprite, dino: HeldDino };
 const units: Sprites<UnitEntry, "unit"> = { lab: Lab, dino: Dino };
 
 // Each draws a thing with the sprite for its type. The tables pair each type with its

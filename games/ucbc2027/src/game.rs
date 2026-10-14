@@ -93,7 +93,7 @@ impl Ucbc2027 {
                     level: dino.level,
                 }
             }
-            Item::Fossil => ItemView::Fossil,
+            Item::Fossil(id) => ItemView::Fossil { id: id.0 },
         }
     }
 
@@ -307,7 +307,7 @@ impl Game for Ucbc2027 {
             fossils: state
                 .items
                 .iter()
-                .filter(|&(_, item)| *item == Some(Item::Fossil))
+                .filter(|&(_, item)| matches!(item, Some(Item::Fossil(_))))
                 .map(|(at, _)| at)
                 .collect(),
             teams: state

@@ -91,10 +91,13 @@ class ItemViewDino:
 
 @dataclass(frozen=True)
 class ItemViewFossil:
+    id: int
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
-        return cls()
+        return cls(
+            id=d["id"],
+        )
 
 
 @dataclass(frozen=True)

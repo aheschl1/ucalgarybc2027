@@ -99,7 +99,7 @@ impl Ucbc2027 {
             Some(Environment::Lab { team: owner }) if owner != team.0 => {
                 return Err(invalid("not your lab"));
             }
-            Some(Environment::Lab { .. }) if item != Item::Fossil => {
+            Some(Environment::Lab { .. }) if !matches!(item, Item::Fossil(_)) => {
                 return Err(invalid("only fossils go in the lab"));
             }
             Some(Environment::Lab { .. }) => true,

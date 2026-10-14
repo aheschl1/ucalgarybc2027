@@ -59,8 +59,7 @@ class Dino:
         self.home = find_home(handle, me.pos, 1)
         self.rng = random.Random(handle.seed)
         self.heading: Direction | None = None
-        # Fossils already split for, so a second sighting does not split again.
-        self.split_for: set[Coord] = set()
+        self.split_for: set[int] = set()
 
     def step(self, handle: Ucbc2027Handle) -> None:
         me = handle.me()
@@ -68,9 +67,9 @@ class Dino:
         if self.home is None:
             self.home = find_home(handle, me.pos, me.vision)
         if me.held is not None:
-            fossil = nearest_fossil(handle, me.pos, me.vision)
-            if fossil is not None and fossil not in self.split_for and self.split_off(handle, me):
-                self.split_for.add(fossil)
+            seen = nearest_fossil(handle, me.pos, me.vision)
+            if seen is not None and seen[1].id not in self.split_for and self.split_off(handle, me):
+                self.split_for.add(seen[1].id)
             if self.home is None:
                 self.wander(handle)  # Split off out of sight of the lab: find it.
             elif dist(self.home, me.pos) <= 1:
@@ -103,14 +102,14 @@ class Dino:
                 handle.attack(tileitem.id)
                 return
 
-        fossil = nearest_fossil(handle, me.pos, me.vision)
+        seen = nearest_fossil(handle, me.pos, me.vision)
 
-        if fossil is None:
+        if seen is None:
             self.wander(handle)
-        elif dist(fossil, me.pos) <= 1:
-            handle.grab(fossil.x, fossil.y)
+        elif dist(seen[0], me.pos) <= 1:
+            handle.grab(seen[0].x, seen[0].y)
         else:
-            self.go(handle, fossil)
+            self.go(handle, seen[0])
 
     def split_off(self, handle: Ucbc2027Handle, me: UnitViewDino) -> bool:
         """Split a helper onto the first free tile around, if the rules allow it now.
@@ -152,18 +151,21 @@ def find_home(handle: Ucbc2027Handle, pos: Coord, look: int) -> Coord | None:
     return best
 
 
-def nearest_fossil(handle: Ucbc2027Handle, pos: Coord, look: int) -> Coord | None:
-    """The closest fossil within `look` tiles: the dino's vision, since a tile any
-    further is refused. Every tile looked at is a query, and queries are what a
-    step's time goes on."""
+def nearest_fossil(
+    handle: Ucbc2027Handle, pos: Coord, look: int
+) -> tuple[Coord, ItemViewFossil] | None:
+    """The closest fossil within `look` tiles, and where it lies: the dino's vision,
+    since a tile any further is refused. Every tile looked at is a query, and queries
+    are what a step's time goes on."""
     width, height = handle.width(), handle.height()
-    best: Coord | None = None
+    best: tuple[Coord, ItemViewFossil] | None = None
     for y in range(max(pos.y - look, 0), min(pos.y + look + 1, height)):
         for x in range(max(pos.x - look, 0), min(pos.x + look + 1, width)):
-            if isinstance(handle.item(x, y), ItemViewFossil):
+            seen = handle.item(x, y)
+            if isinstance(seen, ItemViewFossil):
                 here = Coord(x, y)
-                if best is None or dist(here, pos) < dist(best, pos):
-                    best = here
+                if best is None or dist(here, pos) < dist(best[0], pos):
+                    best = (here, seen)
     return best
 
 

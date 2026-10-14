@@ -63,6 +63,18 @@ fn item(game: &dyn DynGame, bot: BotId, x: u64, y: u64) -> Value {
         .unwrap()
 }
 
+/// The fossil `bot` sees on (x, y), id and all, to recognise it again later.
+#[track_caller]
+fn fossil(game: &dyn DynGame, bot: BotId, x: u64, y: u64) -> Value {
+    let seen = item(game, bot, x, y);
+    assert_eq!(
+        seen["type"],
+        json!("fossil"),
+        "no fossil on ({x}, {y}): {seen}"
+    );
+    seen
+}
+
 /// Team 0's lab spawns a dino at (x, y) and ends its turn; the dino's id.
 fn dino_at(game: &mut dyn DynGame, x: u64, y: u64) -> BotId {
     let spawned = spawn(game, LAB0, x, y).unwrap();
@@ -302,11 +314,9 @@ fn a_move_stays_on_the_board() {
 fn grab_and_put_are_free_and_hold_one_thing() {
     let mut g = game();
     let dino = by_fossil(g.as_mut());
-    assert_eq!(
-        grab(g.as_mut(), dino, 6, 7).unwrap(),
-        json!({"type": "fossil"})
-    );
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
+    assert_eq!(grab(g.as_mut(), dino, 6, 7).unwrap(), the_fossil);
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
     assert_eq!(item(g.as_ref(), dino, 6, 7), Value::Null);
     refused(grab(g.as_mut(), dino, 6, 7), "already holding");
     assert_eq!(
@@ -314,11 +324,30 @@ fn grab_and_put_are_free_and_hold_one_thing() {
         json!({"type": "placed"})
     );
     refused(put(g.as_mut(), dino, 6, 6), "holding nothing");
-    assert_eq!(item(g.as_ref(), dino, 6, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), dino, 6, 6), the_fossil);
     // Again in the same turn, and the move is still unused.
     grab(g.as_mut(), dino, 6, 6).unwrap();
     put(g.as_mut(), dino, 6, 7).unwrap();
     go(g.as_mut(), dino, 5, 7).unwrap();
+}
+
+#[test]
+fn fossils_are_numbered_by_the_map_and_keep_their_id() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
+    let id = the_fossil["id"].as_u64().expect("an id");
+    assert!(
+        id < 6,
+        "six fossils on the standard map, numbered from 0: {id}"
+    );
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    walk(g.as_mut(), dino, &[(6, 6), (7, 6)]);
+    put(g.as_mut(), dino, 8, 7).unwrap();
+    assert_eq!(item(g.as_ref(), dino, 8, 7), the_fossil);
+    // The snapshot lists where fossils lie, and no more.
+    let lying = &g.snapshot()["fossils"];
+    assert!(lying.as_array().unwrap().contains(&json!({"x": 8, "y": 7})));
 }
 
 #[test]
@@ -333,14 +362,14 @@ fn grab_and_put_refuse_what_the_rules_forbid() {
     refused(grab(g.as_mut(), dino, 5, 6), "cannot carry"); // itself
     refused(grab(g.as_mut(), LAB0, 0, 7), "only a dino");
     assert_eq!(item(g.as_ref(), dino, 4, 7)["type"], "dino");
-    assert_eq!(item(g.as_ref(), dino, 6, 7), json!({"type": "fossil"}));
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
     grab(g.as_mut(), dino, 6, 7).unwrap();
     refused(put(g.as_mut(), dino, 4, 7), "not free");
     refused(put(g.as_mut(), dino, 5, 5), "not free"); // a wall
     refused(put(g.as_mut(), dino, 5, 6), "not free"); // itself
     refused(put(g.as_mut(), dino, 7, 7), "out of range");
     refused(put(g.as_mut(), LAB0, 0, 7), "only a dino");
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
 }
 
 #[test]
@@ -368,11 +397,12 @@ fn a_fossil_dropped_on_your_lab_raises_income() {
 fn a_fossil_cannot_go_into_the_enemy_lab() {
     let mut g = game();
     let dino = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
     grab(g.as_mut(), dino, 6, 7).unwrap();
     let path: Vec<(u64, u64)> = (6..=12).map(|x| (x, 6)).collect();
     walk(g.as_mut(), dino, &path);
     refused(put(g.as_mut(), dino, 13, 7), "not your lab");
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
     assert_eq!(g.snapshot()["teams"][1]["fossils"], json!(0));
 }
 
@@ -706,29 +736,34 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     // The target holds; the merger holds nothing.
     let mut g = game();
     let carrier = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), carrier, 6, 7);
     grab(g.as_mut(), carrier, 6, 7).unwrap();
     let dino = dino_at(g.as_mut(), 3, 7);
     walk(g.as_mut(), dino, &[(4, 6)]);
     merge(g.as_mut(), dino, carrier).unwrap();
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
     assert_eq!(item(g.as_ref(), dino, 4, 6), Value::Null);
 
     // The merger holds; the target holds nothing.
     let mut g = game();
     let carrier = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), carrier, 6, 7);
     grab(g.as_mut(), carrier, 6, 7).unwrap();
     let dino = dino_at(g.as_mut(), 3, 7);
     walk(g.as_mut(), dino, &[(4, 6)]);
     merge(g.as_mut(), carrier, dino).unwrap();
-    assert_eq!(held(g.as_ref(), carrier), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), carrier), the_fossil);
     assert_eq!(item(g.as_ref(), carrier, 5, 6), Value::Null);
 
     // Both hold: the merger's goes down where it stood.
     let mut g = game();
     let first = by_fossil(g.as_mut());
+    let near = fossil(g.as_ref(), first, 6, 7);
     grab(g.as_mut(), first, 6, 7).unwrap();
     walk(g.as_mut(), first, &[(6, 6), (7, 6), (8, 6)]);
     put(g.as_mut(), first, 7, 7).unwrap();
+    let far = fossil(g.as_ref(), first, 9, 7);
+    assert_ne!(near, far, "two fossils, two ids");
     grab(g.as_mut(), first, 9, 7).unwrap();
     let second = dino_at(g.as_mut(), 3, 7);
     walk(g.as_mut(), second, &[(4, 6), (5, 6), (6, 6)]);
@@ -736,8 +771,8 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     walk(g.as_mut(), second, &[(7, 6)]);
     merge(g.as_mut(), second, first).unwrap();
     assert_eq!(me(g.as_ref(), second)["pos"], json!({"x": 8, "y": 6}));
-    assert_eq!(held(g.as_ref(), second), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), second, 7, 6), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), second), far);
+    assert_eq!(item(g.as_ref(), second, 7, 6), near);
 }
 
 #[test]
@@ -818,6 +853,8 @@ fn an_attack_refuses_what_the_rules_forbid() {
 fn a_dino_with_no_health_dies_and_drops_its_load() {
     let mut g = game();
     let (ours, theirs) = face_off(g.as_mut());
+    let the_fossil = held(g.as_ref(), theirs);
+    assert_eq!(the_fossil["type"], json!("fossil"));
     let hits = DINO_HEALTH.div_ceil(EQUAL_LEVEL_DAMAGE);
     for _ in 1..hits {
         attack(g.as_mut(), ours, theirs).unwrap();
@@ -826,7 +863,7 @@ fn a_dino_with_no_health_dies_and_drops_its_load() {
     attack(g.as_mut(), ours, theirs).unwrap();
     assert!(g.team_of(theirs).is_none());
     assert!(!g.schedule().contains(&theirs));
-    assert_eq!(item(g.as_ref(), ours, 10, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), ours, 10, 6), the_fossil);
     g.end_step(ours);
     refused(attack(g.as_mut(), ours, theirs), "no such bot");
 }

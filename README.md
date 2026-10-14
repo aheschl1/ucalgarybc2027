@@ -2,23 +2,28 @@
 
 UCalgary Battlecode is a 1v1 game between participant implemented python bots.
 
-## Install
+## Install Package
 `pip install ucbc` or `uv add ucbc`
 
-## Dev Setup
+## Use Locally
+
+### Dev Setup
 
 Rust 1.96+, Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20.19+, Docker.
 
 ```bash
-make setup      # once: env files, dependencies, then `make build`
-make build        # after any change: generated code, the viewer and editor pages, the bot runtime, the engine in .venv
-make test       # rust, python, api (needs Docker), viewer; `make test-api` for the API alone
+make setup      # once to setup env files, dependencies, then run `make build`
+make build      # after any change to game code, and at setup
+make test       # runs all tests. run make test-api to run that alone
 make lint
-make up         # the platform in compose
+make up         # the full platform in compose. do not run for modular dev testing (runs build)
 ```
 The engine is written to be game agnostic; `default` in `ucbc-games/Cargo.toml` picks the games a build includes.
+Tests build all games.
 
-## Run a match
+To work on one piece without the full build, see [Run one piece alone](#run-one-piece-alone).
+
+### Run a match
 
 ```bash
 uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
@@ -35,15 +40,11 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | `--view` | open replay in browser |
 
 
-### Create Maps
+#### Create Maps
 
 `uv run ucbc editor my.map` opens the map editor on a file (new if missing)
 
-### Viewer Dev Setup
-
-To avoid the full build when working on the viewer: `npm ci && npm run dev -w @ucbc/viewer`
-
-## Write a participant bot
+### Write a participant bot
 
 A directory with a `main.py` defining `step`.
 
@@ -60,7 +61,7 @@ def step(handle: Ucbc2027Handle) -> None:
 uv run ucbc run bots/ucbc2027/mine bots/ucbc2027/noop
 ```
 
-## Platform API
+### Platform API
 
 ```bash
 make up                                 # Postgres, MinIO (:9001 console), API + web on :8000 (/api/docs), worker
@@ -79,7 +80,60 @@ npm run dev -w ucbc-web                 # frontend on :5173, /api proxied
 
 `ENV=prod` reads `.env.prod` over `.env.local`
 
-## Layout
+### Modular testing
+
+Each platform chunk has a dev loop that skips `make build`. 
+
+<details>
+<summary>API</summary>
+
+```bash
+make db                                 # Postgres and MinIO in Docker (run once if not up)
+uv run alembic upgrade head             # Run after database changes (migration files)
+uv run ucbc-api                         # API on :8000, docs at /api/docs
+uv run ucbc-worker                      # optional: plays queued matches
+make test-api                           # tests/api; starts its own Postgres and MinIO containers
+```
+</details>
+
+<details>
+<summary>Web app</summary>
+
+```bash
+uv run ucbc-api                         # the dev server proxies /api to :8000 (run once if not up)
+npm run dev -w ucbc-web                 # frontend on :5173
+npm run typecheck -w ucbc-web
+```
+
+Change `UCBC_API_PROXY` env var to proxy to a different api 
+</details>
+
+<details>
+<summary>Game viewer</summary>
+
+```bash
+npm run dev -w @ucbc/viewer             # lists the sample replays in games/<game>/viewer/replays; or drop a replay file on the page
+npm test -w @ucbc/viewer
+uv run pytest tests/test_viewer.py      # the sample replays against the engine
+```
+
+Changed Rust types need `make viewer-types` first
+</details>
+
+<details>
+<summary>Map editor</summary>
+
+```bash
+npm run dev -w @ucbc/editor-ucbc2027    # starts on a new map; Save downloads it
+npm test -w @ucbc/editor-ucbc2027
+uv run pytest tests/test_editor.py
+uv run ucbc editor my.map               # the built page on a file, after `make editor`
+```
+
+A changed `map.proto` needs `make editor-types` first.
+</details>
+
+### Layout
 
 | Path | Builds | Reached as |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 # On a cpython-N tag (`make tag KIND=cpython`): builds CPython for WASI (`make cpython`:
 # pymalloc, LTO, the wasm features wasmtime has) and publishes the build and stdlib zips as
-# a release at the tag, which `make guest` downloads: the Makefile pins the release and
+# a release at the tag, which `make guest` downloads: Makefile.build pins the release and
 # both checksums, printed in this run's summary.
 name: CPython
 

@@ -1,6 +1,6 @@
 # On a guest-N tag (`make tag KIND=guest`): builds the bot interpreter (ucbc-wasm/guest)
 # and the stdlib zip and publishes them as a release at the tag, which `make build`
-# downloads: the Makefile pins the release and both checksums, printed in this run's
+# downloads: Makefile.build pins the release and both checksums, printed in this run's
 # summary.
 name: Guest
 
@@ -20,7 +20,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-wasip1
-      # Only until the Makefile pins a CPython release: `make guest` then builds it here.
+      # Only until Makefile.build pins a CPython release: `make guest` then builds it here.
       - uses: astral-sh/setup-uv@v6
       - run: uv python install 3.14.7
       - run: make guest

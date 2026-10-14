@@ -38,7 +38,7 @@ it("draws the board in layers, a table of team counts, and the set's step order"
     tick: 3,
     environment: [[{ type: "lab", team: 1 }, { type: "wall" }, { type: "empty" }, { type: "empty" }]],
     units: [
-      { id: 2, team: 0, type: "dino", pos: { x: 2, y: 0 }, level: 1, health: 10, held: { type: "fossil" }, vision: 3 },
+      { id: 2, team: 0, type: "dino", pos: { x: 2, y: 0 }, level: 1, health: 10, held: { type: "fossil", id: 0 }, vision: 3 },
       { id: 0, team: 1, type: "lab", origin: { x: 0, y: 0 }, health: 100, vision: 2 },
     ],
     fossils: [{ x: 3, y: 0 }],

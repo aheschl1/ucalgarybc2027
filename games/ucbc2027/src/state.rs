@@ -6,17 +6,22 @@ use crate::map::Map;
 use crate::rules;
 use crate::unit::Dino;
 
+/// A fossil's identity for the set: it keeps it when carried, dropped and dropped
+/// again, so a bot can tell one fossil from another wherever it turns up.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FossilId(pub u64);
+
 /// The one movable thing a tile can hold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item {
     Dino(BotId),
-    Fossil,
+    Fossil(FossilId),
 }
 
 impl Item {
     /// Whether a dino can pick it up.
     pub fn carriable(self) -> bool {
-        matches!(self, Item::Fossil)
+        matches!(self, Item::Fossil(_))
     }
 }
 
@@ -54,11 +59,12 @@ pub struct State {
 }
 
 impl State {
-    /// The map's fossils laid out, and a fresh team for each of its labs.
+    /// The map's fossils laid out and numbered in the map's order, and a fresh team
+    /// for each of its labs.
     pub fn new(map: Map) -> Self {
         let mut items = Grid::filled(map.width(), map.height(), None);
-        for &at in map.fossils() {
-            items[at] = Some(Item::Fossil);
+        for (id, &at) in map.fossils().iter().enumerate() {
+            items[at] = Some(Item::Fossil(FossilId(id as u64)));
         }
         let teams = (0..map.teams()).map(|_| TeamState::new()).collect();
         Self {

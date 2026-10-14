@@ -6,7 +6,7 @@ use prost::Message;
 use serde_json::{Value, json};
 use ucbc_2027::rules::{
     ATTACK_COST, ATTACKS_PER_TURN, BASE_INCOME, DINO_HEALTH, DINO_MAX_HEALTH, EQUAL_LEVEL_DAMAGE,
-    INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_PER_TURN, SPAWN_COST, START_BONES, damage,
+    INCOME_PER_FOSSIL, LAB_HEALTH, MERGES_OR_SPLITS_PER_TURN, SPAWN_COST, START_BONES, damage,
 };
 use ucbc_2027::{Coord, Ucbc2027, UnitView, proto};
 use ucbc_engine::{
@@ -63,6 +63,18 @@ fn item(game: &dyn DynGame, bot: BotId, x: u64, y: u64) -> Value {
         .unwrap()
 }
 
+/// The fossil `bot` sees on (x, y), id and all, to recognise it again later.
+#[track_caller]
+fn fossil(game: &dyn DynGame, bot: BotId, x: u64, y: u64) -> Value {
+    let seen = item(game, bot, x, y);
+    assert_eq!(
+        seen["type"],
+        json!("fossil"),
+        "no fossil on ({x}, {y}): {seen}"
+    );
+    seen
+}
+
 /// Team 0's lab spawns a dino at (x, y) and ends its turn; the dino's id.
 fn dino_at(game: &mut dyn DynGame, x: u64, y: u64) -> BotId {
     let spawned = spawn(game, LAB0, x, y).unwrap();
@@ -101,6 +113,47 @@ fn merge(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, Act
 #[track_caller]
 fn attack(game: &mut dyn DynGame, bot: BotId, target: BotId) -> Result<Value, ActionError> {
     checked(game, "attack", bot, target)
+}
+
+/// Asks `can_split` first and checks the action agrees.
+#[track_caller]
+fn split(
+    game: &mut dyn DynGame,
+    bot: BotId,
+    x: u64,
+    y: u64,
+    level: u64,
+) -> Result<Value, ActionError> {
+    let can = game
+        .handle_query(
+            bot,
+            &json!({"type": "can_split", "x": x, "y": y, "level": level}),
+        )
+        .unwrap();
+    let result = game.apply_action(
+        bot,
+        &json!({"type": "split", "x": x, "y": y, "level": level}),
+    );
+    assert_eq!(
+        can,
+        json!(result.is_ok()),
+        "can_split disagrees: {result:?}"
+    );
+    result
+}
+
+/// A team 0 dino at (3, 8) of level `level`, built by merging fresh spawns, with its
+/// turn ended.
+fn stacked(game: &mut dyn DynGame, level: u32) -> BotId {
+    let dino = dino_at(game, 3, 8);
+    for _ in 1..level {
+        let other = dino_at(game, 3, 7);
+        merge(game, dino, other).unwrap();
+        game.end_step(dino);
+        go(game, dino, 3, 8).unwrap();
+        game.end_step(dino);
+    }
+    dino
 }
 
 /// A team 0 dino at (9, 6) facing a team 1 dino at (10, 6) that holds the fossil
@@ -261,11 +314,9 @@ fn a_move_stays_on_the_board() {
 fn grab_and_put_are_free_and_hold_one_thing() {
     let mut g = game();
     let dino = by_fossil(g.as_mut());
-    assert_eq!(
-        grab(g.as_mut(), dino, 6, 7).unwrap(),
-        json!({"type": "fossil"})
-    );
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
+    assert_eq!(grab(g.as_mut(), dino, 6, 7).unwrap(), the_fossil);
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
     assert_eq!(item(g.as_ref(), dino, 6, 7), Value::Null);
     refused(grab(g.as_mut(), dino, 6, 7), "already holding");
     assert_eq!(
@@ -273,11 +324,30 @@ fn grab_and_put_are_free_and_hold_one_thing() {
         json!({"type": "placed"})
     );
     refused(put(g.as_mut(), dino, 6, 6), "holding nothing");
-    assert_eq!(item(g.as_ref(), dino, 6, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), dino, 6, 6), the_fossil);
     // Again in the same turn, and the move is still unused.
     grab(g.as_mut(), dino, 6, 6).unwrap();
     put(g.as_mut(), dino, 6, 7).unwrap();
     go(g.as_mut(), dino, 5, 7).unwrap();
+}
+
+#[test]
+fn fossils_are_numbered_by_the_map_and_keep_their_id() {
+    let mut g = game();
+    let dino = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
+    let id = the_fossil["id"].as_u64().expect("an id");
+    assert!(
+        id < 6,
+        "six fossils on the standard map, numbered from 0: {id}"
+    );
+    grab(g.as_mut(), dino, 6, 7).unwrap();
+    walk(g.as_mut(), dino, &[(6, 6), (7, 6)]);
+    put(g.as_mut(), dino, 8, 7).unwrap();
+    assert_eq!(item(g.as_ref(), dino, 8, 7), the_fossil);
+    // The snapshot lists where fossils lie, and no more.
+    let lying = &g.snapshot()["fossils"];
+    assert!(lying.as_array().unwrap().contains(&json!({"x": 8, "y": 7})));
 }
 
 #[test]
@@ -292,14 +362,14 @@ fn grab_and_put_refuse_what_the_rules_forbid() {
     refused(grab(g.as_mut(), dino, 5, 6), "cannot carry"); // itself
     refused(grab(g.as_mut(), LAB0, 0, 7), "only a dino");
     assert_eq!(item(g.as_ref(), dino, 4, 7)["type"], "dino");
-    assert_eq!(item(g.as_ref(), dino, 6, 7), json!({"type": "fossil"}));
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
     grab(g.as_mut(), dino, 6, 7).unwrap();
     refused(put(g.as_mut(), dino, 4, 7), "not free");
     refused(put(g.as_mut(), dino, 5, 5), "not free"); // a wall
     refused(put(g.as_mut(), dino, 5, 6), "not free"); // itself
     refused(put(g.as_mut(), dino, 7, 7), "out of range");
     refused(put(g.as_mut(), LAB0, 0, 7), "only a dino");
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
 }
 
 #[test]
@@ -327,11 +397,12 @@ fn a_fossil_dropped_on_your_lab_raises_income() {
 fn a_fossil_cannot_go_into_the_enemy_lab() {
     let mut g = game();
     let dino = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), dino, 6, 7);
     grab(g.as_mut(), dino, 6, 7).unwrap();
     let path: Vec<(u64, u64)> = (6..=12).map(|x| (x, 6)).collect();
     walk(g.as_mut(), dino, &path);
     refused(put(g.as_mut(), dino, 13, 7), "not your lab");
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
     assert_eq!(g.snapshot()["teams"][1]["fossils"], json!(0));
 }
 
@@ -540,10 +611,10 @@ fn a_merge_adds_levels_and_takes_the_target_tile() {
 fn merges_per_turn_are_limited() {
     let mut g = game();
     let dino = dino_at(g.as_mut(), 0, 8);
-    let others: Vec<BotId> = (0..=MERGES_PER_TURN)
+    let others: Vec<BotId> = (0..=MERGES_OR_SPLITS_PER_TURN)
         .map(|i| dino_at(g.as_mut(), 0, 7 - u64::from(i)))
         .collect();
-    for &other in &others[..MERGES_PER_TURN as usize] {
+    for &other in &others[..MERGES_OR_SPLITS_PER_TURN as usize] {
         merge(g.as_mut(), dino, other).unwrap();
     }
     let last = *others.last().unwrap();
@@ -574,6 +645,71 @@ fn a_merge_refuses_what_the_rules_forbid() {
 }
 
 #[test]
+fn a_split_divides_levels_copies_health_and_queues_the_new_dino() {
+    let mut g = game();
+    let dino = stacked(g.as_mut(), 3);
+    assert_eq!(me(g.as_ref(), dino)["health"], json!(3 * DINO_HEALTH));
+    let new = split(g.as_mut(), dino, 3, 7, 1).unwrap();
+    let id = new["id"].as_u64().unwrap();
+    assert_eq!(
+        new,
+        json!({"type": "dino", "id": id, "pos": {"x": 3, "y": 7}, "level": 1, "health": 3 * DINO_HEALTH, "held": null, "vision": 3})
+    );
+    let rest = me(g.as_ref(), dino);
+    assert_eq!(rest["level"], json!(2));
+    assert_eq!(rest["health"], json!(3 * DINO_HEALTH));
+    assert_eq!(rest["pos"], json!({"x": 3, "y": 8}));
+    assert_eq!(
+        item(g.as_ref(), dino, 3, 7),
+        json!({"type": "dino", "id": id, "team": 0, "level": 1})
+    );
+    assert_eq!(g.team_of(BotId(id)), Some(TeamId(0)));
+    let ids: Vec<Value> = g.snapshot()["units"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| u["id"].clone())
+        .collect();
+    assert_eq!(*ids.last().unwrap(), json!(id));
+    // The move is still unused.
+    go(g.as_mut(), dino, 4, 8).unwrap();
+}
+
+#[test]
+fn merges_and_splits_share_one_budget() {
+    let mut g = game();
+    let dino = stacked(g.as_mut(), 2);
+    let other = dino_at(g.as_mut(), 3, 9);
+    split(g.as_mut(), dino, 3, 7, 1).unwrap();
+    refused(merge(g.as_mut(), dino, other), "already merged or split");
+    g.end_step(dino);
+    merge(g.as_mut(), dino, other).unwrap();
+    refused(split(g.as_mut(), dino, 3, 8, 1), "already merged or split");
+    g.end_step(dino);
+    split(g.as_mut(), dino, 3, 8, 1).unwrap();
+}
+
+#[test]
+fn a_split_refuses_what_the_rules_forbid() {
+    let mut g = game();
+    let small = dino_at(g.as_mut(), 0, 7);
+    refused(split(g.as_mut(), small, 0, 6, 1), "level 1 dino");
+    let dino = stacked(g.as_mut(), 2);
+    let other = dino_at(g.as_mut(), 3, 9);
+    refused(split(g.as_mut(), LAB0, 3, 7, 1), "only a dino");
+    refused(split(g.as_mut(), dino, 3, 7, 0), "level must be");
+    refused(split(g.as_mut(), dino, 3, 7, 2), "level must be");
+    refused(split(g.as_mut(), dino, 3, 6, 1), "out of range");
+    refused(split(g.as_mut(), dino, 3, 9, 1), "not free");
+    refused(split(g.as_mut(), dino, 2, 8, 1), "not free");
+    refused(split(g.as_mut(), dino, 99, 8, 1), "out of range");
+    assert_eq!(me(g.as_ref(), dino)["level"], json!(2));
+    assert_eq!(item(g.as_ref(), dino, 3, 9)["id"], json!(other.0));
+    // None of that used the split.
+    split(g.as_mut(), dino, 3, 7, 1).unwrap();
+}
+
+#[test]
 fn merged_health_is_capped() {
     let mut g = game();
     for _ in 0..SPAWN_COST {
@@ -600,29 +736,34 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     // The target holds; the merger holds nothing.
     let mut g = game();
     let carrier = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), carrier, 6, 7);
     grab(g.as_mut(), carrier, 6, 7).unwrap();
     let dino = dino_at(g.as_mut(), 3, 7);
     walk(g.as_mut(), dino, &[(4, 6)]);
     merge(g.as_mut(), dino, carrier).unwrap();
-    assert_eq!(held(g.as_ref(), dino), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), dino), the_fossil);
     assert_eq!(item(g.as_ref(), dino, 4, 6), Value::Null);
 
     // The merger holds; the target holds nothing.
     let mut g = game();
     let carrier = by_fossil(g.as_mut());
+    let the_fossil = fossil(g.as_ref(), carrier, 6, 7);
     grab(g.as_mut(), carrier, 6, 7).unwrap();
     let dino = dino_at(g.as_mut(), 3, 7);
     walk(g.as_mut(), dino, &[(4, 6)]);
     merge(g.as_mut(), carrier, dino).unwrap();
-    assert_eq!(held(g.as_ref(), carrier), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), carrier), the_fossil);
     assert_eq!(item(g.as_ref(), carrier, 5, 6), Value::Null);
 
     // Both hold: the merger's goes down where it stood.
     let mut g = game();
     let first = by_fossil(g.as_mut());
+    let near = fossil(g.as_ref(), first, 6, 7);
     grab(g.as_mut(), first, 6, 7).unwrap();
     walk(g.as_mut(), first, &[(6, 6), (7, 6), (8, 6)]);
     put(g.as_mut(), first, 7, 7).unwrap();
+    let far = fossil(g.as_ref(), first, 9, 7);
+    assert_ne!(near, far, "two fossils, two ids");
     grab(g.as_mut(), first, 9, 7).unwrap();
     let second = dino_at(g.as_mut(), 3, 7);
     walk(g.as_mut(), second, &[(4, 6), (5, 6), (6, 6)]);
@@ -630,8 +771,8 @@ fn a_merge_takes_the_target_load_and_leaves_its_own() {
     walk(g.as_mut(), second, &[(7, 6)]);
     merge(g.as_mut(), second, first).unwrap();
     assert_eq!(me(g.as_ref(), second)["pos"], json!({"x": 8, "y": 6}));
-    assert_eq!(held(g.as_ref(), second), json!({"type": "fossil"}));
-    assert_eq!(item(g.as_ref(), second, 7, 6), json!({"type": "fossil"}));
+    assert_eq!(held(g.as_ref(), second), far);
+    assert_eq!(item(g.as_ref(), second, 7, 6), near);
 }
 
 #[test]
@@ -712,6 +853,8 @@ fn an_attack_refuses_what_the_rules_forbid() {
 fn a_dino_with_no_health_dies_and_drops_its_load() {
     let mut g = game();
     let (ours, theirs) = face_off(g.as_mut());
+    let the_fossil = held(g.as_ref(), theirs);
+    assert_eq!(the_fossil["type"], json!("fossil"));
     let hits = DINO_HEALTH.div_ceil(EQUAL_LEVEL_DAMAGE);
     for _ in 1..hits {
         attack(g.as_mut(), ours, theirs).unwrap();
@@ -720,7 +863,7 @@ fn a_dino_with_no_health_dies_and_drops_its_load() {
     attack(g.as_mut(), ours, theirs).unwrap();
     assert!(g.team_of(theirs).is_none());
     assert!(!g.schedule().contains(&theirs));
-    assert_eq!(item(g.as_ref(), ours, 10, 6), json!({"type": "fossil"}));
+    assert_eq!(item(g.as_ref(), ours, 10, 6), the_fossil);
     g.end_step(ours);
     refused(attack(g.as_mut(), ours, theirs), "no such bot");
 }

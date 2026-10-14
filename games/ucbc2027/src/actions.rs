@@ -4,7 +4,7 @@
 use ucbc_engine::{ActionError, BotId};
 
 use crate::coord::Coord;
-use crate::game::Ucbc2027;
+use crate::game::{SplitTarget, Ucbc2027};
 use crate::map::Environment;
 use crate::rules;
 use crate::state::Item;
@@ -99,7 +99,7 @@ impl Ucbc2027 {
             Some(Environment::Lab { team: owner }) if owner != team.0 => {
                 return Err(invalid("not your lab"));
             }
-            Some(Environment::Lab { .. }) if item != Item::Fossil => {
+            Some(Environment::Lab { .. }) if !matches!(item, Item::Fossil(_)) => {
                 return Err(invalid("only fossils go in the lab"));
             }
             Some(Environment::Lab { .. }) => true,
@@ -119,15 +119,13 @@ impl Ucbc2027 {
         }
     }
 
-    /// Why `bot` may not merge with `target` now, if it may not. The merge action and
-    /// the `can_merge` query both ask this.
     pub(crate) fn check_merge(&self, bot: BotId, target: BotId) -> Result<(), ActionError> {
         let team = self.bots[bot].team();
         let dino = self.bots[bot]
             .as_dino()
             .ok_or_else(|| invalid("only a dino can merge"))?;
-        if self.turn.merges >= rules::MERGES_PER_TURN {
-            return Err(invalid("already merged this turn"));
+        if self.turn.merges_or_splits >= rules::MERGES_OR_SPLITS_PER_TURN {
+            return Err(invalid("already merged or split this turn"));
         }
         if target == bot {
             return Err(invalid("cannot merge with itself"));
@@ -148,8 +146,6 @@ impl Ucbc2027 {
         Ok(())
     }
 
-    /// The target's bot goes; this one takes its tile. If the target held something,
-    /// this dino takes it and leaves what it held on its old tile.
     pub(crate) fn merge(&mut self, bot: BotId, target: BotId) -> Result<UnitView, ActionError> {
         self.check_merge(bot, target)?;
         let other = self.bots[target].as_dino().expect("checked above");
@@ -166,8 +162,56 @@ impl Ucbc2027 {
         };
         self.state.items[from] = left;
         self.state.items[at] = Some(Item::Dino(bot));
-        self.turn.merges += 1;
+        self.turn.merges_or_splits += 1;
         Ok(self.unit_view(bot))
+    }
+
+    pub(crate) fn check_split(&self, bot: BotId, target: SplitTarget) -> Result<(), ActionError> {
+        let dino = self.bots[bot]
+            .as_dino()
+            .ok_or_else(|| invalid("only a dino can split"))?;
+        if self.turn.merges_or_splits >= rules::MERGES_OR_SPLITS_PER_TURN {
+            return Err(invalid("already merged or split this turn"));
+        }
+        if dino.level <= 1 {
+            return Err(invalid("cannot split a level 1 dino"));
+        }
+        if target.level == 0 || target.level >= dino.level {
+            return Err(invalid(
+                "the new dino's level must be at least 1 and below this dino's",
+            ));
+        }
+        let at = target.at();
+        if dino.pos.dist(at) > dino.stats().action_range {
+            return Err(invalid("out of range"));
+        }
+        if !self.state.is_free(at) {
+            return Err(invalid("the tile is not free"));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn split(
+        &mut self,
+        bot: BotId,
+        target: SplitTarget,
+    ) -> Result<UnitView, ActionError> {
+        self.check_split(bot, target)?;
+        let team = self.bots[bot].team();
+        let dino = self.bots[bot].as_dino_mut().expect("checked above");
+        let health = dino.health;
+        dino.level -= target.level;
+        let at = target.at();
+        let new = Dino {
+            pos: at,
+            level: target.level,
+            health,
+            held: None,
+        };
+        let id = self.bots.spawn(team, Unit::Dino(new));
+        self.state.items[at] = Some(Item::Dino(id));
+        self.turn.merges_or_splits += 1;
+        Ok(self.unit_view(id))
     }
 
     /// Why `bot` may not attack `target` now, if it may not. The attack action and

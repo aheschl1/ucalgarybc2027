@@ -1,15 +1,14 @@
 import { useFrame, useSelection } from "@ucbc/viewer";
 import { useMemo } from "react";
 
-import type { Coord, Environment, ItemView, UnitEntry } from "./api.gen.ts";
-import { CELL, ItemSprite, TileSprite, UnitSprite } from "./skin/sprites.tsx";
+import type { Coord, Environment, UnitEntry } from "./api.gen.ts";
+import { CELL, FossilSprite, TileSprite, UnitSprite } from "./skin/sprites.tsx";
 import { useSnapshot } from "./snapshot.ts";
 
 /** Tiles a unit covers on each side; a lab's footprint is `lab_footprint` in map.rs. */
 const SIDE: Record<UnitEntry["type"], number> = { lab: 2, dino: 1 };
 /** Units of a lower layer are drawn first. */
 const LAYER: Record<UnitEntry["type"], number> = { lab: 0, dino: 1 };
-const FOSSIL: ItemView = { type: "fossil" };
 
 /** A unit's top-left tile. */
 function corner(unit: UnitEntry): Coord {
@@ -78,7 +77,7 @@ export function Board() {
       <g className="u27-items">
         {s.fossils.map((tile, i) => (
           <g key={i} transform={at(tile)}>
-            <ItemSprite item={FOSSIL} />
+            <FossilSprite />
           </g>
         ))}
       </g>

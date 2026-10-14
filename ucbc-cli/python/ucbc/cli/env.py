@@ -15,6 +15,5 @@ def env_files() -> tuple[Path, Path]:
 def load_env() -> None:
     """Load the environment variables from the files, if they exist."""
     for path in env_files():
-        print(path)
         if path.exists():
             dotenv.load_dotenv(path, override=True)

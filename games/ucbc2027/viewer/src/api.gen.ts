@@ -48,6 +48,7 @@ export type ItemView =
       type: "dino";
     }
   | {
+      id: number;
       type: "fossil";
     };
 export type Action =
@@ -77,6 +78,12 @@ export type Action =
   | {
       bot_id: number;
       type: "merge";
+    }
+  | {
+      level: number;
+      type: "split";
+      x: number;
+      y: number;
     }
   | {
       bot_id: number;

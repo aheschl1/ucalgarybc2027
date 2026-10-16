@@ -8,6 +8,8 @@
   --ucbc-error: #b91c1c;
   --ucbc-team-0: #f97316;
   --ucbc-team-1: #3b82f6;
+  --ucbc-card: color-mix(in srgb, var(--ucbc-fg) 3%, var(--ucbc-panel));
+  --ucbc-chip: color-mix(in srgb, var(--ucbc-fg) 8%, transparent);
   --ucbc-stage-height: min(36rem, 70vh);
 
   display: grid;
@@ -40,6 +42,8 @@
     --ucbc-panel: #292524;
     --ucbc-accent: #60a5fa;
     --ucbc-error: #f87171;
+    --ucbc-card: color-mix(in srgb, var(--ucbc-fg) 5%, var(--ucbc-panel));
+    --ucbc-chip: color-mix(in srgb, var(--ucbc-fg) 14%, transparent);
   }
 }
 
@@ -51,6 +55,15 @@
 
   .ucbc-viewer .ucbc-side {
     height: auto;
+  }
+
+  .ucbc-viewer .ucbc-info {
+    max-height: none;
+  }
+
+  .ucbc-viewer .ucbc-bot-log,
+  .ucbc-viewer .ucbc-steps-box {
+    max-height: 20rem;
   }
 }
 
@@ -169,7 +182,8 @@
   background: var(--ucbc-panel);
 }
 
-/* The side column is as tall as the stage and controls; its content scrolls. */
+/* The side column is as tall as the stage and controls. Its panes share that height and
+ * each scrolls on its own: the game's info, the selected bot's timeline, the tick's steps. */
 .ucbc-side {
   grid-area: side;
   display: flex;
@@ -177,13 +191,22 @@
   gap: 0.75rem;
   height: 0;
   min-height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .ucbc-info {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 0.5rem;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.ucbc-steps-box {
+  flex: 2 1 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .ucbc-info:empty {
@@ -284,16 +307,20 @@
   cursor: pointer;
 }
 
-.ucbc-steps .ucbc-selected {
-  background: color-mix(in srgb, var(--ucbc-accent) 12%, transparent);
+.ucbc-action {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem;
 }
 
-/* The selected bot's output. */
+/* The selected bot's timeline. */
 .ucbc-bot {
   display: flex;
-  flex: none;
+  flex: 3 1 0;
   flex-direction: column;
   gap: 0.5rem;
+  min-height: 0;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--ucbc-line);
   border-radius: 0.5rem;
@@ -302,36 +329,203 @@
 
 .ucbc-bot-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 0.5rem;
 }
 
 .ucbc-bot-header .ucbc-team {
+  flex: 1;
   max-width: none;
 }
 
-/* Positioned, so entries' offsetTop is measured from the log. */
+/* The timeline: a list of ticks, each a chain of nodes down one rail at --ucbc-rail.
+ * Positioned, so entries' offsetTop is measured from the log. */
 .ucbc-bot-log {
+  --ucbc-rail: 0.5rem;
+
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 16rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
   overflow-y: auto;
+  list-style: none;
 }
 
 .ucbc-entry {
-  padding-left: 0.5rem;
-  border-left: 2px solid transparent;
+  position: relative;
+  padding: 0.25rem 0 0.25rem 1.5rem;
+  cursor: pointer;
 }
 
-.ucbc-entry.ucbc-current {
-  border-left-color: var(--ucbc-accent);
+/* The rail runs the full height of every entry, so the chain is unbroken across ticks;
+ * it starts at the first tick's marker and ends at the last node's dot. */
+.ucbc-entry::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--ucbc-rail);
+  width: 2px;
+  background: var(--ucbc-line);
+  transform: translateX(-50%);
+}
+
+.ucbc-entry:first-child::before {
+  top: 0.75rem;
+}
+
+/* The tick's marker on the rail, beside its label. */
+.ucbc-entry::after {
+  content: "";
+  position: absolute;
+  top: 0.75rem;
+  left: var(--ucbc-rail);
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--ucbc-muted);
+  transform: translate(-50%, -50%);
+}
+
+/* The rail is coloured as far as playback has come. */
+.ucbc-entry:not(.ucbc-future)::before,
+.ucbc-entry.ucbc-current::after {
+  background: var(--ucbc-accent);
 }
 
 .ucbc-entry.ucbc-future {
-  opacity: 0.45;
+  opacity: 0.65;
+}
+
+/* A search hit is what the search is for; never dim it. */
+.ucbc-entry.ucbc-future:has(.ucbc-match) {
+  opacity: 1;
+}
+
+.ucbc-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A node: a card, linked to the rail by a dot. */
+.ucbc-node {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 0.375rem;
+  background: var(--ucbc-card);
+}
+
+.ucbc-entry:hover .ucbc-node:not(.ucbc-match) {
+  border-color: var(--ucbc-muted);
+}
+
+.ucbc-node::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  left: calc(var(--ucbc-rail) - 1.5rem);
+  box-sizing: content-box;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 2px solid var(--ucbc-line);
+  border-radius: 50%;
+  background: var(--ucbc-panel);
+  transform: translateX(-50%);
+}
+
+.ucbc-current .ucbc-node::before {
+  border-color: var(--ucbc-accent);
+}
+
+/* Hides the rail below the last dot. */
+.ucbc-entry:last-child .ucbc-node:last-child::after {
+  content: "";
+  position: absolute;
+  top: calc(1rem + 4px);
+  bottom: -0.5rem;
+  left: calc(var(--ucbc-rail) - 1.5rem);
+  width: 4px;
+  background: var(--ucbc-panel);
+  transform: translateX(-50%);
+}
+
+.ucbc-node-type {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.ucbc-node-stdout .ucbc-node-type,
+.ucbc-node-idle .ucbc-node-type {
+  color: var(--ucbc-muted);
+  font-weight: 500;
+}
+
+.ucbc-node-idle .ucbc-muted {
+  font-size: 12px;
+}
+
+.ucbc-node-error .ucbc-node-type {
+  color: var(--ucbc-error);
+}
+
+.ucbc-node-stdout,
+.ucbc-node-error {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.125rem;
+}
+
+/* Long output stays a card, not the whole log; it scrolls and can be selected. */
+.ucbc-node .ucbc-stdout,
+.ucbc-node .ucbc-traceback {
+  max-height: 6rem;
+  overflow: auto;
+  cursor: text;
+  user-select: text;
+}
+
+.ucbc-node-idle {
+  border-style: dashed;
+}
+
+.ucbc-node.ucbc-match {
+  border-color: var(--ucbc-accent);
+  background: color-mix(in srgb, var(--ucbc-accent) 10%, var(--ucbc-card));
+}
+
+.ucbc-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.ucbc-param {
+  max-width: 100%;
+  padding: 0 0.3rem;
+  border-radius: 0.25rem;
+  background: var(--ucbc-chip);
+  font: 12px/1.4 ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+
+.ucbc-param-key {
+  color: var(--ucbc-muted);
+}
+
+/* The part of an action a search asked for. */
+.ucbc-hit {
+  background: color-mix(in srgb, var(--ucbc-accent) 25%, transparent);
 }
 
 .ucbc-link {
@@ -339,11 +533,41 @@
   border: 0;
   color: var(--ucbc-muted);
   background: none;
-  font: 12px/1.4 system-ui, sans-serif;
+  font: inherit;
+  font-size: 12px;
   cursor: pointer;
 }
 
 .ucbc-link:hover,
 .ucbc-current .ucbc-link {
   color: var(--ucbc-accent);
+}
+
+.ucbc-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.ucbc-search-input {
+  flex: 1;
+  min-width: 0;
+  margin-right: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 0.375rem;
+  color: inherit;
+  background: var(--ucbc-card);
+  font: inherit;
+}
+
+.ucbc-search-input:focus {
+  border-color: var(--ucbc-accent);
+  outline: none;
+}
+
+.ucbc-search-count {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }

@@ -1,8 +1,8 @@
 """Kingdom: a walled town that farms, mines, smelts, and raises the Monument.
 
-The commander never leaves its sheltered post beside the base: it spawns workers, gives
-each a role, and relays the base's stock and the veins the team has found. The base sits in
-a ring of walls and gates with towers inside; hidden spikes cover the approaches. Workers
+The commander never leaves its shelter beside the base: it spawns workers, gives each a
+role, and relays the base's stock and the veins the team has found. The base sits in a
+ring of walls and gates with towers inside; hidden spikes cover the approaches. Workers
 farm wheat and apples around the pond and wells, fill granaries, cut wood and stone for
 the base, build the town from a fixed plan, study and craft at the desk, workbench, and
 smelters, mine and dig out veins, man the towers, raise the Monument, and once the base is
@@ -10,32 +10,40 @@ stocked, hoard what they gather in chests and walls in the wild, which counts fo
 Each unit runs its own copy of this file: module globals belong to one unit."""
 
 import base64
-from collections.abc import Callable, Iterable
+import random
+from collections.abc import Callable, Iterator
 from contextlib import suppress
 
 from ucbc.games.frontier import (
     STEPS,
+    WALKABLE,
     Building,
+    Crop,
     Dir,
     FrontierHandle,
     Item,
     Kind,
     Observation,
     Recipe,
-    Store,
+    Tiles,
+    beside,
+    towards,
 )
 from ucbc.handle import ActionError
 
 Pos = tuple[int, int]
+Costs = dict[Item, int]
 
 CARRY = 20
 GRASS, FOREST, ROCK, WATER, DIRT, COAL, COPPER, IRON, FARMLAND = range(9)
-FREE = bytes(t in (GRASS, FOREST, DIRT, FARMLAND) for t in range(256))
+FREE = bytes(t in WALKABLE for t in range(256))
+DIGGABLE = bytes(t in WALKABLE or t == ROCK for t in range(256))
 DIGITS = b"01" + b"1" * 254
-DIGGABLE = bytes(t in (GRASS, FOREST, DIRT, FARMLAND, ROCK) for t in range(256))
 MASK = [bytes(tile) + b"\x01" + bytes(255 - tile) for tile in range(9)]
 WET = b"0" * WATER + b"1" + b"0" * (255 - WATER)
 BUILDINGS = list(Building)
+ITEMS = list(Item)
+BASE = BUILDINGS.index(Building.BASE)
 GATE = BUILDINGS.index(Building.GATE)
 TRAP = BUILDINGS.index(Building.SPIKE_TRAP)
 CHEST = BUILDINGS.index(Building.CHEST)
@@ -43,7 +51,9 @@ TOWER = BUILDINGS.index(Building.TOWER)
 WELL = BUILDINGS.index(Building.WELL)
 MONUMENT = BUILDINGS.index(Building.MONUMENT)
 DRILL = BUILDINGS.index(Building.MECH_DRILL)
-STONE_WALL = BUILDINGS.index(Building.STONE_WALL)
+DESK = BUILDINGS.index(Building.RESEARCH_DESK)
+SHOPS = (Building.SMELTER, Building.WORKBENCH)
+APPLE_TREE = list(Crop).index(Crop.APPLE_TREE)
 DIRS = list(STEPS.items())
 COMPASS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 FOOD = (Item.WHEAT, Item.APPLE)
@@ -53,44 +63,6 @@ MINES = {COALER: COAL, COPPERER: COPPER, IRONER: IRON}
 TOOLS = {COPPERER: Item.STONE_PICK, IRONER: Item.COPPER_PICK}
 ORE = {COAL: Item.COAL, COPPER: Item.COPPER_ORE, IRON: Item.IRON_ORE}
 EARLY = [WOODMAN, BUILDER, WOODMAN, BUILDER, MASON, WOODMAN, FARMER, GUARD, FARMER, SMITH, GUARD]
-
-W, S = Item.WOOD, Item.STONE
-COST: dict[Building, dict[Item, int]] = {
-    Building.CHEST: {W: 10},
-    Building.WOOD_WALL: {W: 4},
-    Building.STONE_WALL: {S: 6},
-    Building.RADIO_TOWER: {W: 20, S: 10},
-    Building.WELL: {S: 10},
-    Building.RESEARCH_DESK: {W: 15, S: 5},
-    Building.WORKBENCH: {W: 10},
-    Building.SMELTER: {S: 20},
-    Building.GATE: {W: 6},
-    Building.TOWER: {W: 5, S: 15},
-    Building.SPIKE_TRAP: {W: 4, S: 2},
-    Building.MONUMENT: {
-        W: 60,
-        S: 60,
-        Item.COPPER_INGOT: 30,
-        Item.IRON_INGOT: 30,
-        Item.GEAR: 20,
-        Item.APPLE: 30,
-    },
-}
-HP = {
-    Building.CHEST: 50,
-    Building.WOOD_WALL: 100,
-    Building.STONE_WALL: 300,
-    Building.RADIO_TOWER: 80,
-    Building.WELL: 100,
-    Building.RESEARCH_DESK: 80,
-    Building.WORKBENCH: 80,
-    Building.SMELTER: 150,
-    Building.GATE: 120,
-    Building.TOWER: 250,
-    Building.SPIKE_TRAP: 20,
-    Building.MONUMENT: 2000,
-}
-UNKNOWN_AT_START = {Building.SMELTER, Building.TOWER, Building.SPIKE_TRAP, Building.MONUMENT}
 STUDY = [
     Item.STONE,
     Item.WOOD,
@@ -103,6 +75,17 @@ STUDY = [
     Item.GEAR,
     Item.APPLE,
 ]
+GOODS = {
+    Item.COPPER_INGOT,
+    Item.IRON_INGOT,
+    Item.GEAR,
+    Item.STONE_PICK,
+    Item.COPPER_PICK,
+    Item.COPPER_SWORD,
+    Item.COPPER_ARMOUR,
+}
+BROADCAST = [Item.WHEAT, Item.APPLE, Item.WOOD, Item.STONE]
+
 WOOD_STOCK, STONE_STOCK = 140, 90
 ORE_STOCK = {COAL: 80, COPPER: 60, IRON: 60}
 CAPS = {Item.WOOD: 180, Item.STONE: 120, Item.COAL: 120, Item.COPPER_ORE: 80, Item.IRON_ORE: 80}
@@ -113,19 +96,31 @@ RESERVE = 15
 APPLES = 31
 BASE_FULL = 920
 
+# The town, in the base's frame: x is mirrored for the right-hand team, so +x faces the
+# other team, and the pond lies north. Inside the wall the buildings stand on even rows and
+# columns, so the odd ones are streets; the commander's shelter is the one exception: walls
+# beside its post and a tower behind it, which it shoots from. Guards wait beside the base
+# until there are towers to man.
+POST = (0, 1)
+SHELTER = [(-1, 1), (1, 1)]
+TOWERS = [((0, 2), (1, 2)), ((2, -2), (3, -2))]
+IDLE = [(-3, -3), (3, -3)]
+WATCH = [(2, 0), (0, -2), (-2, 0)]
+GRANARIES = [(-2, -5), (2, -5), (-4, -12), (4, -12), (-5, -8), (5, -8)]
+WELLS = [(9, -9), (-9, -9), (0, -16)]
+RADIO, MONUMENT_AT, SMELTER2 = (-8, 3), (-8, 0), (-8, -3)
 
-def ring() -> list[tuple[Building, int, int]]:
-    """The wall around the base, in the base's frame (x mirrored for the right-hand team),
-    east (toward the other team) first. The pond lies outside the middle of the north side."""
-    wall, gate = Building.WOOD_WALL, Building.GATE
-    east = [(gate, 4, 0)] + [(wall, 4, y) for y in (-4, -3, -2, -1, 1, 2, 3, 4)]
-    north = [(gate, -3, -4), (gate, 3, -4)] + [(wall, x, -4) for x in (-4, -2, -1, 0, 1, 2)]
-    south = [(gate, x, 4) for x in range(-2, 3)] + [(wall, -3, 4), (wall, -4, 4), (wall, 3, 4)]
-    west = [(gate, -4, -1), (gate, -4, 1)] + [(wall, -4, y) for y in (-3, -2, 0, 2, 3)]
-    return east + west + north + south
+
+def ring() -> list[Pos]:
+    """The wall around the town, east (toward the other team) first: all gates, which
+    cost a little more than walls, but let the team through wherever the land outside
+    allows."""
+    east = [(4, y) for y in range(-4, 5)]
+    west = [(-4, y) for y in range(-4, 5)]
+    return east + [(x, y) for y in (-4, 4) for x in range(-3, 4)] + west
 
 
-def trap_spots() -> list[tuple[int, int]]:
+def trap_spots() -> list[Pos]:
     """Hidden spikes in the two rings just outside the wall, east first; the farm and the
     pond to the north are left clear."""
     spots = []
@@ -138,46 +133,27 @@ def trap_spots() -> list[tuple[int, int]]:
     return list(dict.fromkeys(spots))
 
 
-GRANARIES = [(-2, -5), (2, -5), (-4, -12), (4, -12), (-5, -8), (5, -8)]
-BROADCAST = [Item.WHEAT, Item.APPLE, Item.WOOD, Item.STONE]
 TRAPS = trap_spots()
-TRAP_SET = set(TRAPS)
-POSTS = [((3, -1), (3, -2)), ((3, 1), (3, 2)), ((-3, -3), (-3, -2))]
-WELLS = [(9, -9), (-9, -9), (0, -16)]
-IDLE = [(0, -3), (-1, -3), (1, -3), (0, 3), (1, 3)]
 
 
 def town() -> list[tuple[Building, int, int]]:
-    shelter = [(Building.WOOD_WALL, -1, 1), (Building.WOOD_WALL, 1, 1), (Building.GATE, 0, 2)]
-    desk = shelter + [(Building.RESEARCH_DESK, -2, -2)]
-    towers = [(Building.TOWER, x, y) for (x, y), _ in POSTS]
-    shops = [(Building.WORKBENCH, 2, -2), (Building.SMELTER, 2, 2)]
-    shops += [(Building.CHEST, x, y) for x, y in GRANARIES[:2]]
-    later = [(Building.CHEST, x, y) for x, y in GRANARIES[2:]]
-    later += [(Building.SMELTER, -2, 2), (Building.RADIO_TOWER, -3, 3)]
-    later += [(Building.WELL, x, y) for x, y in WELLS]
-    traps = [(Building.SPIKE_TRAP, dx, dy) for dx, dy in TRAPS]
-    return desk + ring() + towers + shops + later + traps + [(Building.MONUMENT, -2, -1)]
-
-
-class Rng:
-    """A small xorshift generator; the random module is slow to import in the sandbox."""
-
-    def __init__(self) -> None:
-        self.state = 1
-
-    def random(self) -> float:
-        x = self.state
-        x ^= (x << 13) & 0xFFFFFFFF
-        x ^= x >> 17
-        x ^= (x << 5) & 0xFFFFFFFF
-        self.state = x
-        return x / 4294967296
-
-    def shuffle(self, items: list[Dir]) -> None:
-        for i in range(len(items) - 1, 0, -1):
-            j = int(self.random() * (i + 1))
-            items[i], items[j] = items[j], items[i]
+    """The plan, in the order it's built."""
+    B = Building
+    parts: list[tuple[Building, list[Pos]]] = [
+        (B.WOOD_WALL, SHELTER),
+        (B.RESEARCH_DESK, [(-2, 2)]),
+        (B.WORKBENCH, [(-2, -2)]),
+        (B.GATE, ring()),
+        (B.TOWER, [tower for tower, _ in TOWERS]),
+        (B.SMELTER, [(2, 2)]),
+        (B.CHEST, GRANARIES),
+        (B.SMELTER, [SMELTER2]),
+        (B.RADIO_TOWER, [RADIO]),
+        (B.WELL, WELLS),
+        (B.SPIKE_TRAP, TRAPS),
+        (B.MONUMENT, [MONUMENT_AT]),
+    ]
+    return [(kind, x, y) for kind, spots in parts for x, y in spots]
 
 
 class Mind:
@@ -188,46 +164,63 @@ class Mind:
         self.base: Pos = (0, 0)
         self.m = 1
         self.size = 0
+        self.rng = random.Random()
+        self.plan: list[tuple[Building, Pos]] = []
+        self.granaries: list[Pos] = []
+        self.ring: list[Pos] = []
+        # Walking.
         self.path: list[Pos] = []
         self.path_key: object = None
         self.stuck = 0
         self.fails: dict[object, int] = {}
-        self.base_busy = -1
-        self.empty: dict[Pos, int] = {}
-        self.full_until: dict[Pos, int] = {}
-        self.stock: dict[Item, int] = {}
+        self.progress: tuple[object, int, int] = (None, 0, 0)
+        """The far walk under way, the closest it has come, and when."""
+        self.bad: set[Pos] = set()
+        # What the team knows.
+        self.costs: dict[Building, Costs] = {}
+        self.hp: dict[Building, int] = {}
+        self.tower = 0
+        """The range of a tower."""
+        self.recipes: dict[Recipe, tuple[Building, Costs]] = {}
+        self.made_at: dict[Building, set[Item]] = {}
+        self.limits: dict[Building, Costs] = {}
+        """At each shop, the most of an item worth keeping there: six runs' worth."""
+        self.known_at = -(10**9)
+        self.studied: set[Item] = set()
+        # The base and stores.
+        self.stock: Costs = {}
         self.stock_at = -(10**6)
-        self.base_full_until = 0
         self.heard_at = -(10**6)
         self.base_total = 0
+        self.base_full_until = 0
+        self.need: Costs = {}
+        """What the commander still lacks to rebuild the base."""
+        self.need_at = -(10**6)
+        self.empty: dict[Pos, int] = {}
+        self.full_until: dict[Pos, int] = {}
+        self.full: set[Pos] = set()
+        # Roles.
         self.unload = ""
-        self.carrying: dict[Item, int] = {}
+        self.carrying: Costs = {}
         self.target: tuple[Building, Pos] | None = None
-        self.progress: dict[tuple[object, Pos], tuple[int, int]] = {}
         self.veins: dict[int, Pos] = {}
         self.explore: Pos | None = None
         self.explore_until = 0
         self.explored = 0
-        self.full: set[Pos] = set()
-        self.bad: set[Pos] = set()
         self.drills = 0
         self.tries = 0
         self.field: list[Pos] = []
+        self.field_set: set[Pos] = set()
         self.field_at = -(10**9)
-        self.known: set[Building] = set()
-        self.recipes: set[Recipe] = set()
-        self.known_at = -(10**9)
-        self.studied: set[Item] = set()
-        self.shop: dict[Pos, tuple[dict[Item, int], int]] = {}
+        self.shop: dict[Pos, tuple[Costs, int]] = {}
         self.made: dict[Recipe, int] = {}
         self.skip: dict[Pos, int] = {}
-        self.owed: dict[Pos, dict[Item, int]] = {}
-        self.plan: list[tuple[Building, Pos]] = []
+        self.owed: dict[Pos, Costs] = {}
         self.post: Pos | None = None
+        # The commander.
         self.alive: dict[int, tuple[int, int]] = {}
         self.assigned: list[tuple[int, int, int]] = []
         self.spawned = 0
-        self.rng = Rng()
 
 
 mind = Mind()
@@ -241,35 +234,47 @@ def dist(a: Pos, b: Pos) -> int:
     return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
 
 
+def dir_to(me: Pos, p: Pos) -> Dir | None:
+    for d, (dx, dy) in DIRS:
+        if (me[0] + dx, me[1] + dy) == p:
+            return d
+    return None
+
+
+def plus(*parts: Costs) -> Costs:
+    out: Costs = {}
+    for part in parts:
+        for i, n in part.items():
+            out[i] = out.get(i, 0) + n
+    return out
+
+
 class View:
     """One step's observation, decoded as far as the step needs."""
 
     def __init__(self, seen: Observation) -> None:
         self.seen = seen
         self.tick = seen.tick
+        self.tiles = Tiles(seen)
+        self.data = self.tiles.data
         self.ox, self.oy = seen.origin.x, seen.origin.y
         self.w, self.h = seen.width, seen.height
-        self.data = base64.b64decode(seen.tiles)
         self.me: Pos = (seen.me.pos.x, seen.me.pos.y)
         self.team = seen.me.team
         self.carried = {s.item: s.count for s in seen.me.carrying}
         self.load = sum(self.carried.values())
-        self.enemies: list[tuple[Pos, int, int]] = []
-        self.occupied: set[Pos] = set()
+        self.enemies: list[tuple[Pos, int]] = []
+        self.mates: list[Pos] = []
         r = seen.units
         for i in range(0, len(r), 6):
             p = (r[i + 3], r[i + 4])
-            self.occupied.add(p)
-            if r[i + 1] != self.team:
-                self.enemies.append((p, r[i + 5], r[i + 2]))
+            if r[i + 1] == self.team:
+                self.mates.append(p)
+            else:
+                self.enemies.append((p, r[i + 5]))
+        self.occupied = set(self.mates) | {p for p, _ in self.enemies}
         self._blds: dict[Pos, tuple[int, int, int, int]] | None = None
-        self._piles: set[Pos] | None = None
-
-    def tile(self, p: Pos) -> int:
-        x, y = p[0] - self.ox, p[1] - self.oy
-        if 0 <= x < self.w and 0 <= y < self.h:
-            return self.data[y * self.w + x]
-        return -1
+        self._piles: dict[Pos, Costs] | None = None
 
     def inside(self, p: Pos) -> bool:
         return 0 <= p[0] - self.ox < self.w and 0 <= p[1] - self.oy < self.h
@@ -284,10 +289,12 @@ class View:
             }
         return self._blds
 
-    def piles(self) -> set[Pos]:
+    def piles(self) -> dict[Pos, Costs]:
         if self._piles is None:
             r = self.seen.piles
-            self._piles = {(r[i], r[i + 1]) for i in range(0, len(r), 4)}
+            self._piles = {}
+            for i in range(0, len(r), 4):
+                self._piles.setdefault((r[i], r[i + 1]), {})[ITEMS[r[i + 2]]] = r[i + 3]
         return self._piles
 
     def own(self, kind: int, finished: bool = True) -> list[Pos]:
@@ -301,13 +308,45 @@ class View:
         return self.carried.get(Item.WHEAT, 0) + self.carried.get(Item.APPLE, 0)
 
 
+def stores_beside(v: View) -> Iterator[tuple[Pos, Dir, Costs, Costs, int]]:
+    """The team's storage and sites next to this unit: where, which way, what it holds,
+    what it's owed, and when its job ends (-1 for none)."""
+    for s in v.seen.stores:
+        p = (s.pos.x, s.pos.y)
+        d = dir_to(v.me, p)
+        if d is not None:
+            stored = {st.item: st.count for st in s.stored}
+            owed = {st.item: st.count for st in s.owed}
+            yield p, d, stored, owed, s.job.done_at if s.job else -1
+
+
+def known(handle: FrontierHandle, v: View, every: int) -> None:
+    """Refreshes what the team knows: building costs and recipes."""
+    if v.tick - mind.known_at < every:
+        return
+    k = handle.known()
+    mind.costs = {b.building: {s.item: s.count for s in b.cost} for b in k.buildings}
+    mind.hp = {b.building: b.hp for b in k.buildings}
+    mind.tower = max((b.tower or 0) for b in k.buildings)
+    mind.recipes = {r.recipe: (r.at, {s.item: s.count for s in r.inputs}) for r in k.recipes}
+    mind.made_at, mind.limits = {}, {}
+    for r in k.recipes:
+        mind.made_at.setdefault(r.at, set()).update(s.item for s in r.outputs)
+        limit = mind.limits.setdefault(r.at, {})
+        for s in r.inputs:
+            limit[s.item] = max(limit.get(s.item, 0), 6 * s.count)
+    mind.known_at = v.tick
+
+
 # Walking
 
 
-def grid(v: View, table: bytes = FREE) -> bytearray:
+def grid(v: View, table: bytes, mates: bool) -> bytearray:
+    """Walkable tiles in view, around buildings and units (only the other team's unless
+    `mates`); the team's own gates and traps are walkable."""
     free = bytearray(v.data.translate(table))
     w, ox, oy = v.w, v.ox, v.oy
-    for x, y in v.occupied:
+    for x, y in v.occupied if mates else (p for p, _ in v.enemies):
         free[(y - oy) * w + x - ox] = 0
     b = v.seen.buildings
     for i in range(0, len(b), 7):
@@ -331,14 +370,15 @@ def bfs(
     reach: int = 0,
     toward: Pos | None = None,
     table: bytes = FREE,
+    mates: bool = True,
 ) -> list[Pos] | None:
     """A shortest walk to a tile in `goal`, or beside one when `near`, within `reach` of
-    here if given; failing that, to the reachable tile nearest `toward` if given. The
-    next step is last. The search spreads a whole ring of tiles at a time as bit masks."""
-    w, h = v.w, v.h
-    row = w + 1
+    here if given; failing that, to the reachable tile nearest `toward` if given. The next
+    step is last; [] if already there, None if there's no walk. The search spreads a whole
+    ring of tiles at a time as bit masks."""
+    w, h, row = v.w, v.h, v.w + 1
     mx, my = v.me[0] - v.ox, v.me[1] - v.oy
-    left = bits(grid(v, table), w, h)
+    left = bits(grid(v, table, mates), w, h)
     if reach:
         x0, x1 = max(mx - reach, 0), min(mx + reach + 1, w)
         span = ((1 << (x1 - x0)) - 1) << x0
@@ -356,52 +396,32 @@ def bfs(
     rings = [start]
     ring = start
     hit = 0
-    while ring:
+    while ring and not hit:
         ring = (ring << 1 | ring >> 1 | ring << row | ring >> row) & left
         left ^= ring
         rings.append(ring)
         hit = ring & target
-        if hit:
-            break
     if not hit:
         if toward is None:
             return None
-        seen = 0
-        for r in rings:
-            seen |= r
-        hit = nearest_bit(seen, row, h, toward[0] - v.ox, toward[1] - v.oy)
-        if not hit:
+        reached = [i for i, c in enumerate(bin(sum(rings))[:1:-1]) if c == "1"]
+        tx, ty = toward[0] - v.ox, toward[1] - v.oy
+        c = min(reached, key=lambda i: max(abs(i % row - tx), abs(i // row - ty)))
+        if c == my * row + mx:
             return None
-        k = next(k for k in range(len(rings)) if rings[k] & hit)
+        k = next(k for k, r in enumerate(rings) if r >> c & 1)
         del rings[k + 1 :]
-    c = (hit & -hit).bit_length() - 1
+    else:
+        c = (hit & -hit).bit_length() - 1
     path = []
-    for k in range(len(rings) - 2, -1, -1):
+    for prev in reversed(rings[:-1]):
         path.append((c % row + v.ox, c // row + v.oy))
-        prev = rings[k]
-        for nb in (c - 1, c + 1, c - row, c + row):
-            if nb >= 0 and prev >> nb & 1:
-                c = nb
-                break
+        c = next(nb for nb in (c - 1, c + 1, c - row, c + row) if nb >= 0 and prev >> nb & 1)
     return path
 
 
-def nearest_bit(cells: int, row: int, h: int, tx: int, ty: int) -> int:
-    """The bit of the tile among `cells` nearest (tx, ty), searching out ring by ring."""
-    w = row - 1
-    tx, ty = min(max(tx, 0), w - 1), min(max(ty, 0), h - 1)
-    for r in range(max(w, h)):
-        for y in range(ty - r, ty + r + 1):
-            if not 0 <= y < h:
-                continue
-            xs = range(tx - r, tx + r + 1) if abs(y - ty) == r else (tx - r, tx + r)
-            for x in xs:
-                if 0 <= x < w and cells >> (y * row + x) & 1:
-                    return 1 << (y * row + x)
-    return 0
-
-
 def step_path(handle: FrontierHandle, v: View) -> bool:
+    """The next step of the walk; waits a tick or two for a unit in the way."""
     if not mind.path:
         return False
     nx = mind.path[-1]
@@ -414,11 +434,10 @@ def step_path(handle: FrontierHandle, v: View) -> bool:
             return True
         except ActionError:
             pass
-    if d is not None and nx in v.occupied and mind.stuck < 2:
-        mind.stuck += 1
+    mind.stuck += 1
+    if d is not None and nx in v.occupied and mind.stuck < 3:
         return True
     mind.path = []
-    mind.stuck += 1
     return False
 
 
@@ -426,13 +445,14 @@ def go(
     handle: FrontierHandle,
     v: View,
     key: object,
-    goal: Callable[[], bytearray],
-    near: bool,
+    goal: Callable[[], bytes | bytearray],
+    near: bool = False,
     reach: int = 0,
     toward: Pos | None = None,
 ) -> bool:
-    """Follows the walk for `key`, or plans one; True if it moved. A walk that can't be
-    planned isn't tried again for a few ticks."""
+    """Follows the walk for `key`, or plans one; True if it moved or is already there. A
+    walk blocked by teammates is planned through them, to wait for them to move; a walk
+    that can't be planned isn't tried again for a few ticks."""
     if mind.path_key == key and step_path(handle, v):
         return True
     if mind.stuck > 3:
@@ -445,16 +465,16 @@ def go(
     path = None
     if any(g) or toward is not None:
         path = bfs(v, g, near, reach, toward)
-        if path is None and reach:
-            path = bfs(v, g, near, 0, toward)
-    if not path:
+        if path is None:
+            path = bfs(v, g, near, 0, toward, mates=False)
+    if path is None:
         mind.path = []
-        mind.fails[key] = v.tick + (3 if path is None else 6)
+        mind.fails[key] = v.tick + 3
         if len(mind.fails) > 64:
             mind.fails = {k: t for k, t in mind.fails.items() if t > v.tick}
         return False
     mind.path = path
-    return step_path(handle, v)
+    return not path or step_path(handle, v)
 
 
 def wiggle(handle: FrontierHandle) -> bool:
@@ -467,12 +487,11 @@ def wiggle(handle: FrontierHandle) -> bool:
     return False
 
 
-def marks(v: View, targets: Iterable[Pos]) -> bytearray:
+def marks(v: View, targets: list[Pos]) -> bytearray:
     goal = bytearray(v.w * v.h)
     for x, y in targets:
-        x, y = x - v.ox, y - v.oy
-        if 0 <= x < v.w and 0 <= y < v.h:
-            goal[y * v.w + x] = 1
+        if v.inside((x, y)):
+            goal[(y - v.oy) * v.w + x - v.ox] = 1
     return goal
 
 
@@ -480,12 +499,13 @@ def go_beside(handle: FrontierHandle, v: View, targets: list[Pos], key: object) 
     if not targets:
         return False
     near = min(dist(t, v.me) for t in targets)
-    return go(handle, v, key, lambda: marks(v, targets), True, near + 5 if near < 10 else 0)
+    return go(handle, v, key, lambda: beside(v.tiles, targets), False, near + 5 if near < 10 else 0)
 
 
 def go_to(handle: FrontierHandle, v: View, target: Pos, key: object, radius: int = 0) -> bool:
     """Toward a tile anywhere: through the view to it, to the view's edge on its side, or
-    as close as the view allows."""
+    as close as the view allows. False, marking the tile bad, after a minute without
+    getting closer."""
     tx = min(max(target[0], v.ox + 1), v.ox + v.w - 2)
     ty = min(max(target[1], v.oy + 1), v.oy + v.h - 2)
     if (tx, ty) != target:
@@ -498,49 +518,45 @@ def go_to(handle: FrontierHandle, v: View, target: Pos, key: object, radius: int
                 g[y * v.w + x] = 1
         return g
 
-    d = dist(v.me, target)
-    best, since = mind.progress.get((key, target), (d + 1, v.tick))
-    if d < best:
-        best, since = d, v.tick
-    mind.progress = {(key, target): (best, since)}
-    if v.tick - since > 60:
+    k, d = (key, target), dist(v.me, target)
+    if mind.progress[0] != k or d < mind.progress[1]:
+        mind.progress = (k, d, v.tick)
+    if v.tick - mind.progress[2] > 60:
         mind.bad.add(target)
-        mind.progress = {}
-        return wiggle(handle) and False
-    if go(handle, v, (key, target), goal, False, 0, target):
-        return True
-    return towards(handle, v.me, target)
+        mind.progress = (None, 0, 0)
+        wiggle(handle)
+        return False
+    if not go(handle, v, k, goal, False, 0, target):
+        towards(handle, v.me, target)
+    return True
 
 
-def towards(handle: FrontierHandle, me: Pos, target: Pos) -> bool:
-    dx, dy = target[0] - me[0], target[1] - me[1]
-    order = sorted(DIRS, key=lambda s: -(s[1][0] * dx + s[1][1] * dy) + mind.rng.random())
-    for d, _ in order[:3]:
-        with suppress(ActionError):
-            handle.move(d)
-            return True
-    return False
-
-
-def dir_to(me: Pos, p: Pos) -> Dir | None:
+def adjacent(v: View, goal: bytes | bytearray) -> Dir | None:
+    """The way to a neighbouring tile marked in `goal`."""
     for d, (dx, dy) in DIRS:
-        if (me[0] + dx, me[1] + dy) == p:
+        x, y = v.me[0] + dx - v.ox, v.me[1] + dy - v.oy
+        if 0 <= x < v.w and 0 <= y < v.h and goal[y * v.w + x]:
             return d
     return None
 
 
-# Messages: the commander says b"C" and records; workers say b"H", their role, and veins.
+# Messages: a tag, then records. The commander says b"C" and R (a unit's id in 3 bytes and
+# its role), S (BROADCAST and the base's total, 2 bytes each), B (wood and stone still
+# needed to rebuild the base) and V records; a worker says b"H", its role, and V records
+# (a vein's tile, then x and y in 2 bytes each).
+
+RECORD = {b"R": 5, b"S": 3 + 2 * len(BROADCAST), b"B": 3, b"V": 6}
 
 
 def encode(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
-def vein_records() -> bytes:
-    out = b""
-    for tile, (x, y) in mind.veins.items():
-        out += b"V" + bytes([tile]) + x.to_bytes(2, "little") + y.to_bytes(2, "little")
-    return out
+def vein_records() -> list[bytes]:
+    return [
+        b"V" + bytes([tile]) + x.to_bytes(2, "little") + y.to_bytes(2, "little")
+        for tile, (x, y) in mind.veins.items()
+    ]
 
 
 def learn_vein(tile: int, p: Pos) -> None:
@@ -551,34 +567,27 @@ def learn_vein(tile: int, p: Pos) -> None:
         mind.veins[tile] = p
 
 
-def read(data: bytes, sender: int, v: View) -> None:
-    i = 1
-    while i < len(data):
+def read(data: bytes, i: int, v: View) -> None:
+    def num(j: int) -> int:
+        return int.from_bytes(data[j : j + 2], "little")
+
+    while i + RECORD.get(data[i : i + 1], len(data)) <= len(data):
         tag = data[i : i + 1]
-        if tag == b"R":
-            uid = int.from_bytes(data[i + 1 : i + 4], "little")
-            if uid == mind.id:
-                if mind.role != data[i + 4]:
-                    mind.path = []
-                mind.role = data[i + 4]
-            i += 5
+        if tag == b"R" and int.from_bytes(data[i + 1 : i + 4], "little") == mind.id:
+            if mind.role != data[i + 4]:
+                mind.path = []
+            mind.role = data[i + 4]
         elif tag == b"S":
             for k, item in enumerate(BROADCAST):
-                mind.stock[item] = int.from_bytes(data[i + 1 + 2 * k : i + 3 + 2 * k], "little")
-            k = i + 1 + 2 * len(BROADCAST)
-            mind.base_total = int.from_bytes(data[k : k + 2], "little")
+                mind.stock[item] = num(i + 1 + 2 * k)
+            mind.base_total = num(i + 1 + 2 * len(BROADCAST))
             mind.heard_at = v.tick
-            i = k + 2
+        elif tag == b"B":
+            mind.need = {Item.WOOD: data[i + 1], Item.STONE: data[i + 2]}
+            mind.need_at = v.tick
         elif tag == b"V":
-            tile = data[i + 1]
-            p = (
-                int.from_bytes(data[i + 2 : i + 4], "little"),
-                int.from_bytes(data[i + 4 : i + 6], "little"),
-            )
-            learn_vein(tile, p)
-            i += 6
-        else:
-            return
+            learn_vein(data[i + 1], (num(i + 2), num(i + 4)))
+        i += RECORD[tag]
 
 
 def hear(v: View, commander: bool) -> None:
@@ -586,9 +595,9 @@ def hear(v: View, commander: bool) -> None:
         data = base64.b64decode(msg.data)
         if commander and data[:1] == b"H" and len(data) >= 2:
             mind.alive[msg.sender] = (data[1], v.tick)
-            read(data[1:], msg.sender, v)
+            read(data, 2, v)
         elif not commander and data[:1] == b"C":
-            read(data, msg.sender, v)
+            read(data, 1, v)
 
 
 def scan_veins(v: View) -> None:
@@ -619,43 +628,42 @@ def scan_veins(v: View) -> None:
 # The base
 
 
-def base_store(v: View) -> Store | None:
-    for s in v.seen.stores:
-        if (s.pos.x, s.pos.y) == mind.base:
-            return s
+def base_store(v: View) -> tuple[Dir, Costs] | None:
+    """The way to the finished base, if it's beside, and what it holds."""
+    b = v.buildings().get(mind.base)
+    if b is None or b[1] != BASE or b[3] > 0:
+        return None
+    for p, d, stored, _, _ in stores_beside(v):
+        if p == mind.base:
+            return d, stored
     return None
 
 
-def visit_base(
-    handle: FrontierHandle, v: View, keep: dict[Item, int], want: dict[Item, int]
-) -> bool:
+def visit_base(handle: FrontierHandle, v: View, keep: Costs, want: Costs) -> bool:
     """Beside the base, unloads all but `keep` and takes up to `want`; elsewhere heads
     there. False once there's nothing left to do there."""
-    store = base_store(v)
-    if store is None:
-        if dist(v.me, mind.base) <= 1 and v.seen.base is not None:
-            return wiggle(handle)
-        return go_home(handle, v)
-    stored = {s.item: s.count for s in store.stored}
-    mind.stock = stored
-    mind.stock_at = v.tick
-    d = dir_to(v.me, mind.base)
-    assert d is not None
-    mind.base_busy = v.tick
+    if v.seen.base is None:
+        return clear_base(handle, v)
+    here = base_store(v)
+    if here is None:
+        return errand(v, keep, want) and go_home(handle, v)
+    d, stored = here
+    mind.stock, mind.stock_at = stored, v.tick
     for item, n in v.carried.items():
+        if n <= keep.get(item, 0) or capped(v, item):
+            continue
         extra = n - keep.get(item, 0)
-        if extra > 0 and stored.get(item, 0) < CAPS.get(item, 1000):
-            try:
-                handle.put(d, item, extra)
-                return True
-            except ActionError:
-                mind.base_full_until = v.tick + 150
+        try:
+            handle.put(d, item, extra)
+            return True
+        except ActionError:
+            mind.base_full_until = v.tick + 150
     room = CARRY - v.load
     for item, n in want.items():
         short = min(n - v.carried.get(item, 0), room)
         if item == Item.WHEAT:
-            food = stored.get(Item.WHEAT, 0) + stored.get(Item.APPLE, 0)
-            short = min(short, food - RESERVE)
+            if mind.role != FARMER:
+                short = min(short, stored.get(Item.WHEAT, 0) + stored.get(Item.APPLE, 0) - RESERVE)
             if not stored.get(Item.WHEAT):
                 item = Item.APPLE
                 spare = stored.get(Item.APPLE, 0) - (APPLES if v.seen.me.hungry_at > v.tick else 0)
@@ -664,87 +672,137 @@ def visit_base(
             with suppress(ActionError):
                 handle.take(d, item, short)
                 return True
-    mind.base_busy = -1
     return False
 
 
+def capped(v: View, item: Item) -> bool:
+    return mind.stock.get(item, 0) >= CAPS.get(item, 1000) or mind.base_full_until > v.tick
+
+
+def errand(v: View, keep: Costs, want: Costs) -> bool:
+    """Whether the base, as last seen, has room for what this unit would leave there or
+    holds what it wants."""
+    if any(n > keep.get(i, 0) and not capped(v, i) for i, n in v.carried.items()):
+        return True
+    food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
+    spare = food > (0 if mind.role == FARMER else RESERVE)
+    return any(
+        spare if i == Item.WHEAT else bool(mind.stock.get(i)) or mind.stock_at < 0
+        for i, n in want.items()
+        if n > v.carried.get(i, 0)
+    )
+
+
 def go_home(handle: FrontierHandle, v: View) -> bool:
-    post = at(0, 1)
-    sides = [
-        p for p in ((mind.base[0] + dx, mind.base[1] + dy) for _, (dx, dy) in DIRS) if p != post
-    ]
-    if dist(v.me, mind.base) <= 14:
-        if go(handle, v, "home", lambda: marks(v, sides), False):
-            return True
-        return wiggle(handle) if dist(v.me, mind.base) <= 3 else towards(handle, v.me, mind.base)
-    return go_to(handle, v, mind.base, "far-home", 2)
+    if dist(v.me, mind.base) > 14:
+        return go_to(handle, v, mind.base, "far-home", 2)
+
+    def sides() -> bytearray:
+        goal = beside(v.tiles, [mind.base])
+        post = at(*POST)
+        if v.inside(post):
+            goal[(post[1] - v.oy) * v.w + post[0] - v.ox] = 0
+        return goal
+
+    if go(handle, v, "home", sides):
+        return True
+    if dist(v.me, mind.base) <= 3:
+        return wiggle(handle)
+    towards(handle, v.me, mind.base)
+    return True
+
+
+def clear_base(handle: FrontierHandle, v: View) -> bool:
+    """With the base destroyed, leaves on its tile just what the commander still needs to
+    rebuild it, and carries off the rest."""
+    d = dir_to(v.me, mind.base)
+    if d is None:
+        return go_home(handle, v)
+    pile = v.piles().get(mind.base, {})
+    need = mind.need if v.tick - mind.need_at < 50 else mind.costs.get(Building.BASE, {})
+    extra = {i: pile.get(i, 0) - need.get(i, 0) for i in set(pile) | set(need)}
+    with suppress(ActionError):
+        for item, n in extra.items():
+            if n < 0 and v.carried.get(item):
+                handle.put(d, item, min(-n, v.carried[item]))
+                return True
+        for item, n in extra.items():
+            if n > 0 and v.load < CARRY:
+                handle.take(d, item, min(n, CARRY - v.load))
+                return True
+            if n > 0:
+                junk = max(v.carried, key=lambda i: (i not in FOOD, v.carried[i]))
+                return drop(handle, v, junk, v.carried[junk], tuple(WALKABLE))
+    return False
 
 
 def idle(handle: FrontierHandle, v: View) -> None:
     """Out of the way, inside the wall."""
     spot = at(*IDLE[mind.id % len(IDLE)])
     if v.me != spot:
-        go(handle, v, ("idle", spot), lambda: marks(v, [spot]), False)
+        go(handle, v, ("idle", spot), lambda: marks(v, [spot]))
 
 
 def eat(handle: FrontierHandle, v: View) -> bool:
-    """Food from a granary by the farm with wheat in it, or else from the base."""
+    """Food from a granary on the way home with some in it, or else from the base; False
+    when no food is known anywhere."""
     want = food_want(mind.role)
-    granaries = [at(*g) for g in GRANARIES]
-    for s in v.seen.stores:
-        p = (s.pos.x, s.pos.y)
-        if p in granaries and not s.owed:
-            stored = {st.item: st.count for st in s.stored}
-            d = dir_to(v.me, p) or Dir.UP
+    for p, d, stored, owed, _ in stores_beside(v):
+        if p in mind.granaries and not owed:
             meal = Item.WHEAT if stored.get(Item.WHEAT) else Item.APPLE
-            if stored.get(meal) and v.food() < want:
+            if not stored.get(meal):
+                mind.empty[p] = v.tick + 150
+            elif v.food() < want:
                 with suppress(ActionError):
                     handle.take(d, meal, want - v.food())
                     return True
-            mind.empty[p] = v.tick + 150
-    built = [g for g in granaries if g in v.own(CHEST)] if v.inside(granaries[0]) else granaries
-    open_ = [g for g in built if mind.empty.get(g, 0) < v.tick]
-    outside = dist(v.me, mind.base) > 4
-    if outside and open_:
+    chests = v.own(CHEST)
+    granaries = mind.granaries
+    built = [g for g in granaries if g in chests] if v.inside(granaries[0]) else granaries
+    home = dist(v.me, mind.base)
+    open_ = [g for g in built if mind.empty.get(g, 0) < v.tick and dist(g, v.me) < home]
+    if home > 4 and open_:
         g = min(open_, key=lambda g: dist(g, v.me))
         if go_beside(handle, v, [g], ("granary", g)):
             return True
         mind.empty[g] = v.tick + 30
     base_food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
-    if outside and built and base_food < 3 and v.tick - mind.heard_at < 50:
-        g = min(built, key=lambda g: dist(g, v.me))
-        return dist(g, v.me) <= 2 or go_beside(handle, v, [g], ("granary", g))
-    keep = {Item.WHEAT: 0, Item.APPLE: 0}
-    keep.update(keeps(v))
-    return visit_base(handle, v, keep, {Item.WHEAT: want})
+    fresh = v.tick - max(mind.heard_at, mind.stock_at) < 100
+    if fresh and base_food <= (0 if mind.role == FARMER else RESERVE):
+        return False
+    return visit_base(handle, v, keeps(v), {Item.WHEAT: want})
 
 
-def drop(handle: FrontierHandle, v: View, item: Item, n: int) -> bool:
-    """Leaves surplus on farmland or bare dirt beside, where it is in nobody's way."""
+def drop(
+    handle: FrontierHandle, v: View, item: Item, n: int, ground: tuple[int, ...] = (FARMLAND, DIRT)
+) -> bool:
+    """Leaves items on the ground beside, by default on farmland or bare dirt, where they
+    are in nobody's way."""
+    blds = v.buildings()
     for d, (dx, dy) in DIRS:
         q = (v.me[0] + dx, v.me[1] + dy)
-        if v.tile(q) in (FARMLAND, DIRT) and q not in v.occupied and q not in v.buildings():
+        free = q not in v.occupied and q not in blds and q != mind.base
+        if free and v.tiles[q] in ground:
             with suppress(ActionError):
                 handle.put(d, item, n)
                 return True
     return False
 
 
-def fill_granary(handle: FrontierHandle, v: View, items: dict[Item, int]) -> bool:
-    granaries = [at(*g) for g in GRANARIES]
-    for s in v.seen.stores:
-        p = (s.pos.x, s.pos.y)
-        if p in granaries and not s.owed:
-            held = sum(st.count for st in s.stored)
+def fill_granary(handle: FrontierHandle, v: View, items: Costs) -> bool:
+    for p, d, stored, owed, _ in stores_beside(v):
+        if p in mind.granaries and not owed:
+            held = sum(stored.values())
             if held < CHEST_ROOM:
                 for item, n in items.items():
                     if n > 0 and (item in FOOD or held < CHEST_ROOM - 10):
                         with suppress(ActionError):
-                            handle.put(dir_to(v.me, p) or Dir.UP, item, n)
+                            handle.put(d, item, n)
                             mind.empty.pop(p, None)
                             return True
             mind.full_until[p] = v.tick + 100
-    room = [g for g in granaries if mind.full_until.get(g, 0) < v.tick and g in v.own(CHEST)]
+    chests = v.own(CHEST)
+    room = [g for g in mind.granaries if mind.full_until.get(g, 0) < v.tick and g in chests]
     if room:
         g = min(room, key=lambda g: dist(g, v.me))
         if go_beside(handle, v, [g], ("granary", g)):
@@ -765,13 +823,88 @@ def food_want(role: int) -> int:
     return 3 if role in (FARMER, BUILDER, SMITH, GUARD) else 6
 
 
+def keeps(v: View) -> Costs:
+    keep = {Item.WHEAT: food_want(mind.role), Item.APPLE: food_want(mind.role)}
+    tool = TOOLS.get(mind.role)
+    if tool:
+        keep[tool] = 1
+    for weapon in (Item.COPPER_SWORD, Item.COPPER_ARMOUR, Item.IRON_SWORD, Item.IRON_ARMOUR):
+        keep[weapon] = 1
+    return keep
+
+
+def resupply(
+    handle: FrontierHandle, v: View, extra: Costs | None = None, food: bool = True
+) -> bool:
+    keep = keeps(v)
+    fed = v.seen.me.hungry_at - v.tick + 100 * v.food()
+    want = {Item.WHEAT: food_want(mind.role) if fed < 300 else 0}
+    if not food:
+        keep[Item.WHEAT] = keep[Item.APPLE] = want[Item.WHEAT] = 0
+    if extra:
+        keep.update(extra)
+        want.update(extra)
+    return visit_base(handle, v, keep, want)
+
+
+# Fighting
+
+
 def attack_adjacent(handle: FrontierHandle, v: View) -> bool:
-    for (x, y), _, _ in sorted(v.enemies, key=lambda e: e[1]):
+    for (x, y), _ in sorted(v.enemies, key=lambda e: e[1]):
         if abs(x - v.me[0]) + abs(y - v.me[1]) == 1:
             with suppress(ActionError):
                 handle.attack(x, y)
                 return True
     return False
+
+
+def fall_back(handle: FrontierHandle, v: View) -> bool:
+    """Back inside the wall while the enemies close by outnumber the team's units there."""
+    if mind.role == GUARD or dist(v.me, mind.base) <= 3:
+        return False
+    foes = sum(1 for p, _ in v.enemies if dist(p, v.me) <= 4)
+    return foes > sum(1 for p in v.mates if dist(p, v.me) <= 4) and go_home(handle, v)
+
+
+def shoot(handle: FrontierHandle, v: View) -> bool:
+    """From beside a tower, hits the weakest enemy in its range."""
+    for t in v.own(TOWER):
+        if abs(t[0] - v.me[0]) + abs(t[1] - v.me[1]) == 1:
+            for (x, y), _ in sorted(v.enemies, key=lambda e: e[1]):
+                if dist((x, y), t) <= mind.tower:
+                    with suppress(ActionError):
+                        handle.attack(x, y)
+                        return True
+    return False
+
+
+def guard(handle: FrontierHandle, v: View) -> None:
+    """Mans a tower inside the wall, or with no tower free, waits beside the base; the
+    guards meet raiders that get inside together."""
+    for weapon in (Item.COPPER_SWORD, Item.COPPER_ARMOUR):
+        fetch = mind.stock.get(weapon) and not v.carried.get(weapon)
+        if fetch and dist(v.me, mind.base) < 8 and resupply(handle, v, {weapon: 1}):
+            return
+    if shoot(handle, v):
+        return
+    towers = v.own(TOWER)
+    posts = [at(*stand) for tower, stand in TOWERS if at(*tower) in towers]
+    if mind.post not in posts or (mind.post in v.occupied and mind.post != v.me):
+        free = [p for p in posts if p not in v.occupied or p == v.me]
+        mind.post = free[mind.id % len(free)] if free else None
+    inside = [p for p, _ in v.enemies if dist(p, mind.base) <= 3]
+    if inside:
+        target = min(inside, key=lambda p: dist(p, v.me))
+        go_beside(handle, v, [target], ("chase", target))
+        return
+    spot = mind.post or at(*WATCH[mind.id % len(WATCH)])
+    if v.me != spot:
+        if not go(handle, v, ("post", spot), lambda: marks(v, [spot])):
+            help_monument(handle, v)
+        return
+    if v.tick - mind.stock_at > 400:
+        resupply(handle, v)
 
 
 # Entry
@@ -787,8 +920,11 @@ def step(handle: FrontierHandle) -> None:
         base = seen.base or seen.me.pos
         mind.base = (base.x, base.y)
         mind.m = 1 if base.x < seen.size // 2 else -1
-        mind.rng.state = seen.me.id * 7919 + 1
+        mind.rng = random.Random(seen.me.id)
         mind.plan = [(k, at(dx, dy)) for k, dx, dy in town()]
+        mind.granaries = [at(*g) for g in GRANARIES]
+        mind.ring = [at(*p) for p in ring()]
+        known(handle, v, 0)
     if seen.me.kind == Kind.COMMANDER:
         commander(handle, v)
         return
@@ -799,10 +935,10 @@ def step(handle: FrontierHandle) -> None:
         mind.role = WOODMAN
     if (v.tick + mind.id) % 20 == 0:
         with suppress(ActionError):
-            handle.say(encode(b"H" + bytes([mind.role]) + vein_records()))
+            handle.say(encode(b"H" + bytes([mind.role]) + b"".join(vein_records())))
     if (v.tick + mind.id) % 8 == 0:
         scan_veins(v)
-    if attack_adjacent(handle, v):
+    if attack_adjacent(handle, v) or fall_back(handle, v):
         return
     hauling = mind.role == BUILDER and v.load - v.food() >= 15
     if needs_food(v) and not (hauling and v.seen.me.hungry_at - v.tick > 20):
@@ -813,38 +949,15 @@ def step(handle: FrontierHandle) -> None:
             return
         if eat(handle, v):
             return
+        if not v.food() and mind.role != FARMER:
+            farmer(handle, v)
+            return
     food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
     famine = v.tick > 400 and food < 15 and v.tick - mind.heard_at < 100
     if famine and mind.role in (HOARDER, MASON, COALER, COPPERER, IRONER):
         farmer(handle, v)
     else:
         ROLES.get(mind.role, woodman)(handle, v)
-    if dir_to(v.me, mind.base) is not None and mind.base_busy != v.tick:
-        wiggle(handle)
-
-
-def keeps(v: View) -> dict[Item, int]:
-    keep = {Item.WHEAT: food_want(mind.role), Item.APPLE: food_want(mind.role)}
-    tool = TOOLS.get(mind.role)
-    if tool:
-        keep[tool] = 1
-    for weapon in (Item.COPPER_SWORD, Item.COPPER_ARMOUR, Item.IRON_SWORD, Item.IRON_ARMOUR):
-        keep[weapon] = 1
-    return keep
-
-
-def resupply(
-    handle: FrontierHandle, v: View, extra: dict[Item, int] | None = None, food: bool = True
-) -> bool:
-    keep = keeps(v)
-    fed = v.seen.me.hungry_at - v.tick + 100 * v.food()
-    want = {Item.WHEAT: food_want(mind.role) if fed < 300 else 0}
-    if not food:
-        keep[Item.WHEAT] = keep[Item.APPLE] = want[Item.WHEAT] = 0
-    if extra:
-        keep.update(extra)
-        want.update(extra)
-    return visit_base(handle, v, keep, want)
 
 
 # Commander
@@ -852,23 +965,26 @@ def resupply(
 
 def commander(handle: FrontierHandle, v: View) -> None:
     hear(v, True)
-    scan_veins(v)
+    if v.tick % 8 == 0:
+        scan_veins(v)
     acted = attack_adjacent(handle, v)
-    if not acted and dist(v.me, mind.base) > 1 and v.seen.base is not None:
-        go_beside(handle, v, [mind.base], "post")
-    store = base_store(v)
-    if store is not None and not acted:
-        stored = {s.item: s.count for s in store.stored}
+    post = at(*POST)
+    here = base_store(v)
+    there = acted or v.me == post or go(handle, v, "post", lambda: marks(v, [post]))
+    if not there and here is None:
+        go_beside(handle, v, [mind.base], "base")
+    if not acted and here is None:
+        rebuild(handle, v)
+    elif not acted and here is not None:
+        d, stored = here
         mind.stock = stored
-        d = dir_to(v.me, mind.base)
-        assert d is not None
         food = v.food()
         if food < 5:
             item = Item.WHEAT if stored.get(Item.WHEAT) else Item.APPLE
             with suppress(ActionError):
                 handle.take(d, item, 5 - food)
                 acted = True
-        if not acted:
+        if not acted and not shoot(handle, v):
             spawn(handle, v, stored)
     near = (FARMER, BUILDER, SMITH, GUARD)
     mind.alive = {
@@ -881,25 +997,61 @@ def commander(handle: FrontierHandle, v: View) -> None:
     msg += b"S" + b"".join(
         min(mind.stock.get(i, 0), 65535).to_bytes(2, "little") for i in BROADCAST
     )
-    msg += sum(mind.stock.values()).to_bytes(2, "little")
-    msg += vein_records()
+    msg += min(sum(mind.stock.values()), 65535).to_bytes(2, "little")
+    if v.seen.base is None:
+        cost = mind.costs.get(Building.BASE, {})
+        need = (max(0, cost.get(i, 0) - v.carried.get(i, 0)) for i in (Item.WOOD, Item.STONE))
+        msg += b"B" + bytes(need)
+    for record in vein_records():
+        if len(msg) + len(record) <= 64:
+            msg += record
     with suppress(ActionError):
-        handle.say(encode(msg[:64]))
+        handle.say(encode(msg))
 
 
-def spawn(handle: FrontierHandle, v: View, stored: dict[Item, int]) -> None:
-    """A worker while the farms can feed one more and the base can spare the wood."""
+def rebuild(handle: FrontierHandle, v: View) -> None:
+    """Rebuilds a destroyed base: unloads all but its cost onto its tile, takes the cost
+    from what the base spilled there, and once the workers have cleared the rest, builds."""
+    d = dir_to(v.me, mind.base)
+    b = v.buildings().get(mind.base)
+    if d is None or (b is not None and b[0] != v.team):
+        return
+    cost = mind.costs.get(Building.BASE, {})
+    pile = v.piles().get(mind.base, {})
+    with suppress(ActionError):
+        if b is not None or (not pile and all(v.carried.get(i, 0) >= n for i, n in cost.items())):
+            handle.build(d, Building.BASE)
+            return
+        for item, n in v.carried.items():
+            if n > cost.get(item, 0):
+                handle.put(d, item, n - cost.get(item, 0))
+                return
+        for item, n in cost.items():
+            short = n - v.carried.get(item, 0)
+            if short > 0 and pile.get(item):
+                handle.take(d, item, min(short, pile[item]))
+                return
+
+
+def spawn(handle: FrontierHandle, v: View, stored: Costs) -> None:
+    """A worker while the farms can feed one more and the base can spare the wood; once
+    the early workers are out, the wall gets its wood first."""
     pop = len(mind.alive)
     wood = stored.get(Item.WOOD, 0)
     food = stored.get(Item.WHEAT, 0) + stored.get(Item.APPLE, 0)
-    reserve = 0 if mind.spawned < 6 else 25
+    blds = v.buildings()
+    walled = not any(
+        v.tiles[p] in (GRASS, DIRT, FOREST) and blds.get(p, (-1, 0, 0, 1))[::3] != (v.team, 0)
+        for p in mind.ring
+    )
+    reserve = 0 if mind.spawned < len(EARLY) else 25 if walled else 60
     farmers = sum(1 for role, _ in mind.alive.values() if role == FARMER)
     need_farmer = mind.spawned >= len(EARLY) and farmers < 2 and food >= 4 and wood >= 10
     if not need_farmer and (wood < 10 + reserve or food < 10 + pop // 3):
         return
     farmland = len(v.seen.soil) // 3
     c = v.seen.crops
-    trees = sum(1 for i in range(2, len(c), 4) if c[i] == 0)
+    trees = sum(1 for i in range(2, len(c), 4) if c[i] == APPLE_TREE)
     fed = 8 + farmland * 2 // 5 + 3 * trees
     gap = 2 if mind.spawned < len(EARLY) else 12
     if mind.assigned and v.tick - mind.assigned[-1][2] < gap:
@@ -941,21 +1093,11 @@ def pick_role(pop: int) -> int:
 # Gathering and hoarding
 
 
-def adjacent_tile(v: View, tile: int) -> Dir | None:
-    blds = v.buildings()
-    for d, (dx, dy) in DIRS:
-        p = (v.me[0] + dx, v.me[1] + dy)
-        if v.tile(p) == tile and p not in blds:
-            return d
-    return None
-
-
 def resource_goal(v: View, tile: int, away: int) -> bytearray:
     """The view's tiles of `tile`, but none within `away` of the base."""
     goal = bytearray(v.data.translate(MASK[tile]))
     for p in v.buildings():
-        x, y = p[0] - v.ox, p[1] - v.oy
-        goal[y * v.w + x] = 0
+        goal[(p[1] - v.oy) * v.w + p[0] - v.ox] = 0
     if away:
         bx, by = mind.base[0] - v.ox, mind.base[1] - v.oy
         x0, x1 = max(bx - away, 0), min(bx + away + 1, v.w)
@@ -965,6 +1107,19 @@ def resource_goal(v: View, tile: int, away: int) -> bytearray:
     return goal
 
 
+def harvest(handle: FrontierHandle, v: View, key: object, goal: bytearray) -> bool:
+    """Gathers from a tile marked in `goal` beside, or walks to one."""
+    d = adjacent(v, goal)
+    if d is not None:
+        try:
+            handle.gather(d)
+        except ActionError:
+            return False
+        mind.path = []
+        return True
+    return go(handle, v, key, lambda: goal, True)
+
+
 def gather(handle: FrontierHandle, v: View, tile: int, item: Item, hoard: bool) -> None:
     room = CARRY - v.load
     if not v.carried.get(item):
@@ -972,23 +1127,18 @@ def gather(handle: FrontierHandle, v: View, tile: int, item: Item, hoard: bool) 
     if room <= 0 or (room < 2 and v.carried.get(item, 0) > 0) or mind.unload:
         if not mind.unload or base_full(v):
             mind.unload = "stash" if hoard or base_full(v) else "base"
-        if mind.unload != "stash":
-            resupply(handle, v)
+        if mind.unload != "stash" and resupply(handle, v):
             return
+        mind.unload = "stash"
         if stash(handle, v):
             return
         mind.unload = ""
         if room <= 0:
-            resupply(handle, v)
+            if not resupply(handle, v) and not drop(handle, v, item, v.carried.get(item, 0)):
+                wiggle(handle)
             return
-    d = adjacent_tile(v, tile)
     away = HOARD_FROM if hoard else 0
-    if d is not None and (not hoard or dist(v.me, mind.base) > away):
-        with suppress(ActionError):
-            handle.gather(d)
-            mind.path = []
-            return
-    if go(handle, v, ("res", tile, away), lambda: resource_goal(v, tile, away), True):
+    if harvest(handle, v, ("res", tile, away), resource_goal(v, tile, away)):
         return
     known = mind.veins.get(tile)
     if known is not None and tile == FOREST:
@@ -1005,13 +1155,14 @@ def explore(handle: FrontierHandle, v: View) -> None:
     if mind.explore is None or v.tick > mind.explore_until or dist(v.me, mind.explore) < 3 or stuck:
         k = mind.explored
         mind.explored += 1
-        r = 32 * (1 + k // 8) % max(32, min(192, mind.size // 3))
+        rings = max(1, min(192, mind.size // 3) // 32)
+        r = 32 * (1 + k // 8 % rings)
         dx, dy = COMPASS[(k + mind.id) % 8]
         x, y = mind.base[0] + dx * r, mind.base[1] + dy * r
         mid = mind.size // 2
         x = min(x, mid - 12) if mind.m == 1 else max(x, mid + 12)
         mind.explore = (min(max(x, 1), mind.size - 2), min(max(y, 1), mind.size - 2))
-        mind.explore_until = v.tick + int(r * 2) + 50
+        mind.explore_until = v.tick + 2 * r + 50
     go_to(handle, v, mind.explore, "explore", 2)
 
 
@@ -1030,34 +1181,33 @@ def away() -> Pos:
 def stash(handle: FrontierHandle, v: View) -> bool:
     """Into a chest nearby with room, a chest site, or a new chest or stone wall on the
     lattice where nothing is in anyone's way. False when there is too little to stash."""
-    granaries = {at(*g) for g in GRANARIES}
-    for s in v.seen.stores:
-        p = (s.pos.x, s.pos.y)
-        b = v.buildings().get(p)
-        if b is None or b[1] != CHEST or p in granaries:
+    blds = v.buildings()
+    for p, d, stored, owed, _ in stores_beside(v):
+        b = blds.get(p)
+        if b is None or b[1] != CHEST or p in mind.granaries:
             continue
-        side = dir_to(v.me, p) or Dir.UP
-        if s.owed:
-            for st in s.owed:
-                if v.carried.get(st.item):
+        if owed:
+            for item, n in owed.items():
+                if v.carried.get(item):
                     with suppress(ActionError):
-                        handle.put(side, st.item, st.count)
+                        handle.put(d, item, n)
                         return True
             continue
-        if sum(st.count for st in s.stored) >= CHEST_ROOM:
+        if sum(stored.values()) >= CHEST_ROOM:
             mind.full.add(p)
             continue
         for item, n in v.carried.items():
             if item not in FOOD and n > 0:
                 with suppress(ActionError):
-                    handle.put(side, item, n)
+                    handle.put(d, item, n)
                     return True
     sites = v.own(CHEST, finished=False)
-    for p in sites + v.own(STONE_WALL, finished=False):
-        d = dir_to(v.me, p)
-        if d is not None:
+    walls = v.own(BUILDINGS.index(Building.STONE_WALL), finished=False)
+    for p in sites + walls:
+        side = dir_to(v.me, p)
+        if side is not None:
             with suppress(ActionError):
-                handle.build(d, Building.CHEST if p in sites else Building.STONE_WALL)
+                handle.build(side, Building.CHEST if p in sites else Building.STONE_WALL)
                 return True
     goods = sum(n for item, n in v.carried.items() if item not in FOOD)
     chests = [p for p in v.own(CHEST) if p not in mind.full]
@@ -1066,12 +1216,14 @@ def stash(handle: FrontierHandle, v: View) -> bool:
         if dist(near, v.me) <= 8 and go_beside(handle, v, [near], ("chest", near)):
             return True
     wood, stone = v.carried.get(Item.WOOD, 0), v.carried.get(Item.STONE, 0)
-    if wood < 10 and stone < 6:
+    chest = mind.costs.get(Building.CHEST, {}).get(Item.WOOD, 10)
+    wall = mind.costs.get(Building.STONE_WALL, {}).get(Item.STONE, 6)
+    if wood < chest and stone < wall:
         return False
     if dist(v.me, mind.base) <= HOARD_FROM:
         return go_to(handle, v, away(), "away", 3)
-    kind = Building.CHEST if wood >= 10 else Building.STONE_WALL
-    piles, blds = v.piles(), v.buildings()
+    kind = Building.CHEST if wood >= chest else Building.STONE_WALL
+    piles = v.piles()
     for d, (dx, dy) in DIRS:
         p = (v.me[0] + dx, v.me[1] + dy)
         if lattice(v, p) and p not in v.occupied and p not in blds and p not in piles:
@@ -1090,7 +1242,7 @@ def stash(handle: FrontierHandle, v: View) -> bool:
 def lattice(v: View, p: Pos) -> bool:
     """Chests and walls in the wild go on every fifth tile, never two side by side or
     corner to corner, so they never wall anyone in."""
-    return (p[0] + 2 * p[1]) % 5 == 0 and v.tile(p) in (GRASS, DIRT)
+    return (p[0] + 2 * p[1]) % 5 == 0 and v.tiles[p] in (GRASS, DIRT)
 
 
 def farm_forest(v: View) -> bytearray:
@@ -1124,16 +1276,8 @@ def woodman(handle: FrontierHandle, v: View) -> None:
     if v.load and not hoard and v.carried.get(Item.WOOD, 0) == 0 and CARRY - v.load < 3:
         resupply(handle, v)
         return
-    if not hoard and CARRY - v.load > 1:
-        for d, (dx, dy) in DIRS:
-            x, y = v.me[0] + dx, v.me[1] + dy
-            zone = -14 <= y - mind.base[1] <= -5 and abs(x - mind.base[0]) <= 8
-            if zone and v.tile((x, y)) == FOREST:
-                with suppress(ActionError):
-                    handle.gather(d)
-                    return
-        if go(handle, v, "farm-forest", lambda: farm_forest(v), True):
-            return
+    if not hoard and CARRY - v.load > 1 and harvest(handle, v, "farm-forest", farm_forest(v)):
+        return
     gather(handle, v, FOREST, Item.WOOD, hoard)
 
 
@@ -1168,7 +1312,7 @@ def compute_field(v: View) -> None:
             m |= r
         wet.append(m)
     tilled = (GRASS, DIRT, FARMLAND, FOREST, ROCK)
-    skip = TRAP_SET | set(GRANARIES) | set(WELLS)
+    skip = set(TRAPS) | set(GRANARIES) | set(WELLS) | {RADIO, MONUMENT_AT, SMELTER2}
     field = []
     for dy in range(-16, 14):
         for dx in range(-14, 15):
@@ -1178,7 +1322,7 @@ def compute_field(v: View) -> None:
             x, y = p[0] - v.ox, p[1] - v.oy
             if 0 <= x < w and 0 <= y < h and wet[y] >> x & 1 and v.data[y * w + x] in tilled:
                 field.append(p)
-    mind.field = field
+    mind.field, mind.field_set = field, set(field)
     mind.field_at = v.tick
 
 
@@ -1189,31 +1333,25 @@ def farmer(handle: FrontierHandle, v: View) -> None:
     if not mind.field:
         resupply(handle, v)
         return
-    c = v.seen.crops
-    crops = {(c[i], c[i + 1]): (c[i + 2], c[i + 3]) for i in range(0, len(c), 4)}
-    s = v.seen.soil
-    soil = {(s[i], s[i + 1]): s[i + 2] for i in range(0, len(s), 3)}
+    field = mind.field_set
+    c, s = v.seen.crops, v.seen.soil
+    crops = {(c[i], c[i + 1]): c[i + 3] for i in range(0, len(c), 4)}
     wheat = v.carried.get(Item.WHEAT, 0)
     seeds = v.carried.get(Item.WHEAT_SEED, 0)
     apple_seeds = v.carried.get(Item.APPLE_SEED, 0)
+    apples = v.carried.get(Item.APPLE, 0)
+    junk = v.carried.get(Item.WOOD, 0) + v.carried.get(Item.STONE, 0)
     room = CARRY - v.load
-    field = mind.field
-    ripe = [p for p in field if p in crops and crops[p][1] <= v.tick] if room >= 6 else []
+    ripe = [p for p, t in crops.items() if t <= v.tick and p in field] if room >= 6 else []
     plant = []
     if seeds or apple_seeds:
-        plant = [p for p in field if p in soil and p not in crops and soil[p] >= 100]
-        if apple_seeds:
-            plant = [p for p in field if p in soil and p not in crops]
-    till = [p for p in field if v.tile(p) in (GRASS, DIRT) and p not in v.buildings()]
-    clear = [p for p in field if v.tile(p) in (FOREST, ROCK) and p not in v.buildings()]
-    apples = v.carried.get(Item.APPLE, 0)
-    wood = v.carried.get(Item.WOOD, 0) + v.carried.get(Item.STONE, 0)
+        soil = [(s[i], s[i + 1]) for i in range(0, len(s), 3) if apple_seeds or s[i + 2] >= 100]
+        plant = [p for p in soil if p in field and p not in crops]
     produce = max(0, wheat - 3) + apples + max(0, seeds - 6)
     stocked = mind.stock_at < 0 or mind.stock.get(Item.WHEAT_SEED, 0) > 0
     want_apple = 2 if mind.stock_at < 0 or mind.stock.get(Item.APPLE_SEED) else 0
-    unload = room < 6 or produce >= 12 or wood >= 10
-    restock = not ripe and seeds == 0 and stocked
-    restock |= not ripe and apple_seeds == 0 and want_apple > 0
+    unload = room < 6 or produce >= 12 or junk >= 10
+    restock = not ripe and (seeds == 0 and stocked or apple_seeds == 0 and want_apple > 0)
     keep = {Item.WHEAT: 3, Item.WHEAT_SEED: 99, Item.APPLE_SEED: 2, Item.APPLE: 0}
     if base_full(v) or mind.stock.get(Item.APPLE, 0) >= 40:
         keep[Item.APPLE] = 99
@@ -1224,7 +1362,7 @@ def farmer(handle: FrontierHandle, v: View) -> None:
     porter = (mind.id % 3 == 0 or (base_food < 10 and mind.id % 3 == 1)) and base_food < 30
     porter &= v.tick - mind.heard_at < 300
     apples_home = apples >= 4 and mind.stock.get(Item.APPLE, 0) < 40
-    granary = not porter and not apples_home and wood == 0
+    granary = not porter and not apples_home and junk == 0
     surplus = {Item.WHEAT: wheat - 3, Item.APPLE: apples, Item.WHEAT_SEED: seeds - 6}
     if unload and granary and fill_granary(handle, v, surplus):
         return
@@ -1232,103 +1370,104 @@ def farmer(handle: FrontierHandle, v: View) -> None:
         return
     if (unload or restock) and visit_base(handle, v, keep, supplies):
         return
-    for targets, act in (
-        (ripe, lambda d: handle.harvest(d)),
-        (plant, lambda d: handle.plant(d, Item.APPLE_SEED if apple_seeds else Item.WHEAT_SEED)),
-        (till, lambda d: handle.till(d)),
-    ):
-        if not targets:
-            continue
-        tset = set(targets)
+    for item in (Item.WOOD, Item.STONE):
+        if junk >= 10 and v.carried.get(item) and drop(handle, v, item, v.carried[item]):
+            return
+    blds = v.buildings()
+
+    def open_ground(q: Pos) -> bool:
+        return q in field and v.tiles[q] in (GRASS, DIRT) and q not in blds
+
+    ripe_set, plant_set = set(ripe), set(plant)
+    seed = Item.APPLE_SEED if apple_seeds else Item.WHEAT_SEED
+    jobs: list[tuple[Callable[[Pos], bool], Callable[[Dir], object]]] = [
+        (ripe_set.__contains__, handle.harvest),
+        (plant_set.__contains__, lambda d: handle.plant(d, seed)),
+        (open_ground, handle.till),
+    ]
+    for wants, act in jobs:
         for d, (dx, dy) in DIRS:
-            if (v.me[0] + dx, v.me[1] + dy) in tset:
+            if wants((v.me[0] + dx, v.me[1] + dy)):
                 with suppress(ActionError):
                     act(d)
                     mind.path = []
                     return
-    for key, targets in (("ripe", ripe), ("plant", plant), ("till", till)):
+    for key, targets in (("ripe", ripe), ("plant", plant)):
         if targets and go_beside(handle, v, targets, key):
             return
+    till, clear = [], []
+    for p in mind.field:
+        if v.inside(p) and p not in blds:
+            t = v.data[(p[1] - v.oy) * v.w + p[0] - v.ox]
+            if t in (GRASS, DIRT):
+                till.append(p)
+            elif t in (FOREST, ROCK):
+                clear.append(p)
+    if till and go_beside(handle, v, till, "till"):
+        return
     if not seeds and stocked:
         resupply(handle, v, {Item.WHEAT_SEED: 6})
         return
     if produce >= 4 and granary and fill_granary(handle, v, surplus):
         return
-    if wood >= 10:
-        for item in (Item.WOOD, Item.STONE):
-            if v.carried.get(item) and drop(handle, v, item, v.carried[item]):
-                return
-    spots = set(clear)
     for d, (dx, dy) in DIRS:
-        if (v.me[0] + dx, v.me[1] + dy) in spots:
+        q = (v.me[0] + dx, v.me[1] + dy)
+        if q in field and v.tiles[q] in (FOREST, ROCK) and q not in blds:
             with suppress(ActionError):
                 handle.gather(d)
                 return
     if clear and go_beside(handle, v, clear, "clear"):
         return
-    soon = [p for p in field if p in crops]
-    if soon and dist(v.me, soon[0]) > 3:
-        go_beside(handle, v, soon[:1], "wait")
+    soon = next((p for p in crops if p in field), None)
+    if soon and dist(v.me, soon) > 3:
+        go_beside(handle, v, [soon], "wait")
 
 
 # Building
 
 
-def known(handle: FrontierHandle, v: View, every: int) -> None:
-    if v.tick - mind.known_at < every:
-        return
-    k = handle.known()
-    mind.known = {b.building for b in k.buildings}
-    mind.recipes = {r.recipe for r in k.recipes}
-    mind.known_at = v.tick
-
-
 def builder(handle: FrontierHandle, v: View) -> None:
     known(handle, v, 150)
     blds = v.buildings()
-    stone_ok = mind.stock.get(Item.STONE, 0) >= 12
     working: list[tuple[Building, Pos]] = []
     fresh: list[tuple[Building, Pos]] = []
     repair: list[tuple[Building, Pos]] = []
-    started = any(BUILDINGS[k] == Building.MONUMENT for _, k, _, _ in blds.values())
-    saving: dict[Item, int] = {}
-    if Building.MONUMENT in mind.known and not started:
+    saving: Costs = {}
+    if Building.MONUMENT in mind.costs and not v.own(MONUMENT, False):
         saving = {Item.WOOD: 60, Item.STONE: 60}
+    piles = v.piles()
+    have = plus(mind.stock, v.carried)
+    sealed = at(0, 2) if at(*POST) not in v.mates else None
     for kind, p in mind.plan:
         b = blds.get(p)
         if b is not None:
             team, k, hp, left = b
-            built = BUILDINGS[k]
-            if team != v.team:
-                continue
-            if built == kind or (kind == Building.STONE_WALL and built == Building.WOOD_WALL):
+            if team == v.team and BUILDINGS[k] == kind:
                 if left > 0 and mind.skip.get(p, 0) <= v.tick:
-                    working.append((built, p))
-                elif hp < HP.get(built, 0) * 0.6:
-                    repair.append((built, p))
+                    working.append((kind, p))
+                elif left == 0 and hp < mind.hp.get(kind, 0) * 0.6:
+                    repair.append((kind, p))
             continue
+        cost = mind.costs.get(kind)
         monument = kind == Building.MONUMENT
-        if (len(fresh) >= 6 and not monument) or mind.skip.get(p, 0) > v.tick or not v.inside(p):
+        if cost is None or (len(fresh) >= 6 and not monument):
             continue
-        ground = (GRASS, DIRT, FOREST) if kind == Building.CHEST else (GRASS, DIRT)
-        if v.tile(p) not in ground or p in v.piles():
+        if mind.skip.get(p, 0) > v.tick or not v.inside(p) or p in piles or p == sealed:
             continue
-        if kind == Building.STONE_WALL and not stone_ok:
-            kind = Building.WOOD_WALL
-        if kind in UNKNOWN_AT_START and kind not in mind.known:
+        if v.tiles[p] not in (GRASS, DIRT, FOREST):
             continue
         if monument:
-            if all(mind.stock.get(i, 0) >= n for i, n in COST[kind].items()):
+            if all(mind.stock.get(i, 0) >= n for i, n in cost.items()):
                 fresh.insert(0, (kind, p))
             continue
-        spare = {
-            i: mind.stock.get(i, 0) + v.carried.get(i, 0) - saving.get(i, 0) for i in COST[kind]
-        }
-        if all(spare[i] >= n for i, n in COST[kind].items()):
+        if all(have.get(i, 0) - saving.get(i, 0) >= n for i, n in cost.items()):
             fresh.append((kind, p))
     if working:
         kind, p = min(working, key=lambda w: dist(w[1], v.me))
         finish(handle, v, kind, p)
+        return
+    blocked = [p for _, p in mind.plan if p in piles and dist(p, mind.base) <= 6]
+    if blocked and v.load < CARRY - 4 and pick_up(handle, v, blocked):
         return
     if fresh:
         if fresh[0][0] == Building.MONUMENT:
@@ -1340,9 +1479,10 @@ def builder(handle: FrontierHandle, v: View) -> None:
         return
     if repair and v.tick - mind.stock_at < 200:
         kind, p = repair[0]
-        if dir_to(v.me, p) is not None:
+        d = dir_to(v.me, p)
+        if d is not None:
             with suppress(ActionError):
-                handle.build(dir_to(v.me, p) or Dir.UP, kind)
+                handle.build(d, kind)
                 return
         go_beside(handle, v, [p], ("fix", p))
         return
@@ -1353,11 +1493,22 @@ def builder(handle: FrontierHandle, v: View) -> None:
         idle(handle, v)
 
 
+def pick_up(handle: FrontierHandle, v: View, spots: list[Pos]) -> bool:
+    """Takes what lies on one of `spots`, in the way of building, to bring to the base."""
+    for p in spots:
+        d = dir_to(v.me, p)
+        if d is not None:
+            item = max(v.piles()[p], key=lambda i: v.piles()[p][i])
+            with suppress(ActionError):
+                handle.take(d, item, CARRY - v.load)
+                return True
+    return go_beside(handle, v, spots, "pick-up")
+
+
 def place(handle: FrontierHandle, v: View, kind: Building, p: Pos, count: int) -> None:
     """Places `kind` at `p`, fetching the cost of up to `count` of them in one trip."""
-    cost = COST[kind]
     load, room = {}, CARRY
-    for item, n in cost.items():
+    for item, n in mind.costs[kind].items():
         load[item] = min(n, room)
         room -= load[item]
     short = any(v.carried.get(i, 0) < n for i, n in load.items())
@@ -1369,8 +1520,7 @@ def place(handle: FrontierHandle, v: View, kind: Building, p: Pos, count: int) -
     if (short or base_store(v) is not None) and resupply(handle, v, more, food):
         return
     if short:
-        if not resupply(handle, v, load, food):
-            mind.skip[p] = v.tick + 30
+        mind.skip[p] = v.tick + 30
         return
     d = dir_to(v.me, p)
     if d is None:
@@ -1386,16 +1536,14 @@ def place(handle: FrontierHandle, v: View, kind: Building, p: Pos, count: int) -
 def finish(handle: FrontierHandle, v: View, kind: Building, p: Pos) -> None:
     d = dir_to(v.me, p)
     need = mind.owed.get(p, {})
-    fetch = {i: min(n, CARRY) for i, n in need.items()}
     if d is None:
         if need and not any(v.carried.get(i) for i in need):
-            if not resupply(handle, v, fetch):
+            if not resupply(handle, v, {i: min(n, CARRY) for i, n in need.items()}):
                 mind.owed.pop(p, None)
         elif not go_beside(handle, v, [p], ("work", p)):
             wiggle(handle)
         return
-    site = next((s for s in v.seen.stores if (s.pos.x, s.pos.y) == p), None)
-    owed = {s.item: s.count for s in site.owed} if site else {}
+    owed = next((o for q, _, _, o, _ in stores_beside(v) if q == p), {})
     mind.owed[p] = owed
     for item, n in owed.items():
         if v.carried.get(item):
@@ -1411,41 +1559,29 @@ def finish(handle: FrontierHandle, v: View, kind: Building, p: Pos) -> None:
         handle.build(d, kind)
 
 
+def help_monument(handle: FrontierHandle, v: View) -> bool:
+    sites = v.own(MONUMENT, finished=False)
+    if not sites:
+        return False
+    p = sites[0]
+    d = dir_to(v.me, p)
+    if d is None:
+        return go_beside(handle, v, [p], "monument")
+    with suppress(ActionError):
+        handle.build(d, Building.MONUMENT)
+        return True
+    return False
+
+
 # Industry
 
-RECIPES: dict[Recipe, tuple[Building, dict[Item, int]]] = {
-    Recipe.STONE_PICK: (Building.WORKBENCH, {Item.WOOD: 2, Item.STONE: 3}),
-    Recipe.COPPER_PICK: (Building.WORKBENCH, {Item.WOOD: 2, Item.COPPER_INGOT: 3}),
-    Recipe.GEAR: (Building.WORKBENCH, {Item.IRON_INGOT: 1}),
-    Recipe.COPPER_SWORD: (Building.WORKBENCH, {Item.WOOD: 1, Item.COPPER_INGOT: 3}),
-    Recipe.COPPER_ARMOUR: (Building.WORKBENCH, {Item.COPPER_INGOT: 5}),
-    Recipe.COPPER_INGOT: (Building.SMELTER, {Item.COPPER_ORE: 2, Item.COAL: 1}),
-    Recipe.IRON_INGOT: (Building.SMELTER, {Item.IRON_ORE: 2, Item.COAL: 2}),
-    Recipe.COPPER_INGOT_CHARCOAL: (Building.SMELTER, {Item.COPPER_ORE: 2, Item.CHARCOAL: 2}),
-    Recipe.CHARCOAL: (Building.SMELTER, {Item.WOOD: 4}),
-}
-GOODS = {
-    Item.COPPER_INGOT,
-    Item.IRON_INGOT,
-    Item.GEAR,
-    Item.STONE_PICK,
-    Item.COPPER_PICK,
-    Item.COPPER_SWORD,
-    Item.COPPER_ARMOUR,
-}
-SHOPS = (BUILDINGS.index(Building.SMELTER), BUILDINGS.index(Building.WORKBENCH))
-MADE = {
-    SHOPS[0]: {Item.COPPER_INGOT, Item.IRON_INGOT, Item.CHARCOAL},
-    SHOPS[1]: GOODS - {Item.COPPER_INGOT, Item.IRON_INGOT},
-}
 
-
-def wanted(kind: int) -> list[Recipe]:
+def wanted(kind: Building) -> list[Recipe]:
     """What a workbench or smelter should make next, most wanted first, counting what the
     smith carries as still in the base."""
     s = plus(mind.stock, mind.carrying).get
     copper = s(Item.COPPER_INGOT, 0)
-    if BUILDINGS[kind] == Building.SMELTER:
+    if kind == Building.SMELTER:
         out = [Recipe.COPPER_INGOT, Recipe.COPPER_INGOT_CHARCOAL] if copper < 40 else []
         out.append(Recipe.IRON_INGOT)
         if s(Item.COPPER_ORE, 0) >= 2 and s(Item.CHARCOAL, 0) < 8 and s(Item.WOOD, 0) >= 150:
@@ -1465,20 +1601,16 @@ def wanted(kind: int) -> list[Recipe]:
     return out
 
 
-def recipe_for(kind: int, avail: dict[Item, int]) -> Recipe | None:
+def inputs(recipe: Recipe | None) -> Costs:
+    return mind.recipes[recipe][1] if recipe in mind.recipes else {}
+
+
+def recipe_for(kind: Building, avail: Costs) -> Recipe | None:
     for recipe in wanted(kind):
-        inputs = RECIPES[recipe][1]
-        if recipe in mind.recipes and all(avail.get(i, 0) >= n for i, n in inputs.items()):
+        need = inputs(recipe)
+        if need and all(avail.get(i, 0) >= n for i, n in need.items()):
             return recipe
     return None
-
-
-def plus(*parts: dict[Item, int]) -> dict[Item, int]:
-    out: dict[Item, int] = {}
-    for part in parts:
-        for i, n in part.items():
-            out[i] = out.get(i, 0) + n
-    return out
 
 
 def smith(handle: FrontierHandle, v: View) -> None:
@@ -1486,26 +1618,28 @@ def smith(handle: FrontierHandle, v: View) -> None:
     known(handle, v, 200)
     infer_studied()
     mind.carrying = v.carried
-    desks = v.own(BUILDINGS.index(Building.RESEARCH_DESK))
+    desks = v.own(DESK)
     for item in STUDY:
-        if item not in mind.studied and desks and (mind.stock.get(item) or v.carried.get(item)):
-            study(handle, v, desks[0], item)
-            return
+        if desks and item not in mind.studied and (mind.stock.get(item) or v.carried.get(item)):
+            if study(handle, v, desks[0], item):
+                return
+            break
     blds = v.buildings()
-    shops = {p: k for p, (team, k, _, left) in blds.items() if k in SHOPS and team == v.team}
-    shops = {p: k for p, k in shops.items() if blds[p][3] == 0}
-    for s in v.seen.stores:
-        p = (s.pos.x, s.pos.y)
+    shops = {
+        p: BUILDINGS[k]
+        for p, (team, k, _, left) in blds.items()
+        if team == v.team and left == 0 and BUILDINGS[k] in SHOPS
+    }
+    for p, d, stored, _, done in stores_beside(v):
         if p in shops:
-            stored = {st.item: st.count for st in s.stored}
-            mind.shop[p] = (stored, s.job.done_at if s.job else -1)
-            if work_shop(handle, v, p, shops[p], stored, s.job is not None):
+            mind.shop[p] = (stored, done)
+            if work_shop(handle, v, p, d, shops[p], stored, done >= 0):
                 return
     plan = next_shop(v, shops)
-    inputs = RECIPES[plan[1]][1] if plan else {}
-    goods = sum(v.carried.get(i, 0) for i in GOODS if i not in inputs)
+    need = inputs(plan[1]) if plan else {}
+    goods = sum(v.carried.get(i, 0) for i in GOODS if i not in need)
     if goods and (plan is None or CARRY - v.load < 6):
-        resupply(handle, v, {i: v.carried.get(i, 0) for i in inputs})
+        resupply(handle, v, {i: v.carried.get(i, 0) for i in need})
         return
     if plan is None:
         if v.tick - mind.stock_at > 60 or v.load > 4:
@@ -1517,44 +1651,36 @@ def smith(handle: FrontierHandle, v: View) -> None:
     if not ready:
         room = CARRY - food_want(SMITH) - goods - 2
         have = plus(mind.stock, v.carried)
-        runs = min(
-            [6, room // sum(inputs.values())] + [have.get(i, 0) // n for i, n in inputs.items()]
-        )
-        resupply(handle, v, {i: n * max(runs, 1) for i, n in inputs.items()})
+        runs = min([6, room // sum(need.values())] + [have.get(i, 0) // n for i, n in need.items()])
+        resupply(handle, v, {i: n * max(runs, 1) for i, n in need.items()})
         return
-    if not go_beside(handle, v, [p], ("shop", p)) and dir_to(v.me, p) is None:
+    if not go_beside(handle, v, [p], ("shop", p)):
         stored, _ = mind.shop.get(p, ({}, -1))
         mind.shop[p] = (stored, v.tick + 20)
 
 
 def work_shop(
-    handle: FrontierHandle, v: View, p: Pos, kind: int, stored: dict[Item, int], busy: bool
+    handle: FrontierHandle, v: View, p: Pos, d: Dir, kind: Building, stored: Costs, busy: bool
 ) -> bool:
-    d = dir_to(v.me, p)
-    if d is None:
-        return False
     recipe = None if busy else recipe_for(kind, plus(stored, v.carried))
-    needed = RECIPES[recipe][1] if recipe else {}
+    need = inputs(recipe)
+    room = CARRY - v.load > 0
     for item, n in stored.items():
-        if item in MADE[kind] and item not in needed and CARRY - v.load > 0:
+        if room and item in mind.made_at.get(kind, ()) and item not in need:
             with suppress(ActionError):
                 handle.take(d, item, n)
                 return True
     if busy:
         return False
+    limits = mind.limits.get(kind, {})
     for item, n in stored.items():
-        extra = n - max(
-            (6 * ins.get(item, 0) for b, ins in RECIPES.values() if BUILDINGS.index(b) == kind),
-            default=0,
-        )
-        if extra > 0 and CARRY - v.load > 0:
+        if room and n > limits.get(item, 0):
             with suppress(ActionError):
-                handle.take(d, item, extra)
+                handle.take(d, item, n - limits.get(item, 0))
                 return True
     if recipe is None:
         return False
-    inputs = RECIPES[recipe][1]
-    if all(stored.get(i, 0) >= n for i, n in inputs.items()):
+    if all(stored.get(i, 0) >= n for i, n in need.items()):
         try:
             done = handle.craft(d, recipe)
         except ActionError:
@@ -1562,17 +1688,17 @@ def work_shop(
         mind.shop[p] = (stored, done)
         mind.made[recipe] = mind.made.get(recipe, 0) + 1
         return True
-    for item in inputs:
+    for item in need:
         if v.carried.get(item):
             with suppress(ActionError):
-                handle.put(d, item, v.carried.get(item, 0))
+                handle.put(d, item, v.carried[item])
                 return True
     return False
 
 
-def next_shop(v: View, shops: dict[Pos, int]) -> tuple[Pos, Recipe, bool] | None:
+def next_shop(v: View, shops: dict[Pos, Building]) -> tuple[Pos, Recipe | None, bool] | None:
     """The nearest idle shop that can start a job now with what it holds and what is
-    carried, or else one that could from the base's stock."""
+    carried, or has goods to collect; or else one that could from the base's stock."""
     later = None
     for p in sorted(shops, key=lambda p: dist(p, v.me)):
         stored, done = mind.shop.get(p, ({}, -1))
@@ -1585,13 +1711,13 @@ def next_shop(v: View, shops: dict[Pos, int]) -> tuple[Pos, Recipe, bool] | None
             recipe = recipe_for(shops[p], plus(stored, v.carried, mind.stock))
             if recipe is not None:
                 later = (p, recipe, False)
-        if any(i in MADE[shops[p]] for i in stored):
-            return (p, Recipe.GEAR, True)
+        if any(i in mind.made_at.get(shops[p], ()) for i in stored):
+            return (p, None, True)
     return later
 
 
 def infer_studied() -> None:
-    k, r = mind.known, mind.recipes
+    k, r = mind.costs, mind.recipes
     if Building.SMELTER in k:
         mind.studied.add(Item.STONE)
     if Building.TOWER in k:
@@ -1612,32 +1738,18 @@ def infer_studied() -> None:
         mind.studied.add(Item.APPLE)
 
 
-def study(handle: FrontierHandle, v: View, desk: Pos, item: Item) -> None:
+def study(handle: FrontierHandle, v: View, desk: Pos, item: Item) -> bool:
+    """Fetches `item` and spends it at the desk; False if it can't get there."""
     if not v.carried.get(item):
-        resupply(handle, v, {item: 1})
-        return
+        return resupply(handle, v, {item: 1})
     d = dir_to(v.me, desk)
     if d is None:
-        go_beside(handle, v, [desk], "desk")
-        return
+        return go_beside(handle, v, [desk], "desk")
     with suppress(ActionError):
         handle.study(d, item)
-    mind.studied.add(item)
-    mind.known_at = -(10**9)
-
-
-def help_monument(handle: FrontierHandle, v: View) -> bool:
-    sites = v.own(MONUMENT, finished=False)
-    if not sites:
-        return False
-    p = sites[0]
-    d = dir_to(v.me, p)
-    if d is None:
-        return go_beside(handle, v, [p], "monument")
-    with suppress(ActionError):
-        handle.build(d, Building.MONUMENT)
-        return True
-    return False
+        mind.studied.add(item)
+        mind.known_at = -(10**9)
+    return True
 
 
 # Mining
@@ -1652,24 +1764,21 @@ def miner(handle: FrontierHandle, v: View) -> None:
             return
         tile = COAL
     item = ORE[tile]
+    if v.carried.get(item) and (capped(v, item) or base_full(v)):
+        if not stash(handle, v) and not drop(handle, v, item, v.carried[item]):
+            wiggle(handle)
+        return
     if tile != IRON and drill(handle, v, tile):
         return
     if mind.stock.get(item, 0) >= ORE_STOCK[tile] and not v.carried.get(item):
         gather(handle, v, FOREST, Item.WOOD, True)
         return
-    room = CARRY - v.load
-    if room <= 0:
+    if CARRY - v.load <= 0:
         if v.carried.get(item, 0) >= 8 or not dig(handle, v, tile):
             resupply(handle, v)
         return
-    d = adjacent_tile(v, tile)
-    if d is not None:
-        with suppress(ActionError):
-            handle.gather(d)
-            mind.path = []
-            mind.tries = 0
-            return
-    if go(handle, v, ("vein", tile), lambda: resource_goal(v, tile, 0), True):
+    if harvest(handle, v, ("vein", tile), resource_goal(v, tile, 0)):
+        mind.tries = 0
         return
     if v.carried.get(item, 0) >= 10:
         resupply(handle, v)
@@ -1697,27 +1806,18 @@ def dig(handle: FrontierHandle, v: View, tile: int) -> bool:
     goal = resource_goal(v, tile, 0)
     if not any(goal):
         return False
-    path = bfs(v, goal, True, 0, None, DIGGABLE)
-    if not path:
+    path = bfs(v, goal, True, table=DIGGABLE)
+    rocks = [k for k, p in enumerate(path or []) if v.tiles[p] == ROCK]
+    if not path or not rocks:
         return False
-    for k in range(len(path) - 1, -1, -1):
-        if v.tile(path[k]) == ROCK:
-            break
-    else:
-        return False
+    k = rocks[-1]
     rock = path[k]
     d = dir_to(v.me, rock)
     if d is None:
         mind.path, mind.path_key = path[k + 1 :], ("dig", rock)
         return step_path(handle, v)
     if CARRY - v.load <= 0:
-        for side, (dx, dy) in DIRS:
-            q = (v.me[0] + dx, v.me[1] + dy)
-            if FREE[v.tile(q) % 256] and q not in v.occupied and q not in v.buildings():
-                with suppress(ActionError):
-                    handle.put(side, Item.STONE, v.carried.get(Item.STONE, 0))
-                    return True
-        return False
+        return drop(handle, v, Item.STONE, v.carried.get(Item.STONE, 0), tuple(WALKABLE))
     with suppress(ActionError):
         handle.gather(d)
         return True
@@ -1731,7 +1831,7 @@ def drill(handle: FrontierHandle, v: View, tile: int) -> bool:
         return False
     for p in v.own(DRILL):
         d = dir_to(v.me, p)
-        if d is not None and v.tile(p) in (COAL, COPPER):
+        if d is not None and v.tiles[p] in (COAL, COPPER):
             with suppress(ActionError):
                 handle.operate(d)
                 return True
@@ -1741,59 +1841,23 @@ def drill(handle: FrontierHandle, v: View, tile: int) -> bool:
             with suppress(ActionError):
                 handle.build(d, Building.MECH_DRILL)
                 return True
-    kit = {Item.WOOD: 10, Item.COPPER_INGOT: 4}
+    known(handle, v, 500)
+    kit = mind.costs.get(Building.MECH_DRILL)
+    if kit is None:
+        return False
     if all(v.carried.get(i, 0) >= n for i, n in kit.items()):
         for d, (dx, dy) in DIRS:
             q = (v.me[0] + dx, v.me[1] + dy)
-            if v.tile(q) == tile and q not in v.buildings():
+            if v.tiles[q] == tile and q not in v.buildings():
                 with suppress(ActionError):
                     handle.build(d, Building.MECH_DRILL)
                     mind.drills += 1
                     return True
         return False
-    known(handle, v, 500)
     spare = mind.stock.get(Item.COPPER_INGOT, 0) >= 44 and mind.stock.get(Item.WOOD, 0) >= 60
-    if Building.MECH_DRILL in mind.known and spare and mind.drills < 2 and base_store(v):
+    if spare and mind.drills < 2 and base_store(v):
         return resupply(handle, v, kit)
     return False
-
-
-# Guarding
-
-
-def guard(handle: FrontierHandle, v: View) -> None:
-    """Mans a tower inside the wall, or with no tower free, meets raiders at the wall."""
-    for weapon in (Item.COPPER_SWORD, Item.COPPER_ARMOUR):
-        fetch = mind.stock.get(weapon) and not v.carried.get(weapon)
-        if fetch and dist(v.me, mind.base) < 8 and resupply(handle, v, {weapon: 1}):
-            return
-    towers = v.own(TOWER)
-    near = sorted((e for e in v.enemies if dist(e[0], mind.base) <= 12), key=lambda e: e[1])
-    for t in towers:
-        if abs(t[0] - v.me[0]) + abs(t[1] - v.me[1]) == 1:
-            for (x, y), _, _ in near:
-                if dist((x, y), t) <= 6:
-                    with suppress(ActionError):
-                        handle.attack(x, y)
-                        return
-    posts = [at(*stand) for tower, stand in POSTS if at(*tower) in towers]
-    if mind.post not in posts or (mind.post in v.occupied and mind.post != v.me):
-        free = [p for p in posts if p not in v.occupied or p == v.me]
-        mind.post = free[mind.id % len(free)] if free else None
-    close = [e[0] for e in near if dist(e[0], mind.base) <= 7]
-    inside = [e[0] for e in near if dist(e[0], mind.base) <= 3]
-    if inside or (mind.post is None and close and v.seen.me.hp >= 50):
-        close = inside or close
-        target = min(close, key=lambda p: dist(p, v.me))
-        go_beside(handle, v, [target], ("chase", target))
-        return
-    spot = mind.post or at(*IDLE[mind.id % len(IDLE)])
-    if v.me != spot:
-        if not go(handle, v, ("post", spot), lambda: marks(v, [spot]), False):
-            help_monument(handle, v)
-        return
-    if v.tick - mind.stock_at > 400:
-        resupply(handle, v)
 
 
 ROLES: dict[int, Callable[[FrontierHandle, View], None]] = {

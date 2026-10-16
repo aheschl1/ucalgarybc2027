@@ -41,7 +41,6 @@
     --ucbc-line: #44403c;
     --ucbc-panel: #292524;
     --ucbc-accent: #60a5fa;
-    /* The light orange is too pale against a dark panel. */
     --ucbc-team-0: #ea580c;
     --ucbc-error: #f87171;
     --ucbc-card: color-mix(in srgb, var(--ucbc-fg) 5%, var(--ucbc-panel));

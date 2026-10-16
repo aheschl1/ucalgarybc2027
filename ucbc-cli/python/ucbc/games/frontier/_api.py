@@ -9,6 +9,14 @@ from typing import Any, Self
 from ucbc.handle import Handle
 
 
+class Building(str, Enum):
+    BASE = "base"
+    CHEST = "chest"
+    RADIO_TOWER = "radio_tower"
+    STONE_WALL = "stone_wall"
+    WOOD_WALL = "wood_wall"
+
+
 @dataclass(frozen=True)
 class Coord:
     x: int
@@ -29,50 +37,26 @@ class Dir(str, Enum):
     RIGHT = "right"
 
 
+class Item(str, Enum):
+    COAL = "coal"
+    COPPER_ORE = "copper_ore"
+    IRON_ORE = "iron_ore"
+    STONE = "stone"
+    WOOD = "wood"
+
+
 class Kind(str, Enum):
     COMMANDER = "commander"
     WORKER = "worker"
 
 
 @dataclass(frozen=True)
-class Observation:
-    """What one unit sees: the square of tiles around it, clipped to the map, and the units
-    on it."""
-
-    tick: int
-    me: UnitView
-    base: Coord
-    """Your team's base."""
-    origin: Coord
-    """Top-left tile of `tiles`."""
-    width: int
-    height: int
-    tiles: str
-    """`width * height` bytes, base64, row by row: 0 grass, 1 forest, 2 rock, 3 water,
-    4 ore, 5 base. Grass and forest are walkable."""
-    units: list[UnitView]
-    """Units in view, you included."""
-
-    @classmethod
-    def _from(cls, d: dict[str, Any]) -> Self:
-        return cls(
-            tick=d["tick"],
-            me=UnitView._from(d["me"]),
-            base=Coord._from(d["base"]),
-            origin=Coord._from(d["origin"]),
-            width=d["width"],
-            height=d["height"],
-            tiles=d["tiles"],
-            units=[UnitView._from(v) for v in d["units"]],
-        )
-
-
-@dataclass(frozen=True)
-class UnitView:
+class Me:
     id: int
     team: int
     kind: Kind
     pos: Coord
+    carrying: list[Stack]
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
@@ -81,6 +65,114 @@ class UnitView:
             team=d["team"],
             kind=Kind(d["kind"]),
             pos=Coord._from(d["pos"]),
+            carrying=[Stack._from(v) for v in d["carrying"]],
+        )
+
+
+@dataclass(frozen=True)
+class Message:
+    sender: int
+    data: str
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            sender=d["sender"],
+            data=d["data"],
+        )
+
+
+@dataclass(frozen=True)
+class Observation:
+    """What one unit sees: the square of tiles around it, clipped to the map, and what is
+    on them."""
+
+    tick: int
+    me: Me
+    base: Coord
+    """Your team's base."""
+    origin: Coord
+    """Top-left tile of `tiles`."""
+    width: int
+    height: int
+    tiles: str
+    """`width * height` bytes, base64, row by row: 0 grass, 1 forest, 2 rock, 3 water,
+    4 dirt, 5 coal, 6 copper, 7 iron. Grass, forest, and dirt are walkable."""
+    units: list[int]
+    """`[id, team, kind, x, y]` per unit in view, you included; kind 0 commander, 1 worker."""
+    buildings: list[int]
+    """`[id, team, building, x, y, hp, work_left]` per building in view; `building` is an
+    index into the building ids."""
+    piles: list[int]
+    """`[x, y, item, count]` per kind of item lying on a tile in view."""
+    signs: list[Sign]
+    stores: list[Store]
+    """Your team's storage in the four directions next to you."""
+    heard: list[Message]
+    """What teammates said last tick that reached you."""
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            tick=d["tick"],
+            me=Me._from(d["me"]),
+            base=Coord._from(d["base"]),
+            origin=Coord._from(d["origin"]),
+            width=d["width"],
+            height=d["height"],
+            tiles=d["tiles"],
+            units=list(d["units"]),
+            buildings=list(d["buildings"]),
+            piles=list(d["piles"]),
+            signs=[Sign._from(v) for v in d["signs"]],
+            stores=[Store._from(v) for v in d["stores"]],
+            heard=[Message._from(v) for v in d["heard"]],
+        )
+
+
+@dataclass(frozen=True)
+class Sign:
+    """Bytes on a tile or over the radio, base64."""
+
+    pos: Coord
+    data: str
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            pos=Coord._from(d["pos"]),
+            data=d["data"],
+        )
+
+
+@dataclass(frozen=True)
+class Stack:
+    item: Item
+    count: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            item=Item(d["item"]),
+            count=d["count"],
+        )
+
+
+@dataclass(frozen=True)
+class Store:
+    """A finished storage building of your team that `put` and `take` reach, with what it
+    holds."""
+
+    id: int
+    pos: Coord
+    stored: list[Stack]
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            id=d["id"],
+            pos=Coord._from(d["pos"]),
+            stored=[Stack._from(v) for v in d["stored"]],
         )
 
 
@@ -88,15 +180,48 @@ class FrontierApi(Handle):
     """Queries and actions of the `frontier` game, one method each."""
 
     def observe(self) -> Observation:
-        """What you see: tiles and units within your vision."""
+        """What you see: tiles and what is on them within your vision, what you carry, the
+        storage next to you, and what you heard."""
         return Observation._from(self._query({"type": "observe"}))
 
     def move(self, dir: Dir) -> Coord:
-        """Move one tile onto walkable, unoccupied ground; returns where you are."""
+        """Move one tile onto walkable ground with nothing on it; returns where you are."""
         return Coord._from(self._act({"type": "move", "dir": Dir(dir).value}))
 
+    def gather(self, dir: Dir) -> Item:
+        """Take one item from the tile in `dir`: wood from forest, stone from rock, ore and
+        coal from veins. A tile runs out and turns to dirt."""
+        return Item(self._act({"type": "gather", "dir": Dir(dir).value}))
+
+    def put(self, dir: Dir, item: Item, count: int) -> int:
+        """Hand items to a teammate, into your team's storage, or onto the ground; returns
+        how many moved."""
+        reply: int = self._act({"type": "put", "dir": Dir(dir).value, "item": Item(item).value, "count": count})
+        return reply
+
+    def take(self, dir: Dir, item: Item, count: int) -> int:
+        """Take items from a teammate, your team's storage, or the ground; returns how many
+        moved."""
+        reply: int = self._act({"type": "take", "dir": Dir(dir).value, "item": Item(item).value, "count": count})
+        return reply
+
+    def build(self, dir: Dir, building: Building) -> int:
+        """Place a building, paying its cost from what you carry, or work on your team's
+        unfinished one; returns the work it still needs."""
+        reply: int = self._act({"type": "build", "dir": Dir(dir).value, "building": Building(building).value})
+        return reply
+
     def spawn(self) -> int:
-        """Commander only, next to your base: a worker on a free tile next to the base.
-        Returns its id."""
+        """Commander only, next to your base: a worker next to the base, paid from its
+        storage. Returns its id."""
         reply: int = self._act({"type": "spawn"})
         return reply
+
+    def say(self, data: str) -> None:
+        """Send bytes (base64, at most 64) to teammates in range; they hear it next tick."""
+        self._act({"type": "say", "data": data})
+
+    def mark(self, data: str) -> None:
+        """Leave a sign (base64, at most 64 bytes) on your tile for anyone who sees it;
+        empty takes it down."""
+        self._act({"type": "mark", "data": data})

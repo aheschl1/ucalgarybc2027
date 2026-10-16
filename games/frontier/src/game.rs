@@ -1,33 +1,53 @@
-use std::collections::BTreeSet;
-
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use ucbc_engine::{
-    ActionError, Answer, BotFailure, BotId, BotManager, EngineError, Game, GameStatus, Outcome,
-    QueryError, Request, SetSetup, TeamId,
+    ActionError, Answer, BotFailure, BotId, EngineError, Game, GameStatus, Outcome, QueryError,
+    Request, SetSetup, TeamId,
 };
 
 use crate::config::Config;
-use crate::map::{Coord, Dir, Map, Tile};
-use crate::view::{Kind, MapView, Observation, Snapshot, UnitView};
+use crate::content::{Building, Item};
+use crate::map::{Coord, Dir, Map};
+use crate::rules::START;
+use crate::view::{Kind, Observation, Snapshot};
+use crate::world::{Turn, Unit, World};
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Queries {
-    /// What you see: tiles and units within your vision.
+    /// What you see: tiles and what is on them within your vision, what you carry, the
+    /// storage next to you, and what you heard.
     Observe(Request<(), Observation>),
 }
 
+/// Each step a unit may move once, take one other action (all but `say`), and `say` once.
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// Move one tile onto walkable, unoccupied ground; returns where you are.
+    /// Move one tile onto walkable ground with nothing on it; returns where you are.
     Move(Request<Heading, Coord>),
-    /// Commander only, next to your base: a worker on a free tile next to the base.
-    /// Returns its id.
+    /// Take one item from the tile in `dir`: wood from forest, stone from rock, ore and
+    /// coal from veins. A tile runs out and turns to dirt.
+    Gather(Request<Heading, Item>),
+    /// Hand items to a teammate, into your team's storage, or onto the ground; returns
+    /// how many moved.
+    Put(Request<Transfer, u32>),
+    /// Take items from a teammate, your team's storage, or the ground; returns how many
+    /// moved.
+    Take(Request<Transfer, u32>),
+    /// Place a building, paying its cost from what you carry, or work on your team's
+    /// unfinished one; returns the work it still needs.
+    Build(Request<Construct, u32>),
+    /// Commander only, next to your base: a worker next to the base, paid from its
+    /// storage. Returns its id.
     Spawn(Request<(), u64>),
+    /// Send bytes (base64, at most 64) to teammates in range; they hear it next tick.
+    Say(Request<Data, ()>),
+    /// Leave a sign (base64, at most 64 bytes) on your tile for anyone who sees it;
+    /// empty takes it down.
+    Mark(Request<Data, ()>),
 }
 
 #[derive(Clone, Copy, Deserialize, JsonSchema)]
@@ -35,118 +55,37 @@ pub struct Heading {
     pub dir: Dir,
 }
 
-pub struct Unit {
-    kind: Kind,
-    pos: Coord,
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+pub struct Transfer {
+    pub dir: Dir,
+    pub item: Item,
+    pub count: u32,
+}
+
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+pub struct Construct {
+    pub dir: Dir,
+    pub building: Building,
+}
+
+#[derive(Clone, Deserialize, JsonSchema)]
+pub struct Data {
+    pub data: String,
+}
+
+fn decode(data: &str) -> Result<Vec<u8>, ActionError> {
+    BASE64
+        .decode(data)
+        .map_err(|e| ActionError::Invalid(format!("not base64: {e}")))
 }
 
 pub struct Frontier {
     config: Config,
-    bots: BotManager<Unit>,
-    map: Map,
-    /// Bot id + 1 standing on each tile, 0 if none.
-    occupant: Vec<u64>,
-    /// Indexed by team id.
-    bases: [Coord; 2],
+    world: World,
     commanders: [BotId; 2],
     /// Ticks begun; the snapshot after them is numbered this.
     ticks: u32,
-    /// What the stepping bot has done this step.
-    moved: bool,
-    spawned: bool,
-    /// Units changed and removed since the last snapshot.
-    changed: BTreeSet<BotId>,
-    removed: Vec<u64>,
     outcome: Option<Outcome>,
-}
-
-fn invalid(message: &str) -> ActionError {
-    ActionError::Invalid(message.into())
-}
-
-fn adjacent(a: Coord, b: Coord) -> bool {
-    a != b && a.x.abs_diff(b.x) <= 1 && a.y.abs_diff(b.y) <= 1
-}
-
-impl Frontier {
-    fn idx(&self, at: Coord) -> usize {
-        at.y * self.map.size() + at.x
-    }
-
-    fn free(&self, at: Coord) -> bool {
-        self.map.tile(at).walkable() && self.occupant[self.idx(at)] == 0
-    }
-
-    fn view(&self, id: BotId) -> UnitView {
-        let unit = &self.bots[id];
-        UnitView {
-            id: id.0,
-            team: unit.team().0,
-            kind: unit.kind,
-            pos: unit.pos,
-        }
-    }
-
-    fn place(&mut self, team: TeamId, kind: Kind, at: Coord) -> BotId {
-        let id = self.bots.spawn(team, Unit { kind, pos: at });
-        let i = self.idx(at);
-        self.occupant[i] = id.0 + 1;
-        self.changed.insert(id);
-        id
-    }
-
-    fn move_unit(&mut self, bot: BotId, dir: Dir) -> Result<Coord, ActionError> {
-        if self.moved {
-            return Err(invalid("already moved this step"));
-        }
-        let from = self.bots[bot].pos;
-        let to = self
-            .map
-            .step(from, dir)
-            .ok_or_else(|| invalid("off the map"))?;
-        if !self.free(to) {
-            return Err(invalid("blocked"));
-        }
-        let (a, b) = (self.idx(from), self.idx(to));
-        self.occupant.swap(a, b);
-        self.bots[bot].pos = to;
-        self.moved = true;
-        self.changed.insert(bot);
-        Ok(to)
-    }
-
-    fn spawn(&mut self, bot: BotId) -> Result<u64, ActionError> {
-        let team = self.bots[bot].team();
-        let base = self.bases[team.0 as usize];
-        if self.bots[bot].kind != Kind::Commander {
-            return Err(invalid("only a commander can spawn"));
-        }
-        if self.spawned {
-            return Err(invalid("already spawned this step"));
-        }
-        if !adjacent(self.bots[bot].pos, base) {
-            return Err(invalid("the commander must stand next to the base"));
-        }
-        let ids = self.bots.ids();
-        if ids
-            .iter()
-            .filter(|&&id| self.bots[id].team() == team)
-            .count() as u32
-            >= self.config.units
-        {
-            return Err(invalid("the team is at its unit cap"));
-        }
-        let size = self.map.size();
-        let at = (base.y.saturating_sub(1)..=(base.y + 1).min(size - 1))
-            .flat_map(|y| {
-                (base.x.saturating_sub(1)..=(base.x + 1).min(size - 1))
-                    .map(move |x| Coord::new(x, y))
-            })
-            .find(|&at| self.free(at))
-            .ok_or_else(|| invalid("no free tile next to the base"))?;
-        self.spawned = true;
-        Ok(self.place(team, Kind::Worker, at).0)
-    }
 }
 
 impl Game for Frontier {
@@ -170,101 +109,78 @@ impl Game for Frontier {
             Coord::new(size / 4, size / 2),
             Coord::new(size - 1 - size / 4, size / 2),
         ];
-        for base in bases {
-            map.clear(base, 4);
-            map.set(base, Tile::Base);
+        map.settle(bases[0]);
+        let mut world = World::new(map);
+        for team in [TeamId(0), TeamId(1)] {
+            let id = world.place_structure(team, Building::Base, bases[team.0 as usize]);
+            world.bases[team.0 as usize] = id;
+            let (item, n) = START;
+            world.structures.get_mut(&id).unwrap().stored.add(item, n);
         }
-        let mut game = Self {
-            occupant: vec![0; size * size],
-            config,
-            bots: BotManager::new(),
-            map,
-            bases,
-            commanders: [BotId(0); 2],
-            ticks: 0,
-            moved: false,
-            spawned: false,
-            changed: BTreeSet::new(),
-            removed: Vec::new(),
-            outcome: None,
-        };
+        let mut commanders = [BotId(0); 2];
         // In step order, so the set's first team's commander steps first.
         for &team in &setup.teams {
             let base = bases[team.0 as usize];
-            game.commanders[team.0 as usize] =
-                game.place(team, Kind::Commander, Coord::new(base.x, base.y + 1));
+            commanders[team.0 as usize] =
+                world.place_unit(team, Kind::Commander, Coord::new(base.x, base.y + 1));
         }
-        Ok(game)
+        Ok(Self {
+            config,
+            world,
+            commanders,
+            ticks: 0,
+            outcome: None,
+        })
     }
 
-    fn bots(&self) -> &BotManager<Unit> {
-        &self.bots
+    fn bots(&self) -> &ucbc_engine::BotManager<Unit> {
+        &self.world.bots
     }
 
-    fn bots_mut(&mut self) -> &mut BotManager<Unit> {
-        &mut self.bots
+    fn bots_mut(&mut self) -> &mut ucbc_engine::BotManager<Unit> {
+        &mut self.world.bots
     }
 
-    /// Every unit in spawn order; a new tick starts a new delta.
+    /// Every unit in spawn order. A new tick starts a new delta, and what was said last
+    /// tick is heard.
     fn schedule(&mut self) -> Vec<BotId> {
-        self.changed.clear();
-        self.removed.clear();
+        let w = &mut self.world;
+        w.changes = Default::default();
+        w.heard = std::mem::take(&mut w.said);
         self.ticks += 1;
-        self.bots.ids()
+        w.bots.ids()
     }
 
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         match query {
             Queries::Observe(q) => {
-                let me = self.bots[bot].pos;
-                let r = self.config.vision;
-                let last = self.map.size() - 1;
-                let origin = Coord::new(me.x.saturating_sub(r), me.y.saturating_sub(r));
-                let width = (me.x + r).min(last) - origin.x + 1;
-                let height = (me.y + r).min(last) - origin.y + 1;
-                let mut units = Vec::new();
-                for y in origin.y..origin.y + height {
-                    for x in origin.x..origin.x + width {
-                        let o = self.occupant[self.idx(Coord::new(x, y))];
-                        if o != 0 {
-                            units.push(self.view(BotId(o - 1)));
-                        }
-                    }
-                }
-                Ok(q.reply(Observation {
-                    tick: self.ticks - 1,
-                    me: self.view(bot),
-                    base: self.bases[self.bots[bot].team().0 as usize],
-                    origin,
-                    width,
-                    height,
-                    tiles: BASE64.encode(self.map.window(origin, width, height)),
-                    units,
-                }))
+                Ok(q.reply(self.world.observe(bot, self.ticks - 1, self.config.vision)))
             }
         }
     }
 
     fn apply_action(&mut self, bot: BotId, action: Action) -> Result<Answer, ActionError> {
+        let w = &mut self.world;
         match action {
-            Action::Move(a) => Ok(a.reply(self.move_unit(bot, a.dir)?)),
-            Action::Spawn(a) => Ok(a.reply(self.spawn(bot)?)),
+            Action::Move(a) => Ok(a.reply(w.move_unit(bot, a.dir)?)),
+            Action::Gather(a) => Ok(a.reply(w.gather(bot, a.dir)?)),
+            Action::Put(a) => Ok(a.reply(w.put(bot, a.dir, a.item, a.count)?)),
+            Action::Take(a) => Ok(a.reply(w.take(bot, a.dir, a.item, a.count)?)),
+            Action::Build(a) => Ok(a.reply(w.build(bot, a.dir, a.building)?)),
+            Action::Spawn(a) => Ok(a.reply(w.spawn(bot, self.config.units)?)),
+            Action::Say(a) => Ok(a.reply(w.say(bot, decode(&a.data)?)?)),
+            Action::Mark(a) => Ok(a.reply(w.mark(bot, decode(&a.data)?)?)),
         }
     }
 
     fn end_step(&mut self, _bot: BotId) {
-        self.moved = false;
-        self.spawned = false;
+        self.world.turn = Turn::default();
     }
 
     fn bot_failed(&mut self, bot: BotId, failure: &BotFailure) {
-        self.moved = false;
-        self.spawned = false;
-        let i = self.idx(self.bots[bot].pos);
-        self.occupant[i] = 0;
-        self.changed.remove(&bot);
-        self.removed.push(bot.0);
-        let team = self.bots[bot].team();
+        self.world.turn = Turn::default();
+        let team = self.world.bots[bot].team();
+        self.world.remove_unit(bot);
         if bot == self.commanders[team.0 as usize] && self.outcome.is_none() {
             self.outcome = Some(Outcome::forfeit(
                 TeamId(1 - team.0),
@@ -283,26 +199,7 @@ impl Game for Frontier {
     }
 
     fn snapshot(&self) -> Snapshot {
-        let keyframe = self.ticks.is_multiple_of(self.config.keyframe);
-        let units = if keyframe {
-            self.bots
-                .ids()
-                .into_iter()
-                .map(|id| self.view(id))
-                .collect()
-        } else {
-            self.changed.iter().map(|&id| self.view(id)).collect()
-        };
-        Snapshot {
-            tick: self.ticks,
-            map: (self.ticks == 0).then(|| MapView {
-                size: self.map.size(),
-                tiles: BASE64.encode(self.map.bytes()),
-                bases: self.bases.to_vec(),
-            }),
-            keyframe,
-            units,
-            removed: self.removed.clone(),
-        }
+        self.world
+            .snapshot(self.ticks, self.ticks.is_multiple_of(self.config.keyframe))
     }
 }

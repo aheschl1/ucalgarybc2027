@@ -1,12 +1,15 @@
-//! Frontier, Phase 0: a scaling prototype. A generated map, a base and commander per
-//! team, units that move and observe, and delta snapshots. See docs/frontier.md.
+//! Frontier: farming, industry, and war on a large generated map. See docs/frontier.md.
 
 mod config;
+pub mod content;
 mod game;
 mod map;
+pub mod rules;
 mod view;
+mod world;
 
 pub use config::Config;
-pub use game::{Action, Frontier, Heading, Queries};
+pub use content::{Building, Item};
+pub use game::{Action, Construct, Data, Frontier, Heading, Queries, Transfer};
 pub use map::{Coord, Dir, Map, Tile};
-pub use view::{Kind, MapView, Observation, Snapshot, UnitView};
+pub use view::{Kind, MapView, Me, Message, Observation, Sign, Snapshot, Stack, Store};

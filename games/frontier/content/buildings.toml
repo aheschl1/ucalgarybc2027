@@ -1,0 +1,32 @@
+# Every building: what it costs, how much work finishes it, and its behaviours.
+# `upgrades` names the building it improves on; a building's tier is its place on that line.
+
+[base]
+hp = 500
+cost = {}
+work = 0
+storage = 200
+radio = 24
+
+[chest]
+hp = 50
+cost = { wood = 10 }
+work = 4
+storage = 40
+
+[wood_wall]
+hp = 100
+cost = { wood = 4 }
+work = 2
+
+[stone_wall]
+upgrades = "wood_wall"
+hp = 300
+cost = { stone = 6 }
+work = 5
+
+[radio_tower]
+hp = 80
+cost = { wood = 20, stone = 10 }
+work = 10
+radio = 40

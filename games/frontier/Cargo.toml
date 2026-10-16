@@ -3,7 +3,7 @@ name = "ucbc-frontier"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
-description = "Frontier: farming, industry and war on a large generated map (Phase 0 prototype)"
+description = "Frontier: farming, industry and war on a large generated map"
 
 [dependencies]
 ucbc-engine = { workspace = true }
@@ -11,6 +11,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 schemars = { workspace = true }
 base64 = { workspace = true }
+toml = "1"
+
+[build-dependencies]
+toml = "1"
 
 [lints]
 workspace = true

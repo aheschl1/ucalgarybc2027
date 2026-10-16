@@ -1,23 +1,49 @@
-"""Frontier as a bot sees it. A bot's ``step`` receives a :class:`FrontierHandle`."""
+"""Frontier as a bot sees it. A bot's ``step`` receives a :class:`FrontierHandle`.
+
+An observation's units, buildings, and piles are flat integer rows; the functions here
+decode them when a bot wants objects instead."""
 
 import base64
+from typing import NamedTuple
 
-from ucbc.games.frontier._api import Coord, Dir, FrontierApi, Kind, Observation, UnitView
+from ucbc.games.frontier._api import (
+    Building,
+    Coord,
+    Dir,
+    FrontierApi,
+    Item,
+    Kind,
+    Observation,
+)
 
 __all__ = [
     "HANDLE",
+    "STEPS",
     "WALKABLE",
+    "Building",
+    "BuildingRow",
     "Coord",
     "Dir",
     "FrontierHandle",
+    "Item",
     "Kind",
     "Observation",
+    "PileRow",
     "Tiles",
-    "UnitView",
+    "UnitRow",
+    "buildings",
+    "piles",
+    "units",
 ]
 
-WALKABLE = frozenset((0, 1))
-"""Tile bytes a unit can walk on: grass and forest."""
+WALKABLE = frozenset((0, 1, 4))
+"""Tile bytes a unit can walk on: grass, forest, dirt."""
+
+STEPS = {Dir.UP: (0, -1), Dir.DOWN: (0, 1), Dir.LEFT: (-1, 0), Dir.RIGHT: (1, 0)}
+
+KINDS = list(Kind)
+BUILDINGS = list(Building)
+ITEMS = list(Item)
 
 
 class Tiles:
@@ -29,12 +55,58 @@ class Tiles:
         self.height = seen.height
         self.data = base64.b64decode(seen.tiles)
 
-    def __getitem__(self, at: Coord) -> int | None:
-        """The tile byte at `at`, or None outside the observation."""
-        x, y = at.x - self.origin.x, at.y - self.origin.y
+    def __getitem__(self, at: tuple[int, int]) -> int | None:
+        """The tile byte at map `(x, y)`, or None outside the observation."""
+        x, y = at[0] - self.origin.x, at[1] - self.origin.y
         if 0 <= x < self.width and 0 <= y < self.height:
             return self.data[y * self.width + x]
         return None
+
+
+class UnitRow(NamedTuple):
+    id: int
+    team: int
+    kind: Kind
+    x: int
+    y: int
+
+
+class BuildingRow(NamedTuple):
+    id: int
+    team: int
+    building: Building
+    x: int
+    y: int
+    hp: int
+    work_left: int
+
+
+class PileRow(NamedTuple):
+    x: int
+    y: int
+    item: Item
+    amount: int
+    """The count; `count` is a tuple method."""
+
+
+def units(seen: Observation) -> list[UnitRow]:
+    r = seen.units
+    return [
+        UnitRow(r[i], r[i + 1], KINDS[r[i + 2]], r[i + 3], r[i + 4]) for i in range(0, len(r), 5)
+    ]
+
+
+def buildings(seen: Observation) -> list[BuildingRow]:
+    r = seen.buildings
+    return [
+        BuildingRow(r[i], r[i + 1], BUILDINGS[r[i + 2]], *r[i + 3 : i + 7])
+        for i in range(0, len(r), 7)
+    ]
+
+
+def piles(seen: Observation) -> list[PileRow]:
+    r = seen.piles
+    return [PileRow(r[i], r[i + 1], ITEMS[r[i + 2]], r[i + 3]) for i in range(0, len(r), 4)]
 
 
 class FrontierHandle(FrontierApi):

@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 1.
+competition and RL environment. Status: Phase 2.
 
 ## Principles
 
@@ -14,10 +14,12 @@ competition and RL environment. Status: Phase 1.
 
 ## World
 
-- Grid up to 4096 x 4096 (1024 x 1024 is the target), generated from `game_config` (size, seed, densities): biomes
-  (grass, forest, rock, water), ore veins by depth and tier. Resources are finite.
-- Snapshots are deltas. `initial_state` carries the map and bases; each tick carries
-  changed units (and, from Phase 1, changed tiles); a keyframe lists every unit every
+- Grid up to 4096 x 4096 (1024 x 1024 is the target), generated from the seed and
+  mirrored left to right: grass, forest, rock, water, coal, copper and iron veins. Each
+  base gets a forest grove and rock beside it. Resources are finite; a tile gathered
+  out turns to dirt.
+- Snapshots are deltas. `initial_state` carries the map; each tick carries changed
+  units, buildings, tiles, ground items, and signs; a keyframe lists all of them every
   N ticks.
 
 ## Units
@@ -32,18 +34,20 @@ competition and RL environment. Status: Phase 1.
 
 ## Instruction set
 
+Per step a unit may move once, take one other action, and `say` once. Directions are
+the four neighbours.
+
 ```text
-queries   observe                 tiles in vision (compact layers), entities, self, inbox
-          known                   the team's discovered recipes, buildings, stats
+queries   observe                 tiles in vision as bytes; units, buildings, ground items as
+                                  flat integer rows; signs; adjacent storage; what was heard
 actions   move dir                one tile
-          gather | mine | till | plant | harvest   adjacent tile
-          pick | drop | give      items to/from tile, storage, unit
-          build kind at           place or advance a construction
-          use building verb args  act on an adjacent building
-          attack target
-          spawn kind              commander, next to the base
-          say bytes               radio broadcast to teammates in range, next tick
-          mark tile bytes         sign on a tile, readable by anyone who sees it
+          gather dir              one item from forest, rock, or a vein
+          put | take dir item n   to/from a teammate, the team's storage, or the ground
+          build dir building      place (paying the cost carried) or work on a site
+          spawn                   commander, next to the base, paid from its storage
+          say bytes               to teammates in range or on the radio network, next tick
+          mark bytes              sign on your tile, readable by anyone who sees it
+later     known, till | plant | harvest, use, attack
 ```
 
 Ids for items, buildings, and recipes are generated enums in the SDK. Their details are
@@ -99,7 +103,7 @@ tiers increase along each `upgrades` line, and there are no cycles.
 
 ## Phase 0 results
 
-1024² map, 2 teams, Python bots in the sandbox. `walker` decodes its whole view and steps
+1024² map, 2 teams, Python bots in the sandbox. The Phase 0 `walker` bot decoded its whole view and stepped
 to a random free neighbour; units crowd around the bases, so most of the team is in view.
 Steady state over the last 100 ticks.
 

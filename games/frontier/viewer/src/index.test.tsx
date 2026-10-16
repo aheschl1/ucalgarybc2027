@@ -91,7 +91,7 @@ it("selects the unit clicked and shows it", () => {
   const info = render(at(<Info />, 2)).container;
   expect(info.querySelector(".fr-detail-head")!.textContent).toBe("workeralpha · 2, 1 · 100 HP");
   const detail = [...info.querySelectorAll<HTMLTableRowElement>(".fr-detail tr")].map((r) => [...r.cells].map((c) => c.textContent));
-  expect(detail).toEqual([["Carrying", "4 of 20: 1 stone, 3 wood"]]);
+  expect(detail).toEqual([["Carrying", "4 of 20: 3 wood, 1 stone"]]);
 });
 
 it("counts each kind built, and searches for one when it is clicked", () => {
@@ -131,10 +131,13 @@ it("shows what a building clicked holds, and what a site still needs", () => {
   // The base, at (1, 2): no unit there.
   fireEvent.click(board, { clientX: 15, clientY: 25 });
   expect(head()).toBe("Bbasealpha · 1, 2 · 500 HP");
-  expect(detail()).toEqual([["Storage", "90 of 1000: 40 wheat, 50 wood"]]);
+  expect(detail()).toEqual([["Storage", "90 of 1000: 50 wood, 40 wheat"]]);
   // Beta's chest site, at (5, 5).
   fireEvent.click(board, { clientX: 55, clientY: 55 });
   expect(head()).toBe("Cchestbeta · 5, 5 · 50 HP");
-  expect(detail()).toEqual([["Being built", "3 work left; owed 5 wood"]]);
+  expect(detail()).toEqual([
+    ["Being built", "3 work left"],
+    ["Needs", "5 wood"],
+  ]);
   info.unmount();
 });

@@ -3,7 +3,7 @@ import "./renderer.css";
 import { useFrame, useSelection, type GameRenderer } from "@ucbc/viewer";
 
 import type { Points } from "./api.gen.ts";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { Board, GLYPHS, MARKS, SHAPES, TERRAIN } from "./board.tsx";
 import { Keys, LineChart } from "./chart.tsx";
@@ -58,7 +58,7 @@ function Counts({ w }: { w: World }) {
 /** Items as "12 wood, 3 stone", or "nothing". */
 function Stacks({ stacks }: { stacks: Stack[] }) {
   if (!stacks.length) return <span className="ucbc-muted">nothing</span>;
-  return <>{stacks.map(([item, n]) => `${n} ${name(item)}`).join(", ")}</>;
+  return <>{[...stacks].sort((a, b) => b[1] - a[1]).map(([item, n]) => `${n} ${name(item)}`).join(", ")}</>;
 }
 
 /** A unit or building: a line saying what and where it is, then what it holds. */
@@ -87,6 +87,7 @@ function Selected({ id, w, names }: { id: number; w: World; names: string[] }) {
   const u = w.units.get(id);
   if (!u) return <div className="ucbc-muted">{`Bot ${id} is not on the board: it died, or isn't spawned yet.`}</div>;
   const items = w.carrying.get(id) ?? [];
+  const under = [...w.structures.values()].find((s) => s.x === u.x && s.y === u.y);
   return (
     <Detail
       head={
@@ -99,6 +100,7 @@ function Selected({ id, w, names }: { id: number; w: World; names: string[] }) {
       rows={[
         // Replays from before contents were recorded have only the count.
         ["Carrying", <>{`${u.carried} of 20`}{items.length ? <>{": "}<Stacks stacks={items} /></> : null}</>],
+        ...(under ? [["On", `${name(under.building)}, ${under.hp} HP`] as [string, ReactNode]] : []),
       ]}
     />
   );
@@ -111,7 +113,10 @@ function Picked({ id, w, names }: { id: number; w: World; names: string[] }) {
   const room = w.storage[BUILDINGS.indexOf(s.building)] ?? 0;
   const total = held.stored.reduce((n, [, c]) => n + c, 0);
   const rows: [string, ReactNode][] = [];
-  if (s.workLeft > 0) rows.push(["Being built", <>{`${s.workLeft} work left; owed `}<Stacks stacks={held.owed} /></>]);
+  if (s.workLeft > 0) {
+    rows.push(["Being built", `${s.workLeft} work left`]);
+    rows.push(["Needs", held.owed.length ? <Stacks stacks={held.owed} /> : <span className="ucbc-muted">nothing more</span>]);
+  }
   else if (room) rows.push(["Storage", <>{`${total} of ${room}: `}<Stacks stacks={held.stored} /></>]);
   if (held.job) {
     const left = held.job.doneAt - w.tick;
@@ -318,12 +323,25 @@ function Info() {
   const { selected } = useSelection();
   const building = picked.use();
   const names = useNames();
+  // A new pick shows at the top of the panel, however far it was scrolled.
+  const top = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    top.current?.closest(".ucbc-info")?.scrollTo(0, 0);
+  }, [selected, building]);
   const t = timeline(set);
   const w = t.worldAt(tick ? set.ticks.indexOf(tick) + 1 : 0);
   return (
     <>
       <Counts w={w} />
-      {selected != null ? <Selected id={selected} w={w} names={names} /> : building != null ? <Picked id={building} w={w} names={names} /> : null}
+      <div ref={top}>
+        {selected != null ? (
+          <Selected id={selected} w={w} names={names} />
+        ) : building != null ? (
+          <Picked id={building} w={w} names={names} />
+        ) : (
+          <div className="ucbc-muted fr-hint">Click a unit or building to see what it carries or holds.</div>
+        )}
+      </div>
       <Built w={w} names={names} />
       <Progress history={t.history()} tick={w.tick} names={names} w={w} />
       <Legend />

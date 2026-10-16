@@ -8,6 +8,10 @@
   cursor: pointer;
 }
 
+.fr-hint {
+  font-size: 0.8rem;
+}
+
 .fr-detail-head {
   display: flex;
   flex-wrap: wrap;

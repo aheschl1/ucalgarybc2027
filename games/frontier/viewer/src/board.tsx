@@ -251,8 +251,13 @@ function draw(
   };
   const s = building == null ? undefined : w.structures.get(building);
   if (s) {
-    const side = Math.max(cell * 1.4, 11 * px);
-    outline((s.x + 0.5) * cell - side / 2, (s.y + 0.5) * cell - side / 2, side);
+    const side = Math.max(cell * 1.5, 13 * px);
+    const [x, y] = [(s.x + 0.5) * cell - side / 2, (s.y + 0.5) * cell - side / 2];
+    for (const [colour, width] of [[OUTLINE, 7 * px], ["#ffffff", 4 * px]] as const) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.strokeRect(x, y, side, side);
+    }
   }
   const chosen = selected == null ? undefined : w.units.get(selected);
   if (chosen) {
@@ -305,8 +310,8 @@ export function Board() {
       width={px}
       height={px}
       onClick={(e) => {
-        // The nearest unit to the click, within its tile or a few screen pixels, or else
-        // the nearest building.
+        // A unit on the tile clicked, else a building on it, else the nearest unit or
+        // building within a few screen pixels.
         const r = e.currentTarget.getBoundingClientRect();
         const x = ((e.clientX - r.left) / r.width) * w.size;
         const y = ((e.clientY - r.top) / r.height) * w.size;
@@ -317,9 +322,11 @@ export function Board() {
             .filter(({ d }) => d <= reach)
             .sort((a, b) => a.d - b.d)[0]?.o;
         const now = t.worldAt(index);
-        const unit = nearest(now.units.values());
+        const on = <T extends { x: number; y: number }>(all: Iterable<T>) =>
+          [...all].find((o) => o.x === Math.floor(x) && o.y === Math.floor(y));
+        const unit = on(now.units.values()) ?? (on(now.structures.values()) ? undefined : nearest(now.units.values()));
         select(unit?.id ?? null);
-        picked.set(unit ? null : (nearest(now.structures.values())?.id ?? null));
+        picked.set(unit ? null : ((on(now.structures.values()) ?? nearest(now.structures.values()))?.id ?? null));
       }}
     />
   );

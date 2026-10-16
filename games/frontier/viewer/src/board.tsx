@@ -17,6 +17,7 @@ export const TERRAIN: [string, string][] = [
   ["copper", "#a8706a"],
   ["iron", "#a6aeb8"],
   ["farmland", "#5c4022"],
+  ["titanium", "#2dd4bf"],
 ];
 /** The letter drawn on each kind of building once the board is zoomed in. */
 export const GLYPHS: Record<Building, string> = {

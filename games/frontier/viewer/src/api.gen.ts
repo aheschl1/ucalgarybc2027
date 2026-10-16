@@ -91,6 +91,7 @@ export type Item =
   | "iron_sword"
   | "stone"
   | "stone_pick"
+  | "titanium"
   | "wheat"
   | "wheat_seed"
   | "wood";

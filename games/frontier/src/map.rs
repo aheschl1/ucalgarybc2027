@@ -51,6 +51,7 @@ pub enum Tile {
     Copper = 6,
     Iron = 7,
     Farmland = 8,
+    Titanium = 9,
 }
 
 impl Tile {
@@ -72,13 +73,20 @@ impl Tile {
 
 /// The tiles that give an item: the item, how much a fresh tile holds, and the tool tier
 /// gathering it needs.
-pub const RESOURCES: [(Tile, Item, u16, u32); 5] = [
+pub const RESOURCES: [(Tile, Item, u16, u32); 6] = [
     (Tile::Forest, Item::Wood, 20, 1),
     (Tile::Rock, Item::Stone, 30, 1),
     (Tile::Coal, Item::Coal, 40, 1),
     (Tile::Copper, Item::CopperOre, 40, 2),
     (Tile::Iron, Item::IronOre, 40, 3),
+    (Tile::Titanium, Item::Titanium, 10, 4),
 ];
+
+/// Titanium is the highest rock at least this far in from the side, as a share of the
+/// map's width: between the bases, a quarter of the way in. One tile for every this many
+/// tiles of the map's width, on each half.
+const TITANIUM_BAND: f64 = 0.35;
+const TITANIUM_RARITY: usize = 32;
 
 pub struct Map {
     size: usize,
@@ -128,7 +136,8 @@ impl Map {
         }
     }
 
-    /// Mirrored left to right, so both halves, and the teams on them, are alike.
+    /// Mirrored left to right, so both halves, and the teams on them, are alike. Bases
+    /// are a quarter of the way in from each side.
     pub fn generate(size: usize, seed: u64) -> Self {
         let scale = size as f64 / 6.0;
         let mut tiles = Vec::with_capacity(size * size);
@@ -157,6 +166,18 @@ impl Map {
                 });
             }
         }
+        // A few seams, mirrored, that a team has to go out for.
+        let band = (TITANIUM_BAND * size as f64) as usize;
+        let mut rock: Vec<(f64, usize, usize)> = (0..size)
+            .flat_map(|y| (band..size / 2).map(move |x| (x, y)))
+            .filter(|&(x, y)| tiles[y * size + x] == Tile::Rock)
+            .map(|(x, y)| (noise(x as f64, y as f64, scale, 5, seed), x, y))
+            .collect();
+        rock.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for &(_, x, y) in rock.iter().take(size / TITANIUM_RARITY) {
+            tiles[y * size + x] = Tile::Titanium;
+            tiles[y * size + size - 1 - x] = Tile::Titanium;
+        }
         let left = tiles
             .iter()
             .map(|t| t.resource().map_or(0, |(_, n, _)| n))
@@ -165,7 +186,7 @@ impl Map {
     }
 
     /// A square map from rows of `.` grass, `f` forest, `r` rock, `~` water, `c` coal,
-    /// `u` copper, `i` iron.
+    /// `u` copper, `i` iron, `t` titanium.
     #[cfg(test)]
     pub fn from_text(text: &str) -> Self {
         let tiles: Vec<Tile> = text
@@ -179,6 +200,7 @@ impl Map {
                 'c' => Tile::Coal,
                 'u' => Tile::Copper,
                 'i' => Tile::Iron,
+                't' => Tile::Titanium,
                 _ => panic!("unknown tile {c:?}"),
             })
             .collect();
@@ -296,6 +318,22 @@ mod tests {
             assert!(count(t) > 256 * 256 / 50, "{t:?}: {}", count(t));
         }
         assert!(count(Tile::Coal) + count(Tile::Copper) + count(Tile::Iron) > 0);
+    }
+
+    #[test]
+    fn titanium_is_a_few_tiles_between_the_bases() {
+        let size = 512;
+        let map = Map::generate(size, 3);
+        let titanium: Vec<usize> = (0..size * size)
+            .filter(|&i| map.tiles[i] == Tile::Titanium)
+            .collect();
+        assert_eq!(titanium.len(), 2 * size / TITANIUM_RARITY);
+        let band = (TITANIUM_BAND * size as f64) as usize;
+        assert!(
+            titanium
+                .iter()
+                .all(|&i| (band..size - band).contains(&(i % size)))
+        );
     }
 
     #[test]

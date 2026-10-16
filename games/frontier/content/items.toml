@@ -7,6 +7,7 @@
 [coal]
 [copper_ore]
 [iron_ore]
+[titanium]
 [charcoal]
 [copper_ingot]
 [iron_ingot]
@@ -16,7 +17,6 @@
 tool = 2
 [copper_pick]
 tool = 3
-# Tier 4 reaches nothing yet: it's for veins to come.
 [iron_pick]
 tool = 4
 

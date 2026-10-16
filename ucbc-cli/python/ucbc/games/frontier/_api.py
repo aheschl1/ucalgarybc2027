@@ -144,6 +144,7 @@ class Item(str, Enum):
     IRON_SWORD = "iron_sword"
     STONE = "stone"
     STONE_PICK = "stone_pick"
+    TITANIUM = "titanium"
     WHEAT = "wheat"
     WHEAT_SEED = "wheat_seed"
     WOOD = "wood"
@@ -248,8 +249,8 @@ class Observation:
     height: int
     tiles: str
     """`width * height` bytes, base64, row by row: 0 grass, 1 forest, 2 rock, 3 water,
-    4 dirt, 5 coal, 6 copper, 7 iron, 8 farmland. Grass, forest, dirt, and farmland
-    are walkable."""
+    4 dirt, 5 coal, 6 copper, 7 iron, 8 farmland, 9 titanium. Grass, forest, dirt, and
+    farmland are walkable."""
     units: list[int]
     """`[id, team, kind, x, y, hp]` per unit in view, you included; kind 0 commander,
     1 worker."""

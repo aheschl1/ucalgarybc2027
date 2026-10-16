@@ -17,9 +17,10 @@ competition and RL environment. Status: Phase 6 done, plus traps; next, the RL e
 - `game_config`: `size`, `units` (the cap), `vision`, `keyframe`, and `flat` (grass but
   for the starting areas, for learning on).
 - Grid up to 4096 x 4096 (1024 x 1024 is the target), generated from the seed and
-  mirrored left to right: grass, forest, rock, water, coal, copper and iron veins. Each
-  base gets a forest grove, rock, and a pond beside it. Resources are finite; a tile gathered
-  out turns to dirt.
+  mirrored left to right: grass, forest, rock, water, coal, copper and iron veins, and a
+  few titanium seams in the highest rock between the bases (size / 32 tiles a side, 10
+  titanium each), which a team has to go out for. Each base gets a forest grove, rock,
+  and a pond beside it. Resources are finite; a tile gathered out turns to dirt.
 - Snapshots are deltas. `initial_state` carries the map; each tick carries changed
   units, buildings, tiles, ground items, and signs; a keyframe lists all of them every
   N ticks.
@@ -105,9 +106,9 @@ tiers increase along each `upgrades` line, and there are no cycles.
   then regrow fruit forever.
 - **Industry:** recipes are data (`content/recipes.toml`); fuel is an input like any
   other. The best tool a unit carries limits the veins it gathers: hands take coal,
-  copper needs a stone pick, iron a copper pick. A craft at a workbench or smelter runs
+  copper needs a stone pick, iron a copper pick, titanium an iron pick. A craft at a workbench or smelter runs
   as a batch from its storage. A drill stands on rock or a vein and digs its rate per
-  `operate`; a steam drill burns coal and reaches iron. Smelters, drills, and most
+  `operate`; a steam drill burns coal and reaches iron and titanium. Smelters, drills, and most
   recipes start unknown: a team learns one once it has studied every item it uses, so
   knowledge follows the materials it has found.
 - **War:** a hit does the attacker's best weapon (fists 3) less the target's best
@@ -122,8 +123,8 @@ tiers increase along each `upgrades` line, and there are no cycles.
 ## Winning
 
 1. Kill the enemy commander, or outlast it: a starving commander loses too.
-2. Finish the Monument: wood, stone, copper and iron ingots, gears, and apples, delivered
-   to its site, then 400 work.
+2. Finish the Monument: wood, stone, copper and iron ingots, gears, apples, and 20
+   titanium, delivered to its site, then 400 work.
 3. At the tick limit, the most points: what the team's finished buildings cost, what
    they store, and 5 a unit; then the most units; then a coin toss on the seed.
 

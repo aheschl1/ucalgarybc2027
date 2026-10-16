@@ -44,6 +44,7 @@ export const ITEMS = [
   "iron_sword",
   "stone",
   "stone_pick",
+  "titanium",
   "wheat",
   "wheat_seed",
   "wood",

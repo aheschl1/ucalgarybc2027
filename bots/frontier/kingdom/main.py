@@ -116,14 +116,13 @@ DEBUG = False
 
 def ring() -> list[tuple[Building, int, int]]:
     """The wall around the base, in the base's frame (x mirrored for the right-hand team),
-    east (toward the other team) first. The pond lies outside the middle of the north side;
-    the forest beyond the west side is cut from its gates."""
+    east (toward the other team) first. The pond lies outside the middle of the north side."""
     wall, gate = Building.WOOD_WALL, Building.GATE
     east = [(gate, 4, 0)] + [(wall, 4, y) for y in (-4, -3, -2, -1, 1, 2, 3, 4)]
     north = [(gate, -3, -4), (gate, 3, -4)] + [(wall, x, -4) for x in (-4, -2, -1, 0, 1, 2)]
     south = [(gate, x, 4) for x in range(-2, 3)] + [(wall, -3, 4), (wall, -4, 4), (wall, 3, 4)]
-    west = [(gate, -4, y) for y in range(-3, 4)]
-    return east + north + south + west
+    west = [(gate, -4, -1), (gate, -4, 1)] + [(wall, -4, y) for y in (-3, -2, 0, 2, 3)]
+    return east + west + north + south
 
 
 def trap_spots() -> list[tuple[int, int]]:
@@ -148,7 +147,8 @@ IDLE = [(0, -3), (-1, -3), (1, -3), (0, 3), (1, 3)]
 
 
 def town() -> list[tuple[Building, int, int]]:
-    desk = [(Building.RESEARCH_DESK, -2, -2)]
+    shelter = [(Building.WOOD_WALL, -1, 1), (Building.WOOD_WALL, 1, 1), (Building.GATE, 0, 2)]
+    desk = shelter + [(Building.RESEARCH_DESK, -2, -2)]
     towers = [(Building.TOWER, x, y) for (x, y), _ in POSTS]
     shops = [(Building.WORKBENCH, 2, -2), (Building.SMELTER, 2, 2)]
     shops += [(Building.CHEST, x, y) for x, y in GRANARIES[:2]]
@@ -1784,7 +1784,9 @@ def guard(handle: FrontierHandle, v: View) -> None:
         free = [p for p in posts if p not in v.occupied or p == v.me]
         mind.post = free[mind.id % len(free)] if free else None
     close = [e[0] for e in near if dist(e[0], mind.base) <= 7]
-    if mind.post is None and close and v.seen.me.hp >= 50:
+    inside = [e[0] for e in near if dist(e[0], mind.base) <= 3]
+    if inside or (mind.post is None and close and v.seen.me.hp >= 50):
+        close = inside or close
         target = min(close, key=lambda p: dist(p, v.me))
         go_beside(handle, v, [target], ("chase", target))
         return

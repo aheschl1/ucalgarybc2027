@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -129,6 +130,25 @@ def test_an_overrun_resumes_on_the_next_turn(bot: BotPath, tmp_path: Path) -> No
     assert len(second["actions"]) == 1
     assert "failure" not in second
     assert second["usage"]["time_us"] < STEP_MS * 1000
+
+
+def test_an_overrun_after_done_keeps_the_step(bot: BotPath, tmp_path: Path) -> None:
+    # Set k stops spinning k * 250 ns of bot time sooner, so some of these 120 sets run
+    # out in the ~1 us between the guest sending `done` and its call returning. Before,
+    # that `done` was dropped and the next turn failed with a protocol error.
+    replay = set0(bot, "testing/overrun_after_done", tmp_path, sets=120, step_ms=1)
+    hit = 0
+    for k in range(len(replay["sets"])):
+        for b in (0, 1):
+            steps = steps_of(replay, b, k)
+            assert all("failure" not in step for step in steps)
+            for first, second in pairwise(steps):
+                if first["usage"]["time_us"] == 1000 and "stdout" in first:
+                    # Its `done` stands; the next turn only finishes the call.
+                    assert len(first["actions"]) == 1
+                    assert second["actions"] == []
+                    hit += 1
+    assert hit
 
 
 def test_over_the_memory_limit_is_a_memory_error(bot: BotPath, tmp_path: Path) -> None:

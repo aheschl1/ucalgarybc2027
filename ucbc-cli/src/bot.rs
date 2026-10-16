@@ -125,6 +125,8 @@ impl PyTeam {
 pub struct PyBot {
     guest: Guest,
     fuel: u64,
+    /// The suspended step already sent `done`.
+    finished: bool,
 }
 
 impl PyBot {
@@ -162,7 +164,11 @@ impl PyBot {
                 "TimeoutError",
                 format!("main.py took longer than {} ms to load", ctx.limits.step_ms),
             )),
-            (Outcome::Returned, Some(None)) => Ok(Self { guest, fuel }),
+            (Outcome::Returned, Some(None)) => Ok(Self {
+                guest,
+                fuel,
+                finished: false,
+            }),
             (Outcome::Returned, Some(Some(failure))) => Err(failure.into()),
             (Outcome::Returned, None) => Err(protocol_error()),
         }
@@ -173,6 +179,7 @@ impl Bot for PyBot {
     /// A suspended step resumes and this turn ends when it returns; otherwise the turn
     /// is a fresh step.
     fn step(&mut self, ctx: &mut StepCtx<'_>) -> StepResult {
+        let finished = std::mem::take(&mut self.finished);
         let mut done = None;
         let run = self
             .guest
@@ -200,8 +207,18 @@ impl Bot for PyBot {
         };
         let result = match (run.outcome, done) {
             // Stopped where it is; whatever it already did stands.
-            (Outcome::OutOfFuel, _) => StepResult::ok(),
+            (Outcome::OutOfFuel, None) => {
+                self.finished = finished;
+                StepResult::ok()
+            }
+            // Stopped after `done`, in the guest's own cleanup: the step is over, and
+            // the turn that resumes it only finishes that.
+            (Outcome::OutOfFuel, Some(reply)) => {
+                self.finished = true;
+                reply.into()
+            }
             (Outcome::Returned, Some(reply)) => reply.into(),
+            (Outcome::Returned, None) if finished => StepResult::ok(),
             (Outcome::Returned, None) => StepResult::failed(protocol_error()),
         };
         let result = result.with_time(bot_time(run.fuel));

@@ -40,7 +40,9 @@ tic-tac-toe forfeits "did not place a mark".
 On the bot's next turn the suspended step resumes and that turn ends when it returns,
 so `step` is not called again until the turn after. An overrun of any length therefore
 costs two turns. A message sent just as the bot was suspended is answered on that next
-turn, so a late action lands there. A load that overruns is a load failure
+turn, so a late action lands there. A step suspended after it finished, in the guest's
+own cleanup, is recorded as finished, `stdout` and `failure` included; the next turn
+only completes that cleanup. A load that overruns is a load failure
 (`TimeoutError`).
 
 ## Memory
@@ -75,7 +77,7 @@ Every step:
   suspended step. Loading is not recorded.
 - `memory`: linear memory bytes when the step returned. Absent when it did not
   (suspended) and for Rust bots.
-- `failure`: absent for a suspended step; `MemoryError`, or `Crash` when the
-  interpreter trapped.
+- `failure`: absent for a step suspended before it finished; `MemoryError`, or `Crash`
+  when the interpreter trapped.
 
 Replays are deterministic for a seed, `usage` included.

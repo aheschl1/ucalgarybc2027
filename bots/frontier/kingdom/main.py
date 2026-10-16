@@ -97,15 +97,13 @@ APPLES = 31
 BASE_FULL = 920
 
 # The town, in the base's frame: x is mirrored for the right-hand team, so +x faces the
-# other team, and the pond lies north. Inside the wall the buildings stand on even rows and
+# other team, and the farm is mostly north. Inside the wall the buildings stand on even rows and
 # columns, so the odd ones are streets; the commander's shelter is the one exception: walls
-# beside its post and a tower behind it, which it shoots from. Guards wait beside the base
-# until there are towers to man.
+# beside its post and a gate behind it.
 POST = (0, 1)
 SHELTER = [(-1, 1), (1, 1)]
-TOWERS = [((0, 2), (1, 2)), ((2, -2), (3, -2))]
+TOWERS = [((2, -2), (3, -2)), ((2, 2), (3, 2))]
 IDLE = [(-3, -3), (3, -3)]
-WATCH = [(2, 0), (0, -2), (-2, 0)]
 GRANARIES = [(-2, -5), (2, -5), (-4, -12), (4, -12), (-5, -8), (5, -8)]
 WELLS = [(9, -9), (-9, -9), (0, -16)]
 RADIO, MONUMENT_AT, SMELTER2 = (-8, 3), (-8, 0), (-8, -3)
@@ -141,11 +139,12 @@ def town() -> list[tuple[Building, int, int]]:
     B = Building
     parts: list[tuple[Building, list[Pos]]] = [
         (B.WOOD_WALL, SHELTER),
+        (B.GATE, [(0, 2)]),
         (B.RESEARCH_DESK, [(-2, 2)]),
         (B.WORKBENCH, [(-2, -2)]),
         (B.GATE, ring()),
         (B.TOWER, [tower for tower, _ in TOWERS]),
-        (B.SMELTER, [(2, 2)]),
+        (B.SMELTER, [(0, -2)]),
         (B.CHEST, GRANARIES),
         (B.SMELTER, [SMELTER2]),
         (B.RADIO_TOWER, [RADIO]),
@@ -880,8 +879,8 @@ def shoot(handle: FrontierHandle, v: View) -> bool:
 
 
 def guard(handle: FrontierHandle, v: View) -> None:
-    """Mans a tower inside the wall, or with no tower free, waits beside the base; the
-    guards meet raiders that get inside together."""
+    """Mans a tower inside the wall, or with no tower free, waits inside it; the guards
+    meet raiders that get inside together."""
     for weapon in (Item.COPPER_SWORD, Item.COPPER_ARMOUR):
         fetch = mind.stock.get(weapon) and not v.carried.get(weapon)
         if fetch and dist(v.me, mind.base) < 8 and resupply(handle, v, {weapon: 1}):
@@ -898,7 +897,7 @@ def guard(handle: FrontierHandle, v: View) -> None:
         target = min(inside, key=lambda p: dist(p, v.me))
         go_beside(handle, v, [target], ("chase", target))
         return
-    spot = mind.post or at(*WATCH[mind.id % len(WATCH)])
+    spot = mind.post or at(*IDLE[mind.id % len(IDLE)])
     if v.me != spot:
         if not go(handle, v, ("post", spot), lambda: marks(v, [spot])):
             help_monument(handle, v)
@@ -975,7 +974,7 @@ def commander(handle: FrontierHandle, v: View) -> None:
         go_beside(handle, v, [mind.base], "base")
     if not acted and here is None:
         rebuild(handle, v)
-    elif not acted and here is not None:
+    elif not acted and here:
         d, stored = here
         mind.stock = stored
         food = v.food()
@@ -984,7 +983,7 @@ def commander(handle: FrontierHandle, v: View) -> None:
             with suppress(ActionError):
                 handle.take(d, item, 5 - food)
                 acted = True
-        if not acted and not shoot(handle, v):
+        if not acted:
             spawn(handle, v, stored)
     near = (FARMER, BUILDER, SMITH, GUARD)
     mind.alive = {
@@ -1437,7 +1436,6 @@ def builder(handle: FrontierHandle, v: View) -> None:
         saving = {Item.WOOD: 60, Item.STONE: 60}
     piles = v.piles()
     have = plus(mind.stock, v.carried)
-    sealed = at(0, 2) if at(*POST) not in v.mates else None
     for kind, p in mind.plan:
         b = blds.get(p)
         if b is not None:
@@ -1452,7 +1450,7 @@ def builder(handle: FrontierHandle, v: View) -> None:
         monument = kind == Building.MONUMENT
         if cost is None or (len(fresh) >= 6 and not monument):
             continue
-        if mind.skip.get(p, 0) > v.tick or not v.inside(p) or p in piles or p == sealed:
+        if mind.skip.get(p, 0) > v.tick or not v.inside(p) or p in piles:
             continue
         if v.tiles[p] not in (GRASS, DIRT, FOREST):
             continue

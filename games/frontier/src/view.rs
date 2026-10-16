@@ -110,6 +110,14 @@ pub struct Hit {
     pub left: u32,
 }
 
+/// A team's points: what its finished buildings cost, what they store, and 5 a unit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Points {
+    pub buildings: u32,
+    pub stored: u32,
+    pub units: u32,
+}
+
 /// What `plant` sowed, and the tick it ripens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Sown {
@@ -203,7 +211,7 @@ pub struct Snapshot {
     /// An empty sign was taken down.
     pub signs: Vec<Sign>,
     /// Each team's points, as the tick limit would count them now.
-    pub points: Vec<u32>,
+    pub points: Vec<Points>,
 }
 
 impl World {
@@ -418,7 +426,7 @@ impl World {
             crops,
             cleared,
             signs: sign_at.into_iter().map(|at| self.sign(at)).collect(),
-            points: vec![self.score(TeamId(0)), self.score(TeamId(1))],
+            points: vec![self.points(TeamId(0)), self.points(TeamId(1))],
         }
     }
 

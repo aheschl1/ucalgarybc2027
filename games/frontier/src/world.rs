@@ -12,7 +12,7 @@ use crate::map::{Coord, Dir, Map};
 use crate::rules::{
     CARRY, FIRST_MEAL, HAND_TIER, HP, MESSAGE_BYTES, REPAIR, SAY_RANGE, SPAWN_COST,
 };
-use crate::view::Kind;
+use crate::view::{Kind, Points};
 
 pub(crate) fn invalid(message: &str) -> ActionError {
     ActionError::Invalid(message.into())
@@ -290,17 +290,27 @@ impl World {
         self.changes.removed.push(bot.0);
     }
 
+    /// Points at the tick limit, by where they come from.
+    pub fn points(&self, team: TeamId) -> Points {
+        let finished = || {
+            self.structures
+                .values()
+                .filter(|s| s.team == team && s.work_left == 0)
+        };
+        Points {
+            buildings: finished()
+                .map(|s| s.kind.def().cost.values().sum::<u32>())
+                .sum(),
+            stored: finished().map(|s| s.stored.total()).sum(),
+            units: 5 * self.units(team) as u32,
+        }
+    }
+
     /// Points at the tick limit: what the team's finished buildings cost, what they store,
     /// and 5 for each unit.
     pub fn score(&self, team: TeamId) -> u32 {
-        let buildings = self
-            .structures
-            .values()
-            .filter(|s| s.team == team && s.work_left == 0);
-        let built: u32 = buildings
-            .map(|s| s.kind.def().cost.values().sum::<u32>() + s.stored.total())
-            .sum();
-        built + 5 * self.units(team) as u32
+        let p = self.points(team);
+        p.buildings + p.stored + p.units
     }
 
     pub fn units(&self, team: TeamId) -> usize {

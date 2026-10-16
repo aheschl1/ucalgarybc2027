@@ -157,7 +157,7 @@ export interface Snapshot {
   /**
    * Each team's points, as the tick limit would count them now.
    */
-  points: number[];
+  points: Points[];
   removed: number[];
   /**
    * An empty sign was taken down.
@@ -186,6 +186,14 @@ export interface MapView {
    * How far a unit sees.
    */
   vision: number;
+}
+/**
+ * A team's points: what its finished buildings cost, what they store, and 5 a unit.
+ */
+export interface Points {
+  buildings: number;
+  stored: number;
+  units: number;
 }
 /**
  * Bytes on a tile or over the radio, base64.

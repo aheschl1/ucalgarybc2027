@@ -15,7 +15,7 @@
   gap: 0.25rem 0.75rem;
   margin-top: 0.75rem;
   font-size: 0.8rem;
-  color: var(--ucbc-muted, #78716c);
+  color: var(--ucbc-muted);
 }
 
 .fr-legend > span {
@@ -23,3 +23,147 @@
   align-items: center;
   gap: 0.3rem;
 }
+
+.fr-progress {
+  --fr-team-0: var(--ucbc-team-0);
+  --fr-team-1: var(--ucbc-team-1);
+}
+
+.fr-heading {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fr-subheading {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.fr-team-parts {
+  margin-top: 0.25rem;
+}
+
+.fr-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--ucbc-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-area {
+  stroke: var(--ucbc-panel);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-mark {
+  stroke: var(--ucbc-fg);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-chart {
+  position: relative;
+}
+
+.fr-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.fr-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-grid {
+  stroke: var(--ucbc-line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-axis {
+  fill: var(--ucbc-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-now {
+  stroke: var(--ucbc-fg);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-hair {
+  stroke: var(--ucbc-muted);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-dot {
+  stroke: var(--ucbc-panel);
+  stroke-width: 2;
+}
+
+.fr-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(8px);
+  pointer-events: none;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 6px;
+  background: var(--ucbc-panel);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.fr-tip-left {
+  transform: translateX(calc(-100% - 8px));
+}
+
+.fr-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fr-key {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.fr-key-area {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.fr-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.fr-chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+

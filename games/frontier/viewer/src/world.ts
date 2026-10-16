@@ -4,7 +4,7 @@
 
 import type { SetReplay } from "@ucbc/viewer";
 
-import type { Building, Snapshot } from "./api.gen.ts";
+import type { Building, Points, Snapshot } from "./api.gen.ts";
 
 /** In id order, as observations and snapshots index them. */
 export const BUILDINGS = [
@@ -64,7 +64,7 @@ export interface World {
   crops: Map<number, number>;
   signs: Set<number>;
   /** Each team's points, as the tick limit would count them. */
-  points: number[];
+  points: Points[];
 }
 
 /** `state` as a snapshot. Throws if it is not one, e.g. from an older engine. */
@@ -161,6 +161,26 @@ export class Timeline {
     return this.snapshots.length;
   }
 
+  private sampled?: History;
+
+  /** Every team's points over the set, at up to `SAMPLES` frames from first to last. */
+  history(): History {
+    if (!this.sampled) {
+      const picked = sample(this.snapshots.length, SAMPLES).map((i) => this.snapshots[i]!);
+      const first = this.snapshots[0]!.units;
+      const commanders = new Map<number, number>();
+      for (let i = 0; i < first.length; i += 7) if (first[i + 2] === 0) commanders.set(first[i]!, first[i + 1]!);
+      this.sampled = {
+        ticks: picked.map((s) => s.tick),
+        points: [0, 1].map((t) => picked.map((s) => s.points[t] ?? { buildings: 0, stored: 0, units: 0 })),
+        fallen: this.snapshots.flatMap((s) =>
+          s.removed.filter((id) => commanders.has(id)).map((id) => ({ team: commanders.get(id)!, tick: s.tick })),
+        ),
+      };
+    }
+    return this.sampled;
+  }
+
   /** The world after the `index`th snapshot. Valid until the next call. */
   worldAt(index: number): World {
     const target = Math.max(0, Math.min(index, this.snapshots.length - 1));
@@ -181,6 +201,22 @@ export class Timeline {
     this.at = target;
     return w;
   }
+}
+
+const SAMPLES = 400;
+
+/** `samples` indices spread evenly over `length` items, the first and last included. */
+export function sample(length: number, samples: number): number[] {
+  if (length <= samples) return Array.from({ length }, (_, i) => i);
+  return Array.from({ length: samples }, (_, i) => Math.round((i * (length - 1)) / (samples - 1)));
+}
+
+export interface History {
+  ticks: number[];
+  /** By team, then by sample. */
+  points: Points[][];
+  /** Commanders that died, and the tick. */
+  fallen: { team: number; tick: number }[];
 }
 
 const timelines = new WeakMap<SetReplay, Timeline>();

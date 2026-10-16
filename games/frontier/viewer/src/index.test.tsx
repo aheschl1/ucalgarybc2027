@@ -27,7 +27,10 @@ const set: SetReplay = {
     crops: [],
     cleared: [],
     signs: [],
-    points: [120, 80],
+    points: [
+      { buildings: 100, stored: 10, units: 10 },
+      { buildings: 60, stored: 15, units: 5 },
+    ],
   },
   ticks: [],
   result: { index: 0, first_team: 0, reason: "draw", ticks: 0 },
@@ -49,6 +52,20 @@ it("counts each team's units and finished buildings, and its commander's health"
     ["Team", "Points", "Units", "Buildings", "Commander"],
     ["alpha", "120", "2", "1", "100"],
     ["beta", "80", "1", "0", "70"],
+  ]);
+});
+
+it("charts points over time, and their sources at this tick", () => {
+  const info = render(at(<Info />)).container;
+  expect(info.querySelectorAll(".fr-chart svg")).toHaveLength(3);
+  // Two team lines; each team's stack of three sources, outlined.
+  expect(info.querySelectorAll(".fr-line")).toHaveLength(2 + 2);
+  expect(info.querySelectorAll(".fr-area")).toHaveLength(2 * 3);
+  expect(info.querySelector(".fr-chart svg")?.getAttribute("aria-label")).toContain("alpha 120, beta 80");
+  const readouts = [...info.querySelectorAll(".fr-readout")].map((r) => r.textContent);
+  expect(readouts).toEqual([
+    "alpha at tick 0: 100 buildings · 10 stored · 10 units",
+    "beta at tick 0: 60 buildings · 15 stored · 5 units",
   ]);
 });
 

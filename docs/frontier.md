@@ -172,7 +172,8 @@ for finding walks through what a unit sees.
 `games/frontier/viewer` rebuilds each frame from the deltas: entities from the nearest
 keyframe, tiles from a change log over the initial map. The terrain is a 1-pixel-a-tile
 canvas repainted where tiles change, scaled onto the board; markers keep a few screen
-pixels at any zoom. Snapshots carry each team's points for the panel. Build it into the
+pixels at any zoom. Snapshots carry each team's points by source (buildings, stored,
+units); the panel charts them over the set, per team and by source. Build it into the
 viewer with `make build GAMES="ucbc2027 pacman frontier"`.
 
 ## Phases

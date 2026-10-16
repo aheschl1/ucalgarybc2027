@@ -2,9 +2,10 @@ import type { SetReplay, Tick } from "@ucbc/viewer";
 import { expect, it } from "vitest";
 
 import type { Snapshot } from "./api.gen.ts";
-import { BUILDINGS, Timeline, type World } from "./world.ts";
+import { BUILDINGS, sample, Timeline, type World } from "./world.ts";
 
 const SIZE = 4;
+const ZERO = { buildings: 0, stored: 0, units: 0 };
 
 function snap(tick: number, s: Partial<Snapshot> = {}): Snapshot {
   return {
@@ -19,7 +20,7 @@ function snap(tick: number, s: Partial<Snapshot> = {}): Snapshot {
     crops: [],
     cleared: [],
     signs: [],
-    points: [0, 0],
+    points: [ZERO, ZERO],
     ...s,
   };
 }
@@ -125,6 +126,28 @@ it("tracks the tiles to redraw", () => {
   expect([...w.dirty]).toEqual([2 * SIZE + 2]);
   t.worldAt(0);
   expect(w.dirty).toBeNull();
+});
+
+it("samples evenly from the first frame to the last", () => {
+  expect(sample(4, 400)).toEqual([0, 1, 2, 3]);
+  expect(sample(8, 3)).toEqual([0, 4, 7]);
+  expect(sample(10_001, 400)).toHaveLength(400);
+});
+
+it("keeps each team's points over the set", () => {
+  const points = [
+    { buildings: 1, stored: 2, units: 3 },
+    { buildings: 4, stored: 5, units: 6 },
+  ];
+  const h = new Timeline(set([replay.initial_state as Snapshot, snap(1, { points })])).history();
+  expect(h.ticks).toEqual([0, 1]);
+  expect(h.points.map((team) => team[1])).toEqual(points);
+});
+
+it("finds when commanders fell", () => {
+  const fell = snap(1, { removed: [7] });
+  const replay2 = set([{ ...(replay.initial_state as Snapshot), units: [7, 1, 0, 0, 0, 100, 0] }, fell]);
+  expect(new Timeline(replay2).history().fallen).toEqual([{ team: 1, tick: 1 }]);
 });
 
 it("names buildings in id order, which is alphabetical", () => {

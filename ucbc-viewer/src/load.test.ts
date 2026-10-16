@@ -29,8 +29,32 @@ describe("parseReplay", () => {
     }
   });
 
-  it("rejects what is not JSON", async () => {
-    await expect(parseReplay(stream('{"sets": [{"ticks": [{]}]}', 4))).rejects.toThrow(SyntaxError);
-    await expect(parseReplay(stream("<html>", 4))).rejects.toThrow(SyntaxError);
+  it("agrees with JSON.parse on odd and broken input", async () => {
+    const cases = [
+      '{"sets": [{"ticks": [{]}]}',
+      "<html>",
+      '{"sets":[{"ticks":[{}{}]}]}',
+      '{"sets":[{"ticks":[{} xyz {}]}]}',
+      '{"sets":[{"ticks":[{},]}]}',
+      '{"sets":[{"ticks":[,{}]}]}',
+      '{"sets":[{"ticks":[ ]}]}',
+      '{"sets":[{"ticks":[1, "a", {"n":1}]}]}',
+      '{"config":{"game_config":{"ticks":[{"a":1}]}},"sets":[{"ticks":[{"n":2}]}]}',
+      '{"sets":[{"x":1},2,{"ticks" : [{"n":2}]}]}',
+      '{"sets":[{"ti\\"cks":[{"n":1}]}]}',
+      '{"sets":[["ticks",[{"n":1}]]]}',
+      '{"sets":[{"ticks":[{"n":1}],"ticks":[{"n":2}]}]}',
+      '{"sets":[{"ticks":[{"n":1}',
+    ];
+    for (const text of cases) {
+      let want: unknown;
+      try {
+        want = JSON.parse(text);
+      } catch {
+        await expect(parseReplay(stream(text, 3)), text).rejects.toThrow(SyntaxError);
+        continue;
+      }
+      expect(await parseReplay(stream(text, 3)), text).toEqual(want);
+    }
   });
 });

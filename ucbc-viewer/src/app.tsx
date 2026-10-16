@@ -42,17 +42,21 @@ async function samples(): Promise<string[]> {
 }
 
 async function open(stream: ReadableStream<Uint8Array>, source: string) {
+  // A replay dropped while another loads replaces it.
+  const id = ++opened;
   show(`Loading ${source}…`);
   let replay: Replay;
   try {
     replay = (await parseReplay(stream)) as Replay;
-  } catch {
-    return show(`${source} is not JSON.`);
+  } catch (e) {
+    if (id === opened) show(e instanceof SyntaxError ? `${source} is not JSON.` : `${source} could not be read.`);
+    return;
   }
+  if (id !== opened) return;
   if (!Array.isArray(replay?.sets) || !replay.sets.length || typeof replay.config?.game !== "string") {
     return show(`${source} is not a replay.`);
   }
-  render(<Viewer key={++opened} replay={replay} renderers={renderers} />);
+  render(<Viewer key={id} replay={replay} renderers={renderers} />);
 }
 
 const url = new URLSearchParams(location.search).get("replay") ?? "replay.json";

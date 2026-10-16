@@ -169,6 +169,8 @@ pub struct Observation {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct MapView {
     pub size: usize,
+    /// How far a unit sees.
+    pub vision: usize,
     /// `size * size` tile bytes as in [`Observation::tiles`], base64.
     pub tiles: String,
 }
@@ -198,6 +200,8 @@ pub struct Snapshot {
     pub cleared: Vec<u64>,
     /// An empty sign was taken down.
     pub signs: Vec<Sign>,
+    /// Each team's points, as the tick limit would count them now.
+    pub points: Vec<u32>,
 }
 
 impl World {
@@ -395,6 +399,7 @@ impl World {
             tick,
             map: (tick == 0).then(|| MapView {
                 size: self.map.size(),
+                vision: self.vision,
                 tiles: BASE64.encode(self.map.bytes()),
             }),
             keyframe,
@@ -411,6 +416,7 @@ impl World {
             crops,
             cleared,
             signs: sign_at.into_iter().map(|at| self.sign(at)).collect(),
+            points: vec![self.score(TeamId(0)), self.score(TeamId(1))],
         }
     }
 

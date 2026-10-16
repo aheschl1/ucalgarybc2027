@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 6.
+competition and RL environment. Status: Phase 6 done; next, the RL environment.
 
 ## Principles
 
@@ -165,6 +165,14 @@ for finding walks through what a unit sees.
   mirror image of its own base, hits the units it meets, and steals food. On a 256 map
   it beats the starter 2-0, killing a commander; on 1024 a raid outlasts the CLI's
   1000-tick limit.
+
+## Viewer
+
+`games/frontier/viewer` rebuilds each frame from the deltas: entities from the nearest
+keyframe, tiles from a change log over the initial map. The terrain is a 1-pixel-a-tile
+canvas repainted where tiles change, scaled onto the board; markers keep a few screen
+pixels at any zoom. Snapshots carry each team's points for the panel. Build it into the
+viewer with `make build GAMES="ucbc2027 pacman frontier"`.
 
 ## Phases
 

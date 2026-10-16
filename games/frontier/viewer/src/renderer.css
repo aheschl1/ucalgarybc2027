@@ -1,0 +1,25 @@
+.fr-board {
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+.fr-detail th {
+  position: static;
+  width: 6rem;
+}
+
+.fr-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--ucbc-muted, #78716c);
+}
+
+.fr-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}

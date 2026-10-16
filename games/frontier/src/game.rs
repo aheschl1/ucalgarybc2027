@@ -160,6 +160,7 @@ impl Game for Frontier {
         ];
         map.settle(bases[0]);
         let mut world = World::new(map);
+        world.vision = config.vision;
         for team in [TeamId(0), TeamId(1)] {
             let id = world.place_structure(team, Building::Base, bases[team.0 as usize]);
             world.structures.get_mut(&id).unwrap().work_left = 0;

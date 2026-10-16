@@ -150,6 +150,8 @@ pub struct Changes {
 pub struct World {
     /// The tick in play.
     pub tick: u32,
+    /// How far a unit sees.
+    pub vision: usize,
     pub map: Map,
     pub bots: BotManager<Unit>,
     /// Bot id + 1 on each tile, 0 if none.
@@ -181,6 +183,7 @@ impl World {
         let tiles = map.size() * map.size();
         Self {
             tick: 0,
+            vision: 0,
             map,
             bots: BotManager::new(),
             unit_at: vec![0; tiles],

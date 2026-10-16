@@ -1,11 +1,22 @@
 import "./viewer.css";
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { ErrorBoundary } from "react-error-boundary";
 
 import { ViewerContext, type ViewerState } from "./hooks.ts";
 import type { GameRenderer } from "./renderer.ts";
-import type { BotId, Replay, SetReplay, Step, TeamId, TeamInfo, Tick } from "./replay.gen.ts";
+import type { BotId, FailureRecord, Replay, SetReplay, Step, TeamId, TeamInfo, Tick } from "./replay.gen.ts";
 import { frameAt, frameCount } from "./timeline.ts";
 import { createZoom, type Zoom } from "./zoom.ts";
 
@@ -21,12 +32,22 @@ function teamName(teams: TeamInfo[], id: TeamId): string {
   return teams[id]?.name ?? `team ${id}`;
 }
 
+/** An action's `type`, if it has one, and its other fields as `[key, value]` pairs with
+ * strings bare and anything else as JSON. A non-object action is one value under `""`. */
+export function actionParts(action: unknown): { type: string | null; fields: [string, string][] } {
+  if (typeof action !== "object" || action === null || Array.isArray(action)) {
+    return { type: null, fields: [["", JSON.stringify(action)]] };
+  }
+  const { type, ...rest } = action as Record<string, unknown>;
+  const fields = Object.entries(rest).map(([k, v]): [string, string] => [k, typeof v === "string" ? v : JSON.stringify(v)]);
+  return { type: type === undefined ? null : String(type), fields };
+}
+
 /** An action as its `type`, if it has one, then `key=value` for each other field. */
 export function formatAction(action: unknown): string {
-  if (typeof action !== "object" || action === null || Array.isArray(action)) return JSON.stringify(action);
-  const { type, ...fields } = action as Record<string, unknown>;
-  const parts = Object.entries(fields).map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`);
-  return [...(type === undefined ? [] : [String(type)]), ...parts].join(" ");
+  const { type, fields } = actionParts(action);
+  const parts = fields.map(([k, v]) => (k ? `${k}=${v}` : v));
+  return [...(type === null ? [] : [type]), ...parts].join(" ");
 }
 
 function Button(props: { title?: string; active?: boolean; onClick: () => void; children: ReactNode }) {
@@ -66,16 +87,15 @@ function Output({ step }: { step: Step }) {
 interface StepRowsProps {
   step: Step;
   teams: TeamInfo[];
-  selected: boolean;
   onSelect(bot: BotId): void;
 }
 
 /** One step as a table body: a row of numbers, then a row for any output. Clicking it
  * selects the bot. */
-function StepRows({ step, teams, selected, onSelect }: StepRowsProps) {
+function StepRows({ step, teams, onSelect }: StepRowsProps) {
   const memory = step.usage.memory;
   return (
-    <tbody className={selected ? "ucbc-step ucbc-selected" : "ucbc-step"} onClick={() => onSelect(step.bot)}>
+    <tbody className="ucbc-step" onClick={() => onSelect(step.bot)}>
       <tr>
         <td className="ucbc-team">
           <span className="ucbc-swatch" style={{ background: `var(--ucbc-team-${step.team}, var(--ucbc-muted))` }} />
@@ -88,9 +108,9 @@ function StepRows({ step, teams, selected, onSelect }: StepRowsProps) {
           <div className="ucbc-actions">
             {step.actions.length ? (
               step.actions.map((a, i) => (
-                <code key={i} className="ucbc-action">
-                  {formatAction(a)}
-                </code>
+                <span key={i} className="ucbc-action">
+                  <Action action={a} tokens={NO_TOKENS} />
+                </span>
               ))
             ) : (
               <span className="ucbc-muted">none</span>
@@ -112,11 +132,10 @@ function StepRows({ step, teams, selected, onSelect }: StepRowsProps) {
 interface StepsProps {
   tick: Tick | null;
   teams: TeamInfo[];
-  selected: BotId | null;
   onSelect(bot: BotId): void;
 }
 
-function Steps({ tick, teams, selected, onSelect }: StepsProps) {
+function Steps({ tick, teams, onSelect }: StepsProps) {
   return (
     <table className="ucbc-steps">
       <thead>
@@ -130,7 +149,7 @@ function Steps({ tick, teams, selected, onSelect }: StepsProps) {
       </thead>
       {tick ? (
         tick.steps.map((s, i) => (
-          <StepRows key={i} step={s} teams={teams} selected={s.bot === selected} onSelect={onSelect} />
+          <StepRows key={i} step={s} teams={teams} onSelect={onSelect} />
         ))
       ) : (
         <tbody>
@@ -145,35 +164,172 @@ function Steps({ tick, teams, selected, onSelect }: StepsProps) {
   );
 }
 
-/** A bot's step, and the frame it produced. */
+/** One tick of a bot's timeline: its step, at the frame it produced; or a run of ticks in
+ * which it did nothing, from frame `frame` to frame `to`. */
 interface Entry {
   frame: number;
-  step: Step;
+  to: number;
+  team: TeamId;
+  step: Step | null;
 }
 
-/** Each bot's steps in a set, in order. */
-function stepsByBot(set: SetReplay): Map<BotId, Entry[]> {
+/** Whether a step did anything worth a node of its own. */
+function stepIsIdle(step: Step): boolean {
+  return step.actions.length === 0 && !step.stdout && !step.failure;
+}
+
+/** Each bot's timeline over a set, in order: an entry per tick it acted or printed in,
+ * with runs of idle ticks between them collapsed into one entry each. */
+export function stepsByBot(set: SetReplay): Map<BotId, Entry[]> {
   const bots = new Map<BotId, Entry[]>();
   set.ticks.forEach((tick, i) => {
+    const frame = i + 1;
     for (const step of tick.steps) {
       let entries = bots.get(step.bot);
       if (!entries) bots.set(step.bot, (entries = []));
-      entries.push({ frame: i + 1, step });
+      const last = entries.at(-1);
+      if (stepIsIdle(step)) {
+        if (last && last.step === null) last.to = frame;
+        else entries.push({ frame, to: frame, team: step.team, step: null });
+      } else {
+        entries.push({ frame, to: frame, team: step.team, step });
+      }
     }
   });
   return bots;
 }
 
-const LogEntry = memo(function LogEntry(props: { entry: Entry; when: number; onSeek(frame: number): void }) {
-  const { entry, when, onSeek } = props;
-  const cls = when < 0 ? "" : when === 0 ? " ucbc-current" : " ucbc-future";
+/** A search query as lower-case words. A `key=value` word must equal a whole parameter
+ * of an action; any other word may appear anywhere. */
+export function searchTokens(query: string): string[] {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+const NO_TOKENS: string[] = [];
+
+/** Whether `text` contains every token, ignoring case. Nothing matches no tokens. */
+function textMatches(text: string, tokens: string[]): boolean {
+  if (!tokens.length) return false;
+  const t = text.toLowerCase();
+  return tokens.every((tok) => t.includes(tok));
+}
+
+/** Whether a parameter chip, or the type, is what a token asks for. */
+function partMatches(key: string, value: string, tokens: string[]): boolean {
+  const v = value.toLowerCase();
+  return tokens.some((tok) => (tok.includes("=") ? `${key.toLowerCase()}=${v}` === tok : v.includes(tok)));
+}
+
+/** Whether an action satisfies every token: `key=value` tokens as one of its parameters
+ * exactly, others as text of its type or a parameter. */
+export function actionMatches(action: unknown, tokens: string[]): boolean {
+  if (!tokens.length) return false;
+  const { fields } = actionParts(action);
+  const text = formatAction(action).toLowerCase();
+  return tokens.every((tok) =>
+    tok.includes("=") ? fields.some(([k, v]) => `${k.toLowerCase()}=${v.toLowerCase()}` === tok) : text.includes(tok),
+  );
+}
+
+function failureText(f: FailureRecord): string {
+  return `${f.kind}: ${f.message}`;
+}
+
+/** Whether anything in an entry matches: one of its actions, its output, or its failure. */
+export function entryMatches(entry: Entry, tokens: string[]): boolean {
+  const { step } = entry;
+  if (!step) return false;
+  if (step.actions.some((a) => actionMatches(a, tokens))) return true;
+  if (step.stdout && textMatches(step.stdout, tokens)) return true;
+  return !!step.failure && textMatches(failureText(step.failure), tokens);
+}
+
+/** An action as its type, then a chip per parameter; the parts a search hits are marked. */
+function Action({ action, tokens }: { action: unknown; tokens: string[] }) {
+  const { type, fields } = actionParts(action);
+  const typeHit = type !== null && partMatches("type", type, tokens);
   return (
-    <div className={`ucbc-entry${cls}`}>
-      <button type="button" className="ucbc-link" onClick={() => onSeek(entry.frame)}>
-        {`tick ${entry.frame}`}
+    <>
+      <span className={typeHit ? "ucbc-node-type ucbc-hit" : "ucbc-node-type"}>{type ?? "action"}</span>
+      {fields.length ? (
+        <span className="ucbc-params">
+          {fields.map(([k, v], i) => (
+            <code key={i} className={partMatches(k, v, tokens) ? "ucbc-param ucbc-hit" : "ucbc-param"}>
+              {k ? <span className="ucbc-param-key">{`${k}=`}</span> : null}
+              {v}
+            </code>
+          ))}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function node(kind: string, hit: boolean): string {
+  return hit ? `ucbc-node ucbc-node-${kind} ucbc-match` : `ucbc-node ucbc-node-${kind}`;
+}
+
+interface LogEntryProps {
+  entry: Entry;
+  /** -1 before the frame, 0 at it, 1 after it. */
+  when: number;
+  /** For an idle run at the frame: the frame, to show where in the run it is. */
+  at: number | null;
+  tokens: string[];
+  onSeek(frame: number): void;
+}
+
+/** A tick of the timeline: its number, then the chain of what the bot did in it: each
+ * accepted action, then what it printed, then how it failed. Clicking it seeks there. */
+const LogEntry = memo(function LogEntry({ entry, when, at, tokens, onSeek }: LogEntryProps) {
+  const { step } = entry;
+  const cls = when < 0 ? "" : when === 0 ? " ucbc-current" : " ucbc-future";
+  const f = step?.failure;
+  const run = entry.to - entry.frame + 1;
+  const label = run > 1 ? `ticks ${entry.frame}–${entry.to}` : `tick ${entry.frame}`;
+
+  function onClick(e: MouseEvent) {
+    // Selecting text to copy is not a click to seek.
+    if (window.getSelection()?.isCollapsed === false) return;
+    e.preventDefault();
+    onSeek(entry.frame);
+  }
+
+  return (
+    <li className={`ucbc-entry${cls}`} aria-current={when === 0 ? "step" : undefined} onClick={onClick}>
+      <button type="button" className="ucbc-link" aria-label={`Seek to ${label}`}>
+        {label}
       </button>
-      <Output step={entry.step} />
-    </div>
+      <ol className="ucbc-chain">
+        {step ? (
+          <>
+            {step.actions.map((a, i) => (
+              <li key={i} className={node("action", actionMatches(a, tokens))}>
+                <Action action={a} tokens={tokens} />
+              </li>
+            ))}
+            {step.stdout ? (
+              <li className={node("stdout", textMatches(step.stdout, tokens))}>
+                <span className="ucbc-node-type">stdout</span>
+                <pre className="ucbc-stdout">{step.stdout}</pre>
+              </li>
+            ) : null}
+            {f ? (
+              <li className={node("error", textMatches(failureText(f), tokens))}>
+                <span className="ucbc-node-type">{f.kind}</span>
+                <div className="ucbc-error">{f.message}</div>
+                {f.traceback ? <pre className="ucbc-traceback">{f.traceback}</pre> : null}
+              </li>
+            ) : null}
+          </>
+        ) : (
+          <li className="ucbc-node ucbc-node-idle">
+            <span className="ucbc-node-type">idle</span>
+            {at !== null && run > 1 ? <span className="ucbc-muted">{`tick ${at}`}</span> : null}
+          </li>
+        )}
+      </ol>
+    </li>
   );
 });
 
@@ -181,27 +337,90 @@ interface BotLogProps {
   bot: BotId;
   steps: Entry[];
   frame: number;
+  /** 1-based, for messages. */
+  setNumber: number;
+  playing: boolean;
   teams: TeamInfo[];
   onSeek(frame: number): void;
   onClose(): void;
 }
 
-/** A bot's output over the set: each step that printed or failed. Later ones are dimmed,
- * and the log scrolls to keep the latest one at or before `frame` in view. */
-function BotLog({ bot, steps, frame, teams, onSeek, onClose }: BotLogProps) {
-  const log = useRef<HTMLDivElement>(null);
-  const output = steps.filter((e) => e.step.stdout || e.step.failure);
+/** A bot's timeline over the set: a linked list of its actions and output, tick by tick.
+ * Later ticks are dimmed. While following, the log keeps the latest tick at or before
+ * `frame` at its top, so it scrolls along with playback; scrolling it by hand stops that
+ * until play, a click on a tick, or the Follow button. A search shows only the ticks with
+ * a matching action, parameter, output or failure; Enter seeks to the next match,
+ * Shift+Enter to the previous. */
+function BotLog({ bot, steps, frame, setNumber, playing, teams, onSeek, onClose }: BotLogProps) {
+  const log = useRef<HTMLOListElement>(null);
+  // What the log was last scrolled to by the code; any other scroll is the user's.
+  const scrolledTo = useRef(-1);
+  const [query, setQuery] = useState("");
+  const [follow, setFollow] = useState(true);
+  const tokens = useMemo(() => searchTokens(query), [query]);
+  const searching = tokens.length > 0;
+  const shown = useMemo(() => (searching ? steps.filter((e) => entryMatches(e, tokens)) : steps), [steps, tokens, searching]);
   let latest = -1;
-  for (const [i, e] of output.entries()) if (e.frame <= frame) latest = i;
-  const team = steps[0]?.step.team;
+  for (const [i, e] of shown.entries()) if (e.frame <= frame) latest = i;
+  const onMatch = latest >= 0 && shown[latest]!.frame === frame;
+  const team = steps[0]?.team;
 
   useEffect(() => {
+    if (playing) setFollow(true);
+  }, [playing]);
+
+  useEffect(() => {
+    setFollow(true);
+  }, [bot]);
+
+  useLayoutEffect(() => {
     const box = log.current;
     const el = box?.children[latest] as HTMLElement | undefined;
-    if (!box) return;
-    // The entry's bottom at the box's bottom, or its top at the top if it is taller.
-    box.scrollTop = el ? Math.min(el.offsetTop, el.offsetTop + el.offsetHeight - box.clientHeight) : 0;
-  }, [bot, latest]);
+    if (!box || !follow) return;
+    // The current entry at the top of the box, so the log scrolls along with playback.
+    box.scrollTop = el ? el.offsetTop : 0;
+    scrolledTo.current = box.scrollTop;
+  }, [bot, latest, shown, follow]);
+
+  function onScroll() {
+    const box = log.current;
+    if (box && box.scrollTop !== scrolledTo.current) setFollow(false);
+  }
+
+  // Seeking from the log, by a click or a search jump, follows again.
+  const seek = useCallback(
+    (to: number) => {
+      setFollow(true);
+      onSeek(to);
+    },
+    [onSeek],
+  );
+
+  /** Seeks to the first match after the frame, or before it, wrapping around. */
+  function jump(forward: boolean) {
+    if (!searching || !shown.length) return;
+    const before = shown.filter((e) => e.frame < frame);
+    const next = forward ? (shown.find((e) => e.frame > frame) ?? shown[0]) : (before.at(-1) ?? shown.at(-1));
+    if (next) seek(next.frame);
+  }
+
+  function onSearchKey(e: KeyboardEvent<HTMLInputElement>) {
+    // The search box keeps its keys from the viewer's shortcuts.
+    e.stopPropagation();
+    if (e.key === "Enter") jump(!e.shiftKey);
+    else if (e.key === "Escape") {
+      if (query) setQuery("");
+      else onClose();
+    }
+  }
+
+  const count = !searching
+    ? ""
+    : shown.length === 0
+      ? "no matches"
+      : onMatch
+        ? `${latest + 1} / ${shown.length}`
+        : `${shown.length} ${shown.length === 1 ? "match" : "matches"}`;
 
   return (
     <section className="ucbc-bot">
@@ -212,18 +431,57 @@ function BotLog({ bot, steps, frame, teams, onSeek, onClose }: BotLogProps) {
           )}
           {team == null ? `Bot ${bot}` : `Bot ${bot} · ${teamName(teams, team)}`}
         </span>
+        {follow ? null : (
+          <Button title="Scroll along with playback again" onClick={() => setFollow(true)}>
+            Follow
+          </Button>
+        )}
         <Button title="Clear selection (Escape)" onClick={onClose}>
           ×
         </Button>
       </header>
-      {output.length ? (
-        <div className="ucbc-bot-log" ref={log}>
-          {output.map((e) => (
-            <LogEntry key={e.frame} entry={e} when={Math.sign(e.frame - frame)} onSeek={onSeek} />
-          ))}
-        </div>
+      {steps.length ? (
+        <>
+          <div className="ucbc-search">
+            <input
+              type="search"
+              className="ucbc-search-input"
+              aria-label="Search this bot's actions, output and errors"
+              aria-keyshortcuts="Enter Shift+Enter"
+              placeholder="Search actions, output… e.g. grab x=11 (/)"
+              title="Words match anywhere; key=value matches a whole parameter. Enter: next match, Shift+Enter: previous"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={onSearchKey}
+            />
+            {searching ? (
+              <>
+                <span className="ucbc-search-count ucbc-muted" aria-live="polite">
+                  {count}
+                </span>
+                <Button title="Previous match (Shift+Enter)" onClick={() => jump(false)}>
+                  ▲
+                </Button>
+                <Button title="Next match (Enter)" onClick={() => jump(true)}>
+                  ▼
+                </Button>
+              </>
+            ) : null}
+          </div>
+          {shown.length ? (
+            <ol className="ucbc-bot-log" ref={log} onScroll={onScroll}>
+              {shown.map((e) => {
+                const when = frame < e.frame ? 1 : frame > e.to ? -1 : 0;
+                const at = when === 0 && !e.step ? frame : null;
+                return <LogEntry key={e.frame} entry={e} when={when} at={at} tokens={tokens} onSeek={seek} />;
+              })}
+            </ol>
+          ) : (
+            <div className="ucbc-muted">{`No matches in set ${setNumber}. Esc clears the search.`}</div>
+          )}
+        </>
       ) : (
-        <div className="ucbc-muted">No output in this set.</div>
+        <div className="ucbc-muted">{`Bot ${bot} did not play in set ${setNumber}.`}</div>
       )}
     </section>
   );
@@ -244,7 +502,8 @@ function useZoom() {
 
 /** Plays a replay. The game's renderer draws the board and its info panel, reading the frame
  * and the selected bot from `ViewerContext`; the viewer owns sets, playback, zoom, the
- * per-tick step table, and the selected bot and its output. Give it a new `key` to start
+ * per-tick step table, and the selected bot and its timeline, which replaces the table
+ * while a bot is selected. Give it a new `key` to start
  * another replay from the beginning. */
 export function Viewer({ replay, renderers }: ViewerProps) {
   const [setIndex, setSetIndex] = useState(0);
@@ -282,12 +541,19 @@ export function Viewer({ replay, renderers }: ViewerProps) {
     setFrame(to);
   }, []);
 
+  // Closing the bot panel unmounts whatever had focus; the viewer takes it back, so the
+  // keyboard shortcuts keep working.
+  const close = useCallback(() => {
+    setSelected(null);
+    root.current?.focus({ preventScroll: true });
+  }, []);
+
   function selectSet(index: number) {
     setPlaying(false);
     setSetIndex(index);
     setFrame(0);
     // Bot ids start over in each set.
-    setSelected(null);
+    close();
   }
 
   useEffect(() => {
@@ -329,7 +595,8 @@ export function Viewer({ replay, renderers }: ViewerProps) {
       "=": () => zoom.current?.zoomBy(1.25),
       "-": () => zoom.current?.zoomBy(1 / 1.25),
       "0": () => zoom.current?.fit(),
-      Escape: () => setSelected(null),
+      Escape: close,
+      "/": () => root.current?.querySelector<HTMLInputElement>(".ucbc-search-input")?.focus(),
     };
     const action = stepping[e.key] ?? other[e.key];
     if (!action) return;
@@ -444,12 +711,19 @@ export function Viewer({ replay, renderers }: ViewerProps) {
               bot={selected}
               steps={byBot.get(selected) ?? []}
               frame={frame}
+              setNumber={setIndex + 1}
+              playing={playing}
               teams={teams}
               onSeek={seekPaused}
-              onClose={() => setSelected(null)}
+              onClose={close}
             />
           )}
-          <Steps tick={current.tick} teams={teams} selected={selected} onSelect={setSelected} />
+          {/* The tick's steps give way to the selected bot's timeline. */}
+          {selected == null ? (
+            <div className="ucbc-steps-box">
+              <Steps tick={current.tick} teams={teams} onSelect={setSelected} />
+            </div>
+          ) : null}
         </aside>
       </ViewerContext>
     </div>

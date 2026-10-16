@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useFrame, useSelection, type ViewerState } from "./hooks.ts";
 import type { Frame, GameRenderer } from "./renderer.ts";
 import type { Replay } from "./replay.gen.ts";
-import { formatAction, Viewer } from "./viewer.tsx";
+import { actionMatches, actionParts, formatAction, searchTokens, stepsByBot, Viewer } from "./viewer.tsx";
 
 const replay: Replay = {
   match_id: "m",
@@ -86,6 +86,57 @@ describe("formatAction", () => {
   });
 });
 
+describe("actionParts", () => {
+  it("splits the type from the parameters", () => {
+    expect(actionParts({ x: 9, type: "move", name: "a" })).toEqual({
+      type: "move",
+      fields: [
+        ["x", "9"],
+        ["name", "a"],
+      ],
+    });
+    expect(actionParts({ type: 7 })).toEqual({ type: "7", fields: [] });
+    expect(actionParts([1])).toEqual({ type: null, fields: [["", "[1]"]] });
+  });
+});
+
+describe("actionMatches", () => {
+  const move = { type: "move", x: 11, y: 7 };
+  const hit = (q: string) => actionMatches(move, searchTokens(q));
+  it("matches words anywhere and key=value as a whole parameter", () => {
+    expect(hit("move")).toBe(true);
+    expect(hit("MOVE  x=11")).toBe(true);
+    expect(hit("x=11 y=7")).toBe(true);
+    expect(hit("x=1")).toBe(false);
+    expect(hit("x=110")).toBe(false);
+    expect(hit("grab")).toBe(false);
+    expect(hit("")).toBe(false);
+  });
+});
+
+describe("stepsByBot", () => {
+  it("lists each bot's ticks, collapsing runs of idle ones", () => {
+    const idle = { actions: [], usage: { time_us: 0 } };
+    const set = replay.sets[0]!;
+    const ticks = [
+      { number: 0, state_after: 1, steps: [{ ...idle, bot: 0, team: 0 }] },
+      { number: 1, state_after: 2, steps: [{ ...idle, bot: 0, team: 0 }] },
+      { number: 2, state_after: 3, steps: [{ ...idle, bot: 0, team: 0, actions: [{ type: "add" }] }] },
+      { number: 3, state_after: 4, steps: [{ ...idle, bot: 0, team: 0, stdout: "hi" }] },
+      { number: 4, state_after: 5, steps: [{ ...idle, bot: 0, team: 0 }] },
+    ];
+    const entries = stepsByBot({ ...set, ticks })
+      .get(0)!
+      .map((e) => [e.frame, e.to, e.step ? "step" : "idle"]);
+    expect(entries).toEqual([
+      [1, 2, "idle"],
+      [3, 3, "step"],
+      [4, 4, "step"],
+      [5, 5, "idle"],
+    ]);
+  });
+});
+
 describe("Viewer", () => {
   it("shows the match result and starts at the first frame", () => {
     const { frames, text } = mount([]);
@@ -161,24 +212,34 @@ describe("Viewer", () => {
     expect(text(".ucbc-board .ucbc-raw")).toBe("0");
   });
 
-  it("selects a bot from the steps table and logs its output over the set", () => {
+  it("selects a bot from the steps table and shows its timeline over the set", () => {
     const { root, key, text, selected } = mount([]);
     key("ArrowRight");
     fireEvent.click(root.querySelectorAll(".ucbc-step")[0]!);
     expect(selected()).toBe(0);
-    expect(root.querySelector(".ucbc-step")?.classList).toContain("ucbc-selected");
+    // The timeline takes the table's place until the selection is cleared.
+    expect(root.querySelector(".ucbc-steps")).toBeNull();
     expect(text(".ucbc-bot-header")).toBe("Bot 0 · alpha×");
     const entries = () => [...root.querySelectorAll(".ucbc-entry")].map((e) => [e.className, e.textContent]);
     expect(entries()).toEqual([
-      ["ucbc-entry ucbc-current", "tick 1hello"],
-      ["ucbc-entry ucbc-future", "tick 2hello"],
+      ["ucbc-entry ucbc-current", "tick 1addstdouthello"],
+      ["ucbc-entry ucbc-future", "tick 2addstdouthello"],
     ]);
-    fireEvent.click(root.querySelectorAll(".ucbc-link")[1]!);
+    // Each action is a node with its type, then its parameters; stdout is a node after them.
+    const nodes = [...root.querySelectorAll(".ucbc-entry")[0]!.querySelectorAll(".ucbc-node")];
+    expect(nodes.map((n) => n.className)).toEqual(["ucbc-node ucbc-node-action", "ucbc-node ucbc-node-stdout"]);
+    expect(nodes[0]!.querySelector(".ucbc-node-type")?.textContent).toBe("add");
+    expect(nodes[1]!.querySelector(".ucbc-stdout")?.textContent).toBe("hello");
+    // Clicking an entry, anywhere on it, seeks to its tick.
+    fireEvent.click(root.querySelectorAll(".ucbc-entry")[1]!.querySelector(".ucbc-node")!);
     expect(text(".ucbc-position")).toBe("tick 2 / 2");
     expect(entries().map(([c]) => c)).toEqual(["ucbc-entry", "ucbc-entry ucbc-current"]);
+    fireEvent.click(root.querySelectorAll(".ucbc-link")[0]!);
+    expect(text(".ucbc-position")).toBe("tick 1 / 2");
     key("Escape");
     expect(selected()).toBeNull();
     expect(root.querySelector(".ucbc-bot")).toBeNull();
+    expect(root.querySelectorAll(".ucbc-step")).toHaveLength(2);
   });
 
   it("selects from the board, and a new set clears the selection", () => {
@@ -186,11 +247,133 @@ describe("Viewer", () => {
     select(1);
     expect(selected()).toBe(1);
     expect(text(".ucbc-bot-header")).toBe("Bot 1 · beta×");
-    expect(text(".ucbc-entry .ucbc-error")).toBe("Exception: boom");
+    expect(text(".ucbc-node-error .ucbc-node-type")).toBe("Exception");
+    expect(text(".ucbc-entry .ucbc-error")).toBe("boom");
     expect(text(".ucbc-entry .ucbc-traceback")).toBe("Traceback");
     fireEvent.click(root.querySelectorAll(".ucbc-sets button")[1]!);
     expect(selected()).toBeNull();
     select(5);
-    expect(text(".ucbc-bot")).toBe("Bot 5×No output in this set.");
+    expect(text(".ucbc-bot")).toBe("Bot 5×Bot 5 did not play in set 2.");
+  });
+
+  it("shows an action's parameters as chips and collapses idle ticks", () => {
+    const idle = { bot: 0, team: 0, actions: [], usage: { time_us: 0 } };
+    const ticks = [
+      { number: 0, state_after: 1, steps: [idle] },
+      { number: 1, state_after: 2, steps: [idle] },
+      { number: 2, state_after: 3, steps: [{ ...idle, actions: [{ type: "move", x: 1, y: "b" }] }] },
+    ];
+    const sets = replay.sets.map((s) => ({ ...s, ticks }));
+    const { container } = render(<Viewer renderers={[]} replay={{ ...replay, sets }} />);
+    const root = container.querySelector<HTMLElement>(".ucbc-viewer")!;
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    fireEvent.click(root.querySelector(".ucbc-step")!);
+    const entries = [...root.querySelectorAll(".ucbc-entry")];
+    expect(entries.map((e) => [e.className, e.querySelector(".ucbc-link")?.textContent])).toEqual([
+      ["ucbc-entry ucbc-current", "ticks 1–2"],
+      ["ucbc-entry ucbc-future", "tick 3"],
+    ]);
+    // The idle run is current, so its node says which of its ticks the frame is.
+    expect(entries[0]!.querySelector(".ucbc-node")?.textContent).toBe("idletick 1");
+    const params = [...entries[1]!.querySelectorAll(".ucbc-param")].map((p) => p.textContent);
+    expect(params).toEqual(["x=1", "y=b"]);
+    // The current tick is the one the frame is in, idle run included.
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    expect(root.querySelector(".ucbc-current .ucbc-link")?.textContent).toBe("ticks 1–2");
+    expect(root.querySelector(".ucbc-current .ucbc-node")?.textContent).toBe("idletick 2");
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    expect(root.querySelector(".ucbc-current .ucbc-link")?.textContent).toBe("tick 3");
+    expect(root.querySelector(".ucbc-future .ucbc-node")).toBeNull();
+    expect(root.querySelector(".ucbc-entry .ucbc-node")?.textContent).toBe("idle");
+  });
+
+  it("searches a bot's timeline and jumps between matches", () => {
+    const base = { bot: 0, team: 0, actions: [], usage: { time_us: 0 } };
+    const ticks = [
+      { number: 0, state_after: 1, steps: [{ ...base, actions: [{ type: "move", x: 1 }] }] },
+      { number: 1, state_after: 2, steps: [{ ...base, actions: [{ type: "grab", x: 2 }], stdout: "got it" }] },
+      { number: 2, state_after: 3, steps: [{ ...base, actions: [{ type: "move", x: 2 }, { type: "drop", x: 3 }] }] },
+      { number: 3, state_after: 4, steps: [{ ...base, stdout: "GRAB failed" }] },
+    ];
+    const sets = replay.sets.map((s) => ({ ...s, ticks }));
+    const { container } = render(<Viewer renderers={[]} replay={{ ...replay, sets }} />);
+    const root = container.querySelector<HTMLElement>(".ucbc-viewer")!;
+    fireEvent.keyDown(root, { key: "ArrowRight" });
+    fireEvent.click(root.querySelector(".ucbc-step")!);
+    const input = root.querySelector<HTMLInputElement>(".ucbc-search-input")!;
+    const links = () => [...root.querySelectorAll(".ucbc-entry .ucbc-link")].map((l) => l.textContent);
+    expect(links()).toEqual(["tick 1", "tick 2", "tick 3", "tick 4"]);
+
+    // Matches actions, parameters and stdout, ignoring case; the matching nodes are marked.
+    fireEvent.change(input, { target: { value: "grab" } });
+    expect(links()).toEqual(["tick 2", "tick 4"]);
+    expect(root.querySelector(".ucbc-search-count")?.textContent).toBe("2 matches");
+    expect([...root.querySelectorAll(".ucbc-match .ucbc-node-type")].map((n) => n.textContent)).toEqual(["grab", "stdout"]);
+    // The type is marked as the hit; so is a parameter a key=value word asks for.
+    expect(root.querySelector(".ucbc-hit")?.textContent).toBe("grab");
+    fireEvent.change(input, { target: { value: "x=2" } });
+    expect(links()).toEqual(["tick 2", "tick 3"]);
+    expect([...root.querySelectorAll(".ucbc-hit")].map((n) => n.textContent)).toEqual(["x=2", "x=2"]);
+    expect([...root.querySelectorAll(".ucbc-node-action")].map((n) => n.classList.contains("ucbc-match"))).toEqual([
+      true,
+      true,
+      false,
+    ]);
+
+    // Enter seeks to the next match after the frame, wrapping; Shift+Enter to the previous.
+    const position = () => root.querySelector(".ucbc-position")?.textContent;
+    expect(position()).toBe("tick 1 / 4");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(position()).toBe("tick 2 / 4");
+    expect(root.querySelector(".ucbc-search-count")?.textContent).toBe("1 / 2");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(position()).toBe("tick 3 / 4");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(position()).toBe("tick 2 / 4");
+    fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
+    expect(position()).toBe("tick 3 / 4");
+
+    // Typing in the box does not drive playback; Escape clears the search, then the selection.
+    fireEvent.keyDown(input, { key: " " });
+    fireEvent.keyDown(input, { key: "ArrowLeft" });
+    expect(position()).toBe("tick 3 / 4");
+    fireEvent.change(input, { target: { value: "nothing" } });
+    expect(root.querySelector(".ucbc-bot > .ucbc-muted")?.textContent).toBe("No matches in set 1. Esc clears the search.");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(links()).toHaveLength(4);
+    // Closing from the box hands focus back to the viewer, so its shortcuts keep working.
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(root.querySelector(".ucbc-bot")).toBeNull();
+    expect(document.activeElement).toBe(root);
+    fireEvent.keyDown(root, { key: "ArrowLeft" });
+    expect(position()).toBe("tick 2 / 4");
+  });
+
+  it("focuses the search with / and follows playback until scrolled by hand", () => {
+    const { root, key, select } = mount([]);
+    select(0);
+    key("/");
+    const input = root.querySelector<HTMLInputElement>(".ucbc-search-input")!;
+    expect(document.activeElement).toBe(input);
+    const follow = () => [...root.querySelectorAll(".ucbc-bot-header button")].map((b) => b.textContent);
+    expect(follow()).toEqual(["×"]);
+    // A scroll the code did not ask for stops following; the button offers it back.
+    const log = root.querySelector<HTMLOListElement>(".ucbc-bot-log")!;
+    log.scrollTop = 40;
+    fireEvent.scroll(log);
+    expect(follow()).toEqual(["Follow", "×"]);
+    fireEvent.click(root.querySelector(".ucbc-bot-header button")!);
+    expect(follow()).toEqual(["×"]);
+    log.scrollTop = 40;
+    fireEvent.scroll(log);
+    expect(follow()).toEqual(["Follow", "×"]);
+    // Pressing play follows again; so does clicking a tick.
+    key(" ");
+    expect(follow()).toEqual(["×"]);
+    key(" ");
+    log.scrollTop = 40;
+    fireEvent.scroll(log);
+    fireEvent.click(root.querySelectorAll(".ucbc-entry")[1]!);
+    expect(follow()).toEqual(["×"]);
   });
 });

@@ -115,11 +115,15 @@ function Picked({ id, w, names }: { id: number; w: World; names: string[] }) {
   const rows: [string, ReactNode][] = [];
   if (s.workLeft > 0) {
     rows.push(["Being built", `${s.workLeft} work left`]);
-    rows.push(["Needs", held.owed.length ? <Stacks stacks={held.owed} /> : <span className="ucbc-muted">nothing more</span>]);
+    // Replays from before contents were recorded have no storage sizes, nor what sites need.
+    if (w.storage.length) {
+      rows.push(["Needs", held.owed.length ? <Stacks stacks={held.owed} /> : <span className="ucbc-muted">nothing more</span>]);
+    }
   }
   else if (room) rows.push(["Storage", <>{`${total} of ${room}: `}<Stacks stacks={held.stored} /></>]);
   if (held.job) {
-    const left = held.job.doneAt - w.tick;
+    // A snapshot's tick is the next one: its outputs show in the snapshot after `doneAt`.
+    const left = held.job.doneAt - w.tick + 1;
     rows.push(["Making", `${name(held.job.recipe)}, ${left > 0 ? `ready in ${left} ticks` : "ready"}`]);
   }
   return (
@@ -162,10 +166,7 @@ function Chip({ id, on, mark, counts, label }: { id: string; on: boolean; mark: 
 function Built({ w, names }: { w: World; names: string[] }) {
   const { set } = useFrame();
   const query = useFind();
-  useEffect(() => {
-    setFind("");
-    picked.set(null);
-  }, [set]);
+  useEffect(() => setFind(""), [set]);
   const kinds = found(query);
   // Per kind and team: finished, then being built.
   const built = new Map<string, [number, number][]>(BUILDINGS.map((b) => [b, [[0, 0], [0, 0]]]));

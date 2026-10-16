@@ -277,6 +277,11 @@ export function Board() {
   const { selected, select } = useSelection();
   const query = useFind();
   const building = picked.use();
+  // A unit selected anywhere, or a new set, drops the building picked.
+  useEffect(() => {
+    if (selected != null) picked.set(null);
+  }, [selected]);
+  useEffect(() => picked.set(null), [set]);
   const canvas = useRef<HTMLCanvasElement>(null);
   const t = timeline(set);
   const index = tick ? set.ticks.indexOf(tick) + 1 : 0;

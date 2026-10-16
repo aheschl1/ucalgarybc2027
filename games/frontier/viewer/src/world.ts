@@ -159,23 +159,21 @@ function applyEntities(w: World, s: Snapshot) {
     w.carrying.clear();
     w.contents.clear();
   }
+  const carrying = stacks(s.carrying);
   for (const [id, team, kind, x, y, hp, carried] of rows(s.units, 7)) {
     w.units.set(id!, { id: id!, team: team!, commander: kind === 0, x: x!, y: y!, hp: hp!, carried: carried! });
+    w.carrying.set(id!, carrying.get(id!) ?? []);
   }
-  const carrying = stacks(s.carrying);
-  for (const [id] of rows(s.units, 7)) w.carrying.set(id!, carrying.get(id!) ?? []);
   for (const id of s.removed) {
     w.units.delete(id);
     w.carrying.delete(id);
   }
+  const [stored, owed] = [stacks(s.stored), stacks(s.owed)];
+  const jobs = new Map(rows(s.jobs ?? [], 3).map(([id, r, at]) => [id!, { recipe: RECIPES[r!]!, doneAt: at! }]));
   for (const [id, team, b, x, y, hp, workLeft] of rows(s.buildings, 7)) {
     const building = BUILDINGS[b!];
     if (!building) throw new Error(`unknown building ${b}`);
     w.structures.set(id!, { id: id!, team: team!, building, x: x!, y: y!, hp: hp!, workLeft: workLeft! });
-  }
-  const [stored, owed] = [stacks(s.stored), stacks(s.owed)];
-  const jobs = new Map(rows(s.jobs ?? [], 3).map(([id, r, at]) => [id!, { recipe: RECIPES[r!]!, doneAt: at! }]));
-  for (const [id] of rows(s.buildings, 7)) {
     w.contents.set(id!, { stored: stored.get(id!) ?? [], owed: owed.get(id!) ?? [], job: jobs.get(id!) });
   }
   for (const id of s.demolished) {

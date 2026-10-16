@@ -30,6 +30,7 @@ Pos = tuple[int, int]
 CARRY = 20
 GRASS, FOREST, ROCK, WATER, DIRT, COAL, COPPER, IRON, FARMLAND = range(9)
 FREE = bytes(t in (GRASS, FOREST, DIRT, FARMLAND) for t in range(256))
+DIGGABLE = bytes(t in (GRASS, FOREST, DIRT, FARMLAND, ROCK) for t in range(256))
 MASK = [bytes(tile) + b"\x01" + bytes(255 - tile) for tile in range(9)]
 WET = b"0" * WATER + b"1" + b"0" * (255 - WATER)
 BUILDINGS = list(Building)
@@ -40,7 +41,9 @@ CHEST = BUILDINGS.index(Building.CHEST)
 TOWER = BUILDINGS.index(Building.TOWER)
 WELL = BUILDINGS.index(Building.WELL)
 MONUMENT = BUILDINGS.index(Building.MONUMENT)
+DRILL = BUILDINGS.index(Building.MECH_DRILL)
 DIRS = list(STEPS.items())
+COMPASS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 FOOD = (Item.WHEAT, Item.APPLE)
 
 WOODMAN, MASON, FARMER, BUILDER, SMITH, GUARD, COALER, COPPERER, IRONER, HOARDER = range(1, 11)
@@ -91,6 +94,7 @@ STUDY = [
     Item.WOOD,
     Item.COAL,
     Item.COPPER_ORE,
+    Item.CHARCOAL,
     Item.COPPER_INGOT,
     Item.IRON_ORE,
     Item.IRON_INGOT,
@@ -102,6 +106,7 @@ ORE_STOCK = {COAL: 100, COPPER: 70, IRON: 80}
 HOARD_FROM = 18
 POP_CAP = 90
 CHEST_ROOM = 40
+RESERVE = 8
 APPLES = 31
 DEBUG = False
 
@@ -193,8 +198,10 @@ class Mind:
         self.veins: dict[int, Pos] = {}
         self.explore: Pos | None = None
         self.explore_until = 0
+        self.explored = 0
         self.full: set[Pos] = set()
         self.bad: set[Pos] = set()
+        self.drills = 0
         self.tries = 0
         self.field: list[Pos] = []
         self.field_at = -(10**9)
@@ -291,8 +298,8 @@ class View:
 # Walking
 
 
-def grid(v: View) -> bytearray:
-    free = bytearray(v.data.translate(FREE))
+def grid(v: View, table: bytes = FREE) -> bytearray:
+    free = bytearray(v.data.translate(table))
     w, ox, oy = v.w, v.ox, v.oy
     for x, y in v.occupied:
         free[(y - oy) * w + x - ox] = 0
@@ -304,12 +311,17 @@ def grid(v: View) -> bytearray:
 
 
 def bfs(
-    v: View, goal: bytes | bytearray, near: bool, reach: int = 0, toward: Pos | None = None
+    v: View,
+    goal: bytes | bytearray,
+    near: bool,
+    reach: int = 0,
+    toward: Pos | None = None,
+    table: bytes = FREE,
 ) -> list[Pos] | None:
     """A shortest walk to a tile in `goal`, or beside one when `near`, within `reach` of
     here if given; failing that, to the reachable tile nearest `toward` if given. The
     next step is last."""
-    free = grid(v)
+    free = grid(v, table)
     w, n = v.w, len(free)
     mx, my = v.me[0] - v.ox, v.me[1] - v.oy
     if reach:
@@ -597,10 +609,13 @@ def visit_base(
     room = CARRY - v.load
     for item, n in want.items():
         short = min(n - v.carried.get(item, 0), room)
-        if item == Item.WHEAT and not stored.get(Item.WHEAT):
-            item = Item.APPLE
-            spare = stored.get(Item.APPLE, 0) - (APPLES if v.seen.me.hungry_at > v.tick else 0)
-            short = min(short, spare)
+        if item == Item.WHEAT:
+            food = stored.get(Item.WHEAT, 0) + stored.get(Item.APPLE, 0)
+            short = min(short, food - RESERVE)
+            if not stored.get(Item.WHEAT):
+                item = Item.APPLE
+                spare = stored.get(Item.APPLE, 0) - (APPLES if v.seen.me.hungry_at > v.tick else 0)
+                short = min(short, spare)
         if short > 0 and stored.get(item):
             with suppress(ActionError):
                 handle.take(d, item, short)
@@ -703,7 +718,7 @@ def needs_food(v: View) -> bool:
 
 
 def food_want(role: int) -> int:
-    return 3 if role in (FARMER, BUILDER, SMITH, GUARD) else 5
+    return 3 if role in (FARMER, BUILDER, SMITH, GUARD) else 6
 
 
 def attack_adjacent(handle: FrontierHandle, v: View) -> bool:
@@ -754,7 +769,12 @@ def step(handle: FrontierHandle) -> None:
             return
         if eat(handle, v):
             return
-    ROLES.get(mind.role, woodman)(handle, v)
+    food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
+    famine = v.tick > 400 and food < 15 and v.tick - mind.heard_at < 100
+    if famine and mind.role in (HOARDER, MASON, COALER, COPPERER, IRONER):
+        farmer(handle, v)
+    else:
+        ROLES.get(mind.role, woodman)(handle, v)
     if dir_to(v.me, mind.base) is not None and mind.base_busy != v.tick:
         wiggle(handle)
 
@@ -800,14 +820,17 @@ def commander(handle: FrontierHandle, v: View) -> None:
         d = dir_to(v.me, mind.base)
         assert d is not None
         food = v.food()
-        if food < 3:
+        if food < 5:
             item = Item.WHEAT if stored.get(Item.WHEAT) else Item.APPLE
             with suppress(ActionError):
-                handle.take(d, item, 3 - food)
+                handle.take(d, item, 5 - food)
                 acted = True
         if not acted:
             spawn(handle, v, stored)
-    mind.alive = {k: a for k, a in mind.alive.items() if v.tick - a[1] < 1500}
+    near = (FARMER, BUILDER, SMITH, GUARD)
+    mind.alive = {
+        k: a for k, a in mind.alive.items() if v.tick - a[1] < (300 if a[0] in near else 1500)
+    }
     if DEBUG and v.tick % 100 == 0:
         roles = sorted(r for r, _ in mind.alive.values())
         print(v.tick, "stock", {i.value: n for i, n in mind.stock.items()}, "roles", roles)
@@ -829,16 +852,20 @@ def spawn(handle: FrontierHandle, v: View, stored: dict[Item, int]) -> None:
     wood = stored.get(Item.WOOD, 0)
     food = stored.get(Item.WHEAT, 0) + stored.get(Item.APPLE, 0)
     reserve = 0 if mind.spawned < 6 else 25
-    if wood < 10 + reserve or food < 10 + pop // 3:
+    farmers = sum(1 for role, _ in mind.alive.values() if role == FARMER)
+    need_farmer = mind.spawned >= len(EARLY) and farmers < 2 and food >= 4 and wood >= 10
+    if not need_farmer and (wood < 10 + reserve or food < 10 + pop // 3):
         return
     farmland = len(v.seen.soil) // 3
     c = v.seen.crops
     trees = sum(1 for i in range(2, len(c), 4) if c[i] == 0)
     fed = 10 + int(farmland * 0.7) + 5 * trees
     gap = 2 if mind.spawned < len(EARLY) else 12
-    if (mind.assigned and v.tick - mind.assigned[-1][2] < gap) or pop >= min(POP_CAP, fed):
+    if mind.assigned and v.tick - mind.assigned[-1][2] < gap:
         return
-    role = pick_role(pop)
+    if pop >= min(POP_CAP, fed) and not need_farmer:
+        return
+    role = FARMER if need_farmer else pick_role(pop)
     try:
         uid = handle.spawn()
     except ActionError:
@@ -918,10 +945,13 @@ def gather(handle: FrontierHandle, v: View, tile: int, item: Item, hoard: bool) 
 
 
 def explore(handle: FrontierHandle, v: View) -> None:
+    """Out in widening rings around the base, one compass point after another."""
     if mind.explore is None or v.tick > mind.explore_until or dist(v.me, mind.explore) < 3:
-        r = 30 + mind.rng.random() * min(160, mind.size / 4)
-        x = int(mind.base[0] + (2 * mind.rng.random() - 1) * r)
-        y = int(mind.base[1] + (2 * mind.rng.random() - 1) * r)
+        k = mind.explored
+        mind.explored += 1
+        r = 32 * (1 + k // 8) % max(32, min(192, mind.size // 3))
+        dx, dy = COMPASS[(k + mind.id) % 8]
+        x, y = mind.base[0] + dx * r, mind.base[1] + dy * r
         mid = mind.size // 2
         x = min(x, mid - 12) if mind.m == 1 else max(x, mid + 12)
         mind.explore = (min(max(x, 1), mind.size - 2), min(max(y, 1), mind.size - 2))
@@ -1009,6 +1039,12 @@ def farm_forest(v: View) -> bytearray:
         if x0 < x1:
             out[y * v.w + x0 : y * v.w + x1] = goal[y * v.w + x0 : y * v.w + x1]
     return out
+
+
+def hoarder(handle: FrontierHandle, v: View) -> None:
+    """Fills chests in the wild, unless the base runs short of wood."""
+    short = mind.stock.get(Item.WOOD, 0) < 100 and v.tick - mind.heard_at < 400
+    gather(handle, v, FOREST, Item.WOOD, not (short and dist(v.me, mind.base) <= 40))
 
 
 def woodman(handle: FrontierHandle, v: View) -> None:
@@ -1287,6 +1323,8 @@ RECIPES: dict[Recipe, tuple[Building, dict[Item, int]]] = {
     Recipe.COPPER_ARMOUR: (Building.WORKBENCH, {Item.COPPER_INGOT: 5}),
     Recipe.COPPER_INGOT: (Building.SMELTER, {Item.COPPER_ORE: 2, Item.COAL: 1}),
     Recipe.IRON_INGOT: (Building.SMELTER, {Item.IRON_ORE: 2, Item.COAL: 2}),
+    Recipe.COPPER_INGOT_CHARCOAL: (Building.SMELTER, {Item.COPPER_ORE: 2, Item.CHARCOAL: 2}),
+    Recipe.CHARCOAL: (Building.SMELTER, {Item.WOOD: 4}),
 }
 GOODS = {
     Item.COPPER_INGOT,
@@ -1299,7 +1337,7 @@ GOODS = {
 }
 SHOPS = (BUILDINGS.index(Building.SMELTER), BUILDINGS.index(Building.WORKBENCH))
 MADE = {
-    SHOPS[0]: {Item.COPPER_INGOT, Item.IRON_INGOT},
+    SHOPS[0]: {Item.COPPER_INGOT, Item.IRON_INGOT, Item.CHARCOAL},
     SHOPS[1]: GOODS - {Item.COPPER_INGOT, Item.IRON_INGOT},
 }
 
@@ -1309,7 +1347,11 @@ def wanted(kind: int) -> list[Recipe]:
     s = mind.stock.get
     copper = s(Item.COPPER_INGOT, 0)
     if BUILDINGS[kind] == Building.SMELTER:
-        return [Recipe.COPPER_INGOT, Recipe.IRON_INGOT] if copper < 40 else [Recipe.IRON_INGOT]
+        out = [Recipe.COPPER_INGOT, Recipe.COPPER_INGOT_CHARCOAL] if copper < 40 else []
+        out.append(Recipe.IRON_INGOT)
+        if s(Item.COPPER_ORE, 0) >= 2 and s(Item.CHARCOAL, 0) < 8 and s(Item.WOOD, 0) >= 60:
+            out.append(Recipe.CHARCOAL)
+        return out
     out = []
     if not s(Item.STONE_PICK) and mind.made.get(Recipe.STONE_PICK, 0) < 4:
         out.append(Recipe.STONE_PICK)
@@ -1391,8 +1433,10 @@ def work_shop(
     d = dir_to(v.me, p)
     if d is None:
         return False
+    recipe = None if busy else recipe_for(kind, plus(stored, v.carried))
+    needed = RECIPES[recipe][1] if recipe else {}
     for item, n in stored.items():
-        if item in MADE[kind] and CARRY - v.load > 0:
+        if item in MADE[kind] and item not in needed and CARRY - v.load > 0:
             with suppress(ActionError):
                 handle.take(d, item, n)
                 return True
@@ -1407,7 +1451,6 @@ def work_shop(
             with suppress(ActionError):
                 handle.take(d, item, extra)
                 return True
-    recipe = recipe_for(kind, plus(stored, v.carried))
     if recipe is None:
         return False
     inputs = RECIPES[recipe][1]
@@ -1455,6 +1498,8 @@ def infer_studied() -> None:
         mind.studied |= {Item.STONE, Item.WOOD}
     if Recipe.COPPER_INGOT in r:
         mind.studied |= {Item.COAL, Item.COPPER_ORE}
+    if Recipe.COPPER_INGOT_CHARCOAL in r:
+        mind.studied |= {Item.CHARCOAL, Item.COPPER_ORE}
     if Recipe.IRON_INGOT in r:
         mind.studied |= {Item.COAL, Item.IRON_ORE}
     if Recipe.COPPER_PICK in r:
@@ -1507,12 +1552,15 @@ def miner(handle: FrontierHandle, v: View) -> None:
             return
         tile = COAL
     item = ORE[tile]
+    if tile != IRON and drill(handle, v, tile):
+        return
     if mind.stock.get(item, 0) >= ORE_STOCK[tile] and not v.carried.get(item):
         gather(handle, v, FOREST, Item.WOOD, True)
         return
     room = CARRY - v.load
     if room <= 0:
-        resupply(handle, v)
+        if v.carried.get(item, 0) >= 8 or not dig(handle, v, tile):
+            resupply(handle, v)
         return
     d = adjacent_tile(v, tile)
     if d is not None:
@@ -1526,6 +1574,8 @@ def miner(handle: FrontierHandle, v: View) -> None:
     if v.carried.get(item, 0) >= 10:
         resupply(handle, v)
         return
+    if dist(v.me, mind.base) > 20 and dig(handle, v, tile):
+        return
     vein = mind.veins.get(tile)
     if vein is not None:
         if dist(v.me, vein) <= 6:
@@ -1538,6 +1588,73 @@ def miner(handle: FrontierHandle, v: View) -> None:
             go_to(handle, v, vein, "vein", 1)
             return
     explore(handle, v)
+
+
+def dig(handle: FrontierHandle, v: View, tile: int) -> bool:
+    """Tunnels through rock toward a vein in view that no walk reaches; the stone dug is
+    left on the ground."""
+    goal = resource_goal(v, tile, 0)
+    if not any(goal):
+        return False
+    path = bfs(v, goal, True, 0, None, DIGGABLE)
+    if not path:
+        return False
+    for k in range(len(path) - 1, -1, -1):
+        if v.tile(path[k]) == ROCK:
+            break
+    else:
+        return False
+    rock = path[k]
+    d = dir_to(v.me, rock)
+    if d is None:
+        mind.path, mind.path_key = path[k + 1 :], ("dig", rock)
+        return step_path(handle, v)
+    if CARRY - v.load <= 0:
+        for side, (dx, dy) in DIRS:
+            q = (v.me[0] + dx, v.me[1] + dy)
+            if FREE[v.tile(q) % 256] and q not in v.occupied and q not in v.buildings():
+                with suppress(ActionError):
+                    handle.put(side, Item.STONE, v.carried.get(Item.STONE, 0))
+                    return True
+        return False
+    with suppress(ActionError):
+        handle.gather(d)
+        return True
+    return False
+
+
+def drill(handle: FrontierHandle, v: View, tile: int) -> bool:
+    """Works a drill beside a vein three times as fast as a pick, or sets one up when the
+    base has copper to spare."""
+    if CARRY - v.load <= 0:
+        return False
+    for p in v.own(DRILL):
+        d = dir_to(v.me, p)
+        if d is not None and v.tile(p) in (COAL, COPPER):
+            with suppress(ActionError):
+                handle.operate(d)
+                return True
+    for p in v.own(DRILL, finished=False):
+        d = dir_to(v.me, p)
+        if d is not None:
+            with suppress(ActionError):
+                handle.build(d, Building.MECH_DRILL)
+                return True
+    kit = {Item.WOOD: 10, Item.COPPER_INGOT: 4}
+    if all(v.carried.get(i, 0) >= n for i, n in kit.items()):
+        for d, (dx, dy) in DIRS:
+            q = (v.me[0] + dx, v.me[1] + dy)
+            if v.tile(q) == tile and q not in v.buildings():
+                with suppress(ActionError):
+                    handle.build(d, Building.MECH_DRILL)
+                    mind.drills += 1
+                    return True
+        return False
+    known(handle, v, 500)
+    spare = mind.stock.get(Item.COPPER_INGOT, 0) >= 44 and mind.stock.get(Item.WOOD, 0) >= 60
+    if Building.MECH_DRILL in mind.known and spare and mind.drills < 2 and base_store(v):
+        return resupply(handle, v, kit)
+    return False
 
 
 # Guarding
@@ -1586,5 +1703,5 @@ ROLES: dict[int, Callable[[FrontierHandle, View], None]] = {
     COALER: miner,
     COPPERER: miner,
     IRONER: miner,
-    HOARDER: lambda handle, v: gather(handle, v, FOREST, Item.WOOD, True),
+    HOARDER: hoarder,
 }

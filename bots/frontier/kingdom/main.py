@@ -104,6 +104,7 @@ STUDY = [
 ]
 WOOD_STOCK, STONE_STOCK = 200, 120
 ORE_STOCK = {COAL: 100, COPPER: 70, IRON: 80}
+CAPS = {Item.WOOD: 260, Item.STONE: 160, Item.COAL: 160, Item.COPPER_ORE: 110, Item.IRON_ORE: 110}
 HOARD_FROM = 18
 POP_CAP = 80
 CHEST_ROOM = 40
@@ -645,7 +646,7 @@ def visit_base(
     mind.base_busy = v.tick
     for item, n in v.carried.items():
         extra = n - keep.get(item, 0)
-        if extra > 0:
+        if extra > 0 and stored.get(item, 0) < CAPS.get(item, 1000):
             try:
                 handle.put(d, item, extra)
                 return True

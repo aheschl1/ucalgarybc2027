@@ -3,11 +3,11 @@ import "./renderer.css";
 import { useFrame, useSelection, type GameRenderer } from "@ucbc/viewer";
 
 import type { Points } from "./api.gen.ts";
-import { useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 
 import { Board, GLYPHS, MARKS, SHAPES, TERRAIN } from "./board.tsx";
 import { Keys, LineChart } from "./chart.tsx";
-import { matches, setFind, useFind } from "./find.ts";
+import { found, name, setFind, useFind } from "./find.ts";
 import { BUILDINGS, CROPS, timeline, type History, type World } from "./world.ts";
 
 const total = (p: Points | undefined) => (p ? p.buildings + p.stored + p.units : 0);
@@ -33,7 +33,7 @@ function Counts({ w }: { w: World }) {
           <th className="ucbc-num">Points</th>
           <th className="ucbc-num">Units</th>
           <th className="ucbc-num">Buildings</th>
-          <th className="ucbc-num">Commander</th>
+          <th className="ucbc-num" title="The commander's health">Cmdr</th>
         </tr>
       </thead>
       <tbody>
@@ -77,22 +77,23 @@ function Selected({ id, w }: { id: number; w: World }) {
   );
 }
 
-const name = (id: string) => id.replace(/_/g, " ");
-
 /** A building or crop: its mark, name, and counts. Clicking searches for it, or clears
  * the search if it already is. */
-function Chip({ id, query, mark, counts, title }: { id: string; query: string; mark: ReactNode; counts: ReactNode; title: string }) {
-  const on = matches(query, id);
+function Chip({ id, on, mark, counts, label }: { id: string; on: boolean; mark: ReactNode; counts: ReactNode; label: string }) {
   return (
     <button
       type="button"
-      title={title}
+      title={label}
+      aria-label={label}
+      aria-pressed={on}
       className={`fr-chip${on ? " fr-on" : ""}`}
-      onClick={() => setFind(on && query.trim() === name(id) ? "" : name(id))}
+      onClick={() => setFind(on ? "" : name(id))}
     >
-      {mark}
-      <span className="fr-chip-name">{name(id)}</span>
-      {counts}
+      <span aria-hidden className="fr-chip-face">
+        {mark}
+        <span className="fr-chip-name">{name(id)}</span>
+        {counts}
+      </span>
     </button>
   );
 }
@@ -100,53 +101,65 @@ function Chip({ id, query, mark, counts, title }: { id: string; query: string; m
 /** Every kind of building and crop and how many there are, and a search that rings them
  * on the map. */
 function Built({ w, names }: { w: World; names: string[] }) {
+  const { set } = useFrame();
   const query = useFind();
-  const structures = [...w.structures.values()];
-  const crops = [...w.crops.values()];
+  useEffect(() => setFind(""), [set]);
+  const kinds = found(query);
+  // Per kind and team: finished, then being built.
+  const built = new Map<string, [number, number][]>(BUILDINGS.map((b) => [b, [[0, 0], [0, 0]]]));
+  for (const s of w.structures.values()) built.get(s.building)![s.team]![s.workLeft > 0 ? 1 : 0]!++;
+  // Per kind: growing, then ripe.
+  const grown = new Map<string, [number, number]>(CROPS.map((c) => [c, [0, 0]]));
+  for (const c of w.crops.values()) grown.get(c.kind)![c.ripeAt <= w.tick ? 1 : 0]!++;
+  const total = (id: string) => (built.get(id)?.flat() ?? grown.get(id)!).reduce((a, b) => a + b, 0);
+  const count = [...kinds].reduce((n, id) => n + total(id), 0);
   return (
     <div className="fr-built">
-      <input
-        type="search"
-        className="fr-search"
-        placeholder="Find a building or crop"
-        value={query}
-        onChange={(e) => setFind(e.target.value)}
-      />
+      <div className="fr-search-row">
+        <input
+          type="search"
+          className="fr-search"
+          placeholder="Find a building or crop"
+          aria-label="Find a building or crop"
+          value={query}
+          onChange={(e) => setFind(e.target.value)}
+        />
+        {query.trim() ? <span className="ucbc-muted">{kinds.size ? `${count} found` : "no matches"}</span> : null}
+      </div>
       <div className="fr-chips">
-        {BUILDINGS.map((b) => {
-          const mine = [0, 1].map((t) => structures.filter((s) => s.team === t && s.building === b));
-          const done = mine.map((m) => m.filter((s) => s.workLeft === 0).length);
-          const title = names.map((n, t) => `${n}: ${done[t]} built, ${mine[t]!.length - done[t]!} being built`).join("\n");
+        {BUILDINGS.filter((b) => total(b) || kinds.has(b)).map((b) => {
+          const teams = built.get(b)!;
           return (
             <Chip
               key={b}
               id={b}
-              query={query}
-              title={title}
+              on={kinds.has(b)}
+              label={`${name(b)}: ${teams.map(([done, more], t) => `${names[t]} ${done} built, ${more} being built`).join("; ")}`}
               mark={<span className={`fr-icon fr-${SHAPES[b]}`}>{GLYPHS[b]}</span>}
-              counts={done.map((n, t) => (
-                <span key={t} className={`fr-count${n ? "" : " fr-zero"}`} style={{ borderColor: `var(--ucbc-team-${t})` }}>
-                  {n}
+              counts={teams.map(([done, more], t) => (
+                <span key={t} className={`fr-count${done + more ? "" : " fr-zero"}`} style={{ borderColor: `var(--ucbc-team-${t})` }}>
+                  {done}
+                  {more ? <span className="ucbc-muted">+{more}</span> : null}
                 </span>
               ))}
             />
           );
         })}
-        {CROPS.map((kind) => {
-          const all = crops.filter((c) => c.kind === kind);
-          const ripe = all.filter((c) => c.ripeAt <= w.tick).length;
+        {CROPS.filter((c) => total(c) || kinds.has(c)).map((c) => {
+          const [growing, ripe] = grown.get(c)!;
           return (
             <Chip
-              key={kind}
-              id={kind}
-              query={query}
-              title={`${all.length - ripe} growing, ${ripe} ripe`}
-              mark={<span className="ucbc-swatch" style={{ background: MARKS.crop }} />}
-              counts={[all.length - ripe, ripe].map((n, i) => (
-                <span key={i} className={`fr-count${n ? "" : " fr-zero"}`} style={{ borderColor: i ? MARKS.ripe : MARKS.crop }}>
-                  {n}
+              key={c}
+              id={c}
+              on={kinds.has(c)}
+              label={`${name(c)}: ${growing} growing, ${ripe} ripe`}
+              mark={<span className="fr-crop" />}
+              counts={
+                <span>
+                  {growing + ripe}
+                  {ripe ? <span className="ucbc-muted">{` · ${ripe} ripe`}</span> : null}
                 </span>
-              ))}
+              }
             />
           );
         })}
@@ -169,7 +182,7 @@ function Legend() {
     <div className="fr-legend">
       {LEGEND.map(([label, colour, ring]) => (
         <span key={label}>
-          <span className="ucbc-swatch" style={{ background: colour, outline: ring && `2px solid ${ring}` }} />
+          <span className="fr-swatch" style={{ background: colour, outline: ring && `2px solid ${ring}` }} />
           {label}
         </span>
       ))}
@@ -254,8 +267,8 @@ function Info() {
       <Counts w={w} />
       {selected == null ? null : <Selected id={selected} w={w} />}
       <Built w={w} names={names} />
-      <Legend />
       <Progress history={t.history()} tick={w.tick} names={names} w={w} />
+      <Legend />
     </>
   );
 }

@@ -2,7 +2,7 @@ import { useFrame, useSelection } from "@ucbc/viewer";
 import { useEffect, useRef } from "react";
 
 import type { Action, Building } from "./api.gen.ts";
-import { matches, useFind } from "./find.ts";
+import { found, useFind } from "./find.ts";
 import { timeline, type World } from "./world.ts";
 
 /** Tile bytes' names and colours, in byte order. */
@@ -130,6 +130,20 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
     ctx.lineWidth = line;
     ctx.strokeRect(cx - side / 2, cy - side / 2, side, side);
   };
+  const diamond = (x: number, y: number, side: number, edge: string) => {
+    const [cx, cy, r] = [(x + 0.5) * cell, (y + 0.5) * cell, side * 0.7];
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + r, cy);
+    ctx.lineTo(cx, cy + r);
+    ctx.lineTo(cx - r, cy);
+    ctx.closePath();
+    ctx.fillStyle = OUTLINE;
+    ctx.fill();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.5 * px;
+    ctx.stroke();
+  };
   const dot = (at: number, r: number, fill: string) => {
     const [cx, cy] = centre(at);
     ctx.beginPath();
@@ -143,31 +157,38 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
 
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(ground.canvas, 0, 0, w.size * cell, w.size * cell);
-  const found: [number, number][] = [];
+  // What the search finds is ringed and the other buildings faded, unless it finds nothing.
+  const kinds = found(query);
+  const ringed: [number, number][] = [];
   for (const [at, { kind, ripeAt }] of w.crops) {
-    if (matches(query, kind)) found.push([at % w.size, Math.floor(at / w.size)]);
+    if (kinds.has(kind)) ringed.push([at % w.size, Math.floor(at / w.size)]);
     ctx.fillStyle = ripeAt <= w.tick ? MARKS.ripe : MARKS.crop;
     const inset = cell / 6;
     ctx.fillRect((at % w.size) * cell + inset, Math.floor(at / w.size) * cell + inset, cell - 2 * inset, cell - 2 * inset);
   }
   for (const at of w.piles) dot(at, Math.max(cell / 5, 1.5 * px), MARKS.pile);
   for (const at of w.signs) dot(at, Math.max(cell / 6, 1.5 * px), MARKS.sign);
-  // Letters once a tile is this many screen pixels across.
-  const lettered = cell / px >= 10;
+  // Letters once a tile is this many screen pixels across; walls, the most of them, later.
+  const lettered = (shape: Shape) => cell / px >= (shape === "wall" ? 10 : 7);
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (const s of w.structures.values()) {
-    const hit = matches(query, s.building);
-    if (hit) found.push([s.x, s.y]);
-    ctx.globalAlpha = (s.workLeft > 0 ? 0.45 : 1) * (query.trim() && !hit ? 0.25 : 1);
+    const hit = kinds.has(s.building);
+    if (hit) ringed.push([s.x, s.y]);
+    ctx.globalAlpha = (s.workLeft > 0 ? 0.45 : 1) * (kinds.size && !hit ? 0.3 : 1);
     const shape = SHAPES[s.building];
     const side = shape === "trap" ? Math.max(cell * 0.6, 4 * px) : Math.max(cell, 7 * px);
     const colour = team[s.team]!;
-    if (shape === "trap" || shape === "store") square(s.x, s.y, side, OUTLINE, colour, (shape === "store" ? 2.5 : 1.5) * px);
+    if (shape === "trap") diamond(s.x, s.y, side, colour);
+    else if (shape === "store") square(s.x, s.y, side, OUTLINE, colour, 2.5 * px);
     else square(s.x, s.y, side, colour, OUTLINE, 1.5 * px);
-    if (shape === "wall") square(s.x, s.y, side, "rgba(0, 0, 0, 0.45)", OUTLINE, 1.5 * px);
-    if (lettered) {
-      ctx.font = `bold ${Math.round(side * 0.7)}px sans-serif`;
+    if (shape === "wall") {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+      ctx.fillRect((s.x + 0.5) * cell - side / 2, (s.y + 0.5) * cell - side / 2, side, side);
+    }
+    if (lettered(shape)) {
+      const font = `bold ${Math.round(side * 0.7)}px sans-serif`;
+      if (ctx.font !== font) ctx.font = font;
       ctx.lineWidth = 2 * px;
       ctx.strokeStyle = OUTLINE;
       ctx.fillStyle = "#ffffff";
@@ -181,14 +202,16 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
     }
   }
   ctx.globalAlpha = 1;
+  // Units are round, so they don't pass for buildings.
   for (const u of w.units.values()) {
-    const side = Math.max(cell * 0.7, 4 * px);
-    square(u.x, u.y, side, team[u.team]!);
+    const r = Math.max(cell * 0.4, 2.5 * px);
+    dot(u.y * w.size + u.x, r, team[u.team]!);
     if (u.commander) {
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2 * px;
-      const [cx, cy] = [(u.x + 0.5) * cell, (u.y + 0.5) * cell];
-      ctx.strokeRect(cx - side / 2 - 2 * px, cy - side / 2 - 2 * px, side + 4 * px, side + 4 * px);
+      ctx.beginPath();
+      ctx.arc((u.x + 0.5) * cell, (u.y + 0.5) * cell, r + 2 * px, 0, 2 * Math.PI);
+      ctx.stroke();
     }
   }
   for (const at of hits) {
@@ -204,12 +227,12 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
     ctx.stroke();
   }
   const ring = Math.max(cell * 1.6, 12 * px);
-  for (const [x, y] of found) {
-    for (const [colour, width] of [[OUTLINE, 4 * px], [MARKS.found, 2 * px]] as const) {
-      ctx.strokeStyle = colour;
-      ctx.lineWidth = width;
-      ctx.strokeRect((x + 0.5) * cell - ring / 2, (y + 0.5) * cell - ring / 2, ring, ring);
-    }
+  ctx.beginPath();
+  for (const [x, y] of ringed) ctx.rect((x + 0.5) * cell - ring / 2, (y + 0.5) * cell - ring / 2, ring, ring);
+  for (const [colour, width] of [[OUTLINE, 4 * px], [MARKS.found, 2 * px]] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.stroke();
   }
   const chosen = selected == null ? undefined : w.units.get(selected);
   if (chosen) {

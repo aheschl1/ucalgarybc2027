@@ -53,7 +53,7 @@ it("counts each team's units and finished buildings, and its commander's health"
   const info = render(at(<Info />)).container;
   const rows = [...info.querySelectorAll<HTMLTableRowElement>("table:first-child tr")].map((r) => [...r.cells].map((c) => c.textContent));
   expect(rows).toEqual([
-    ["Team", "Points", "Units", "Buildings", "Commander"],
+    ["Team", "Points", "Units", "Buildings", "Cmdr"],
     ["alpha", "120", "2", "1", "100"],
     ["beta", "80", "1", "0", "70"],
   ]);
@@ -95,13 +95,26 @@ it("selects the unit clicked and shows it", () => {
 it("counts each kind built, and searches for one when it is clicked", () => {
   const info = render(at(<Info />)).container;
   const chip = (name: string) =>
-    [...info.querySelectorAll<HTMLButtonElement>(".fr-chip")].find((c) => c.querySelector(".fr-chip-name")?.textContent === name)!;
-  expect(chip("base").textContent).toBe("Bbase10");
-  expect(chip("chest").title).toBe("alpha: 0 built, 0 being built\nbeta: 0 built, 1 being built");
+    [...info.querySelectorAll<HTMLButtonElement>(".fr-chip")].find((c) => c.querySelector(".fr-chip-name")?.textContent === name);
+  const search = () => info.querySelector<HTMLInputElement>(".fr-search")!;
+  expect(chip("base")!.textContent).toBe("Bbase10");
+  expect(chip("chest")!.textContent).toBe("Cchest00+1");
+  expect(chip("chest")!.getAttribute("aria-label")).toBe("chest: alpha 0 built, 0 being built; beta 0 built, 1 being built");
+  // Kinds nobody has are left out until searched for.
+  expect(chip("tower")).toBeUndefined();
 
-  fireEvent.click(chip("chest"));
-  expect(info.querySelector<HTMLInputElement>(".fr-search")!.value).toBe("chest");
-  expect(chip("chest").className).toContain("fr-on");
-  fireEvent.click(chip("chest"));
-  expect(info.querySelector<HTMLInputElement>(".fr-search")!.value).toBe("");
+  fireEvent.click(chip("chest")!);
+  expect(search().value).toBe("chest");
+  expect(chip("chest")!.getAttribute("aria-pressed")).toBe("true");
+  expect(info.querySelector(".fr-search-row")!.textContent).toBe("1 found");
+  fireEvent.click(chip("chest")!);
+  expect(search().value).toBe("");
+
+  // A kind's whole name finds only it; otherwise the start of any word.
+  fireEvent.change(search(), { target: { value: "tower" } });
+  expect([...info.querySelectorAll(".fr-on .fr-chip-name")].map((c) => c.textContent)).toEqual(["tower"]);
+  fireEvent.change(search(), { target: { value: "dr" } });
+  expect([...info.querySelectorAll(".fr-on .fr-chip-name")].map((c) => c.textContent)).toEqual(["mech drill", "steam drill"]);
+  fireEvent.change(search(), { target: { value: "xyz" } });
+  expect(info.querySelector(".fr-search-row")!.textContent).toBe("no matches");
 });

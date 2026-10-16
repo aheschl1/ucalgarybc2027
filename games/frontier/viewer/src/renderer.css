@@ -1,3 +1,7 @@
+.fr-built {
+  --fr-found: #e879f9;
+}
+
 .fr-board {
   display: block;
   image-rendering: pixelated;
@@ -167,11 +171,17 @@
   gap: 0.3rem;
 }
 
+.fr-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+}
 
 .fr-search {
-  width: 100%;
+  flex: 1;
   box-sizing: border-box;
-  margin-bottom: 0.3rem;
   padding: 0.3rem 0.5rem;
   border: 1px solid var(--ucbc-line);
   border-radius: 6px;
@@ -201,13 +211,23 @@
   cursor: pointer;
 }
 
+.fr-chip-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fr-chip:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .fr-chip:hover {
   border-color: var(--ucbc-muted);
 }
 
 .fr-chip.fr-on {
-  border-color: #e879f9;
-  box-shadow: inset 0 0 0 1px #e879f9;
+  border-color: var(--fr-found);
+  box-shadow: inset 0 0 0 1px var(--fr-found);
 }
 
 /* A building's look on the board, in a neutral colour, with its letter. */
@@ -229,10 +249,19 @@
   background: #4c5056;
 }
 
-.fr-store,
-.fr-trap {
+.fr-store {
   border: 2px solid #8b929c;
   background: #111111;
+}
+
+.fr-trap {
+  width: 12px;
+  height: 12px;
+  margin: 0 1.5px;
+  border: 2px solid #8b929c;
+  background: #111111;
+  transform: rotate(45deg);
+  font-size: 0;
 }
 
 .fr-heart {
@@ -257,10 +286,25 @@
 
 .fr-unit {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border: 1px solid #111111;
+  border-radius: 50%;
   background: var(--ucbc-team-0);
+}
+
+/* Square, as on the board, and outlined so pale ones show on a light panel. */
+.fr-swatch,
+.fr-crop {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+
+.fr-crop {
+  background: #a8d65c;
 }
 
 .fr-commander {

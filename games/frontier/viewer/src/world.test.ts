@@ -1,8 +1,11 @@
+// @ts-expect-error: the viewer has no node types; vitest runs in node.
+import { readFileSync } from "node:fs";
+
 import type { SetReplay, Tick } from "@ucbc/viewer";
 import { expect, it } from "vitest";
 
 import type { Snapshot } from "./api.gen.ts";
-import { BUILDINGS, sample, Timeline, type World } from "./world.ts";
+import { BUILDINGS, CROPS, sample, Timeline, type World } from "./world.ts";
 
 const SIZE = 4;
 const ZERO = { buildings: 0, stored: 0, units: 0 };
@@ -156,4 +159,10 @@ it("names buildings in id order, which is alphabetical", () => {
 
 it("rejects a state it does not recognise", () => {
   expect(() => new Timeline(set([{ tick: 0 } as unknown as Snapshot]))).toThrow("not a frontier state");
+});
+
+it("names crops in the order the engine numbers them, by their content keys", () => {
+  const toml = readFileSync(new URL("../../content/crops.toml", import.meta.url), "utf8");
+  const keys = [...toml.matchAll(/^\[(\w+)\]/gm)].map((m) => m[1]).sort();
+  expect([...CROPS]).toEqual(keys);
 });

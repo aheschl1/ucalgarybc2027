@@ -112,8 +112,12 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
   for (const at of w.piles) dot(at, Math.max(cell / 5, 1.5 * px), MARKS.pile);
   for (const at of w.signs) dot(at, Math.max(cell / 6, 1.5 * px), MARKS.sign);
   for (const s of w.structures.values()) {
-    const side = Math.max(cell, 7 * px);
     ctx.globalAlpha = s.workLeft > 0 ? 0.45 : 1;
+    if (s.building === "spike_trap") {
+      square(s.x, s.y, Math.max(cell * 0.6, 4 * px), OUTLINE, team[s.team]!, 1.5 * px);
+      continue;
+    }
+    const side = Math.max(cell, 7 * px);
     square(s.x, s.y, side, team[s.team]!, OUTLINE, 1.5 * px);
     if (s.building === "base" || s.building === "monument") square(s.x, s.y, side / 3, "#ffffff", "#ffffff", 0);
   }

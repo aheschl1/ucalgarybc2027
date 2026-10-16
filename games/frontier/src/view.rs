@@ -92,6 +92,8 @@ pub struct BuildingView {
     pub gate: bool,
     /// Units next to it attack within this range of it, and take half damage.
     pub tower: Option<usize>,
+    /// Hidden from the other team; the first of them to step on it takes this damage.
+    pub trap: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -271,7 +273,7 @@ impl World {
                 if let Some(id) = self.unit_on(at) {
                     self.unit_row(id, &mut units);
                 }
-                if let Some(id) = self.structure_on(at) {
+                if let Some(id) = self.visible_structure(at, unit.team()) {
                     self.structure_row(id, &mut buildings);
                 }
             }
@@ -447,6 +449,7 @@ impl World {
                 drill: b.drill.clone(),
                 gate: b.gate,
                 tower: b.tower,
+                trap: b.trap,
             }
         });
         KnownView {

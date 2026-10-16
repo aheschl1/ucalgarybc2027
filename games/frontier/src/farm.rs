@@ -50,7 +50,7 @@ impl World {
         if !matches!(self.map.tile(at), Tile::Grass | Tile::Dirt) {
             return Err(invalid("only grass and dirt can be tilled"));
         }
-        if self.structure_on(at).is_some() {
+        if self.visible_structure(at, self.bots[bot].team()).is_some() {
             return Err(invalid("a building stands there"));
         }
         self.map.set(at, Tile::Farmland);

@@ -111,6 +111,9 @@ pub struct BuildingDef {
     /// Finishing it wins the set.
     #[serde(default)]
     pub monument: bool,
+    /// Hidden from the other team and walkable when finished; the first of them to step
+    /// on it takes this much damage, and it's spent.
+    pub trap: Option<u32>,
     #[serde(default)]
     pub known: bool,
 }

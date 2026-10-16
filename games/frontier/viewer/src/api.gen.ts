@@ -103,6 +103,7 @@ export type Building =
   | "radio_tower"
   | "research_desk"
   | "smelter"
+  | "spike_trap"
   | "steam_drill"
   | "stone_wall"
   | "tower"

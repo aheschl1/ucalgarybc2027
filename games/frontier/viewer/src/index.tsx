@@ -85,7 +85,10 @@ function Legend() {
           {name}
         </span>
       ))}
-      <span>Units are small squares, buildings larger; a ringed unit is a commander, a white centre a base.</span>
+      <span>
+        Units are small squares, buildings larger; a ringed unit is a commander, a white centre a
+        base, a dark square with a coloured edge a trap, which the other team can't see.
+      </span>
     </div>
   );
 }

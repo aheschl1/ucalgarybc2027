@@ -30,8 +30,9 @@ pub enum Queries {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// Move one tile onto walkable ground with nothing on it, or through your team's gate;
-    /// returns where you are.
+    /// Move one tile onto walkable ground with nothing on it, through your team's gate, or
+    /// onto a finished trap: the other team's hurts, and you can't see it until it does.
+    /// Returns where you are.
     Move(Request<Heading, Coord>),
     /// Take one item from the tile in `dir`: wood from forest, stone from rock, ore and
     /// coal from veins. A tile runs out and turns to dirt.
@@ -133,6 +134,15 @@ pub struct Frontier {
     outcome: Option<Outcome>,
 }
 
+impl Frontier {
+    /// Ends the set for `winner` if `killed` is a commander.
+    fn commander_killed(&mut self, killed: Option<BotId>, winner: TeamId, detail: &str) {
+        if killed.is_some_and(|id| self.commanders.contains(&id)) {
+            self.outcome = Some(Outcome::win(winner).with_detail(detail));
+        }
+    }
+}
+
 impl Game for Frontier {
     const NAME: &'static str = "frontier";
     type Query = Queries;
@@ -206,6 +216,10 @@ impl Game for Frontier {
     }
 
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
+        // Killed during its own step: it may still be asking.
+        if self.world.bots.get(bot).is_none() {
+            return Err(QueryError::Rejected("you died".into()));
+        }
         match query {
             Queries::Observe(q) => Ok(q.reply(self.world.observe(bot, self.config.vision))),
             Queries::Known(q) => Ok(q.reply(self.world.known_view(self.world.bots[bot].team()))),
@@ -213,9 +227,17 @@ impl Game for Frontier {
     }
 
     fn apply_action(&mut self, bot: BotId, action: Action) -> Result<Answer, ActionError> {
+        if self.world.bots.get(bot).is_none() {
+            return Err(ActionError::Invalid("you died".into()));
+        }
         let w = &mut self.world;
         match action {
-            Action::Move(a) => Ok(a.reply(w.move_unit(bot, a.dir)?)),
+            Action::Move(a) => {
+                let other = TeamId(1 - w.bots[bot].team().0);
+                let (to, killed) = w.move_unit(bot, a.dir)?;
+                self.commander_killed(killed, other, "the other commander walked into a trap");
+                Ok(a.reply(to))
+            }
             Action::Gather(a) => Ok(a.reply(w.gather(bot, a.dir)?)),
             Action::Put(a) => Ok(a.reply(w.put(bot, a.dir, a.item, a.count)?)),
             Action::Take(a) => Ok(a.reply(w.take(bot, a.dir, a.item, a.count)?)),
@@ -236,12 +258,9 @@ impl Game for Frontier {
             Action::Operate(a) => Ok(a.reply(w.operate(bot, a.dir)?)),
             Action::Study(a) => Ok(a.reply(w.study(bot, a.dir, a.item)?)),
             Action::Attack(a) => {
+                let team = w.bots[bot].team();
                 let (hit, killed) = w.attack(bot, *a)?;
-                if killed.is_some_and(|id| self.commanders.contains(&id)) {
-                    let winner = w.bots[bot].team();
-                    self.outcome =
-                        Some(Outcome::win(winner).with_detail("killed the other commander"));
-                }
+                self.commander_killed(killed, team, "killed the other commander");
                 Ok(a.reply(hit))
             }
             Action::Spawn(a) => Ok(a.reply(w.spawn(bot, self.config.units)?)),
@@ -256,6 +275,9 @@ impl Game for Frontier {
 
     fn bot_failed(&mut self, bot: BotId, failure: &BotFailure) {
         self.world.turn = Turn::default();
+        if self.world.bots.get(bot).is_none() {
+            return;
+        }
         let team = self.world.bots[bot].team();
         self.world.remove_unit(bot);
         if bot == self.commanders[team.0 as usize] && self.outcome.is_none() {
@@ -345,5 +367,31 @@ mod tests {
             (outcome.winner, outcome.detail.as_str()),
             (Some(TeamId(0)), "built the monument")
         );
+    }
+
+    #[test]
+    fn a_commander_walking_into_a_trap_loses() {
+        let teams = vec![TeamId(0), TeamId(1)];
+        let setup = SetSetup::new(0, teams, 0, Some(json!({"size": 64, "flat": true})));
+        let mut game = Frontier::create(&setup).unwrap();
+        // Team 0's commander stands at (16, 33); team 1's trap is below it.
+        let w = &mut game.world;
+        let trap = w.place_structure(TeamId(1), Building::SpikeTrap, Coord::new(16, 34));
+        w.structures.get_mut(&trap).unwrap().work_left = 0;
+        let commander = game.commanders[0];
+        game.world.bots[commander].hp = 10;
+        let down = serde_json::from_value(json!({"type": "move", "dir": "down"})).unwrap();
+        game.apply_action(commander, down).unwrap();
+        let GameStatus::Complete(outcome) = game.status() else {
+            panic!("still in progress")
+        };
+        assert_eq!(outcome.winner, Some(TeamId(1)));
+        assert_eq!(outcome.detail, "the other commander walked into a trap");
+        // It may still ask and act in that step, or fail: refused, without a panic.
+        let observe = serde_json::from_value(json!({"type": "observe"})).unwrap();
+        assert!(game.handle_query(commander, observe).is_err());
+        let up = serde_json::from_value(json!({"type": "move", "dir": "up"})).unwrap();
+        assert!(game.apply_action(commander, up).is_err());
+        game.bot_failed(commander, &BotFailure::exception("RuntimeError", "late"));
     }
 }

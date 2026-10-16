@@ -18,6 +18,7 @@ class Building(str, Enum):
     RADIO_TOWER = "radio_tower"
     RESEARCH_DESK = "research_desk"
     SMELTER = "smelter"
+    SPIKE_TRAP = "spike_trap"
     STEAM_DRILL = "steam_drill"
     STONE_WALL = "stone_wall"
     TOWER = "tower"
@@ -42,6 +43,8 @@ class BuildingView:
     storage: int | None
     tower: int | None
     """Units next to it attack within this range of it, and take half damage."""
+    trap: int | None
+    """Hidden from the other team; the first of them to step on it takes this damage."""
     upgrades: Building | None
     water: int | None
 
@@ -58,6 +61,7 @@ class BuildingView:
             radio=d.get("radio"),
             storage=d.get("storage"),
             tower=d.get("tower"),
+            trap=d.get("trap"),
             upgrades=None if (_upgrades := d.get("upgrades")) is None else Building(_upgrades),
             water=d.get("water"),
         )
@@ -404,8 +408,9 @@ class FrontierApi(Handle):
         return KnownView._from(self._query({"type": "known"}))
 
     def move(self, dir: Dir) -> Coord:
-        """Move one tile onto walkable ground with nothing on it, or through your team's gate;
-        returns where you are."""
+        """Move one tile onto walkable ground with nothing on it, through your team's gate, or
+        onto a finished trap: the other team's hurts, and you can't see it until it does.
+        Returns where you are."""
         return Coord._from(self._act({"type": "move", "dir": Dir(dir).value}))
 
     def gather(self, dir: Dir) -> Item:

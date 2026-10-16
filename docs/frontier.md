@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 6 done; next, the RL environment.
+competition and RL environment. Status: Phase 6 done, plus traps; next, the RL environment.
 
 ## Principles
 
@@ -59,7 +59,7 @@ actions   move dir                one tile
           spawn                   commander, next to the base, paid from its storage
           say bytes               to teammates in range or on the radio network, next tick
           mark bytes              sign on your tile, readable by anyone who sees it
-later     traps
+later     -
 ```
 
 Ids for items, buildings, and recipes are generated enums in the SDK. Their details are
@@ -116,7 +116,8 @@ tiers increase along each `upgrades` line, and there are no cycles.
   back. Attacking a crop destroys it. A unit next to its team's tower reaches the
   tower's range and takes half damage. Gates let only their team through; walls come in
   material tiers; `build` repairs a damaged building a little (less than a sword hit). A destroyed base stops spawning
-  until the commander rebuilds it. Traps come later.
+  until the commander rebuilds it. A finished trap is hidden from the other team and
+  walkable; the first of them to step on it takes its damage, and it's spent.
 
 ## Winning
 

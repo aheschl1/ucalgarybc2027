@@ -58,7 +58,7 @@ impl World {
             });
             return Ok((Hit { damage, left }, killed));
         }
-        if let Some(id) = self.structure_on(at) {
+        if let Some(id) = self.visible_structure(at, team) {
             if self.structures[&id].team == team {
                 return Err(invalid("that's your team's"));
             }
@@ -83,7 +83,7 @@ impl World {
 
     /// Takes a building down, leaving what it stored, or for a site what was paid and
     /// delivered for it, on its tile if things can lie there.
-    fn destroy(&mut self, id: u64) {
+    pub(crate) fn destroy(&mut self, id: u64) {
         let mut s = self.structures.remove(&id).unwrap();
         if s.work_left > 0 {
             for (&item, &n) in &s.kind.def().cost {
@@ -281,5 +281,71 @@ mod tests {
         assert_eq!(w.structures[&chest].hp, 50);
         next_step(&mut w);
         refused(w.build(a, Dir::Right, Building::Chest), "another building");
+    }
+
+    #[test]
+    fn a_trap_is_hidden_from_the_other_team_and_hurts_who_steps_on_it() {
+        let (mut w, a, b) = world();
+        let trap = finished(&mut w, A, Building::SpikeTrap, Coord::new(6, 4));
+        let rows = |w: &World, bot| w.observe(bot, 3).buildings;
+        assert!(rows(&w, b).is_empty());
+        assert_eq!(rows(&w, a)[0], trap);
+        // Hidden, so it can't be hit, and things put on it lie on the ground.
+        refused(w.attack(b, Coord::new(6, 4)), "nothing to attack");
+        w.bots[b].carrying.add(Item::Wood, 1);
+        assert_eq!(w.put(b, Dir::Up, Item::Wood, 1).unwrap(), 1);
+        next_step(&mut w);
+        assert_eq!(w.take(b, Dir::Up, Item::Wood, 1).unwrap(), 1);
+        // Stepping on it: 30 damage, and it's spent.
+        let (to, killed) = w.move_unit(b, Dir::Up).unwrap();
+        assert_eq!((to, killed), (Coord::new(6, 4), None));
+        assert_eq!(w.bots[b].hp, HP - 30);
+        assert_eq!(w.structure_on(Coord::new(6, 4)), None);
+        assert_eq!(w.changes.demolished, vec![trap]);
+    }
+
+    #[test]
+    fn a_trap_spares_its_team_and_can_kill() {
+        let (mut w, a, b) = world();
+        finished(&mut w, A, Building::SpikeTrap, Coord::new(4, 5));
+        w.move_unit(a, Dir::Left).unwrap();
+        assert_eq!(w.bots[a].hp, HP);
+        assert!(w.structure_on(Coord::new(4, 5)).is_some());
+        // An unfinished one is a site like any other: seen, and in the way.
+        next_step(&mut w);
+        w.place_structure(A, Building::SpikeTrap, Coord::new(7, 5));
+        assert_eq!(w.observe(b, 3).buildings.len(), 7);
+        refused(w.move_unit(b, Dir::Right), "blocked");
+        // A finished one kills a unit with little health left, which drops what it carried.
+        finished(&mut w, A, Building::SpikeTrap, Coord::new(6, 6));
+        w.bots[b].hp = 30;
+        w.bots[b].carrying.add(Item::Wheat, 2);
+        assert_eq!(
+            w.move_unit(b, Dir::Down).unwrap(),
+            (Coord::new(6, 6), Some(b))
+        );
+        assert_eq!(w.piles[&(6, 6)].count(Item::Wheat), 2);
+    }
+
+    /// Whether a trap is there or not, the other team's actions get the same replies.
+    #[test]
+    fn actions_on_a_hidden_trap_reveal_nothing() {
+        let replies = |trapped: bool| {
+            let mut w = World::new(Map::from_text("...... ...f.. ...... ...... ...... ......"));
+            let b = w.place_unit(B, Kind::Worker, Coord::new(3, 2));
+            if trapped {
+                for at in [Coord::new(3, 1), Coord::new(2, 2), Coord::new(4, 2)] {
+                    finished(&mut w, A, Building::SpikeTrap, at);
+                }
+            }
+            w.bots[b].carrying.add(Item::Wood, 10);
+            let mut out = vec![format!("{:?}", w.gather(b, Dir::Up))];
+            next_step(&mut w);
+            out.push(format!("{:?}", w.till(b, Dir::Left)));
+            next_step(&mut w);
+            out.push(format!("{:?}", w.build(b, Dir::Right, Building::WoodWall)));
+            out
+        };
+        assert_eq!(replies(true), replies(false));
     }
 }

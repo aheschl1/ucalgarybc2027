@@ -217,10 +217,17 @@ impl World {
     }
 
     /// Walkable, with no unit or structure on it.
-    fn free(&self, at: Coord) -> bool {
+    /// Walkable, with no unit on it and no structure `team` can see.
+    fn free(&self, at: Coord, team: TeamId) -> bool {
         self.map.tile(at).walkable()
             && self.unit_on(at).is_none()
-            && self.structure_on(at).is_none()
+            && self.visible_structure(at, team).is_none()
+    }
+
+    /// The structure on `at`, unless it's a trap hidden from `team`.
+    pub fn visible_structure(&self, at: Coord, team: TeamId) -> Option<u64> {
+        self.structure_on(at)
+            .filter(|&id| !self.hidden_from(id, team))
     }
 
     pub fn known(&self, team: TeamId) -> &Known {
@@ -329,18 +336,32 @@ impl World {
             .ok_or_else(|| invalid("off the map"))
     }
 
-    pub fn move_unit(&mut self, bot: BotId, dir: Dir) -> Result<Coord, ActionError> {
+    /// A finished trap that `team` can't see.
+    pub fn hidden_from(&self, id: u64, team: TeamId) -> bool {
+        let s = &self.structures[&id];
+        s.team != team && s.work_left == 0 && s.kind.def().trap.is_some()
+    }
+
+    /// Moves the bot; returns where it is now and, if it walked into a trap that killed
+    /// it, itself.
+    pub fn move_unit(
+        &mut self,
+        bot: BotId,
+        dir: Dir,
+    ) -> Result<(Coord, Option<BotId>), ActionError> {
         if self.turn.moved {
             return Err(invalid("already moved this step"));
         }
         let from = self.bots[bot].pos;
         let to = self.target(bot, dir)?;
         let team = self.bots[bot].team();
-        let gate = self.structure_on(to).is_some_and(|id| {
+        // Through the team's gates, and onto finished traps of either team.
+        let passable = self.structure_on(to).is_some_and(|id| {
             let s = &self.structures[&id];
-            s.team == team && s.work_left == 0 && s.kind.def().gate
+            let def = s.kind.def();
+            s.work_left == 0 && ((def.gate && s.team == team) || def.trap.is_some())
         });
-        if !self.free(to) && !(gate && self.unit_on(to).is_none()) {
+        if !self.free(to, team) && !(passable && self.unit_on(to).is_none()) {
             return Err(invalid("blocked"));
         }
         let (a, b) = (self.idx(from), self.idx(to));
@@ -348,7 +369,25 @@ impl World {
         self.bots[bot].pos = to;
         self.turn.moved = true;
         self.changes.units.insert(bot);
-        Ok(to)
+        Ok((to, self.spring(bot)))
+    }
+
+    /// Springs a trap hidden from the bot on its tile; returns the bot if it killed it.
+    fn spring(&mut self, bot: BotId) -> Option<BotId> {
+        let (at, team) = (self.bots[bot].pos, self.bots[bot].team());
+        let trap = self
+            .structure_on(at)
+            .filter(|&id| self.hidden_from(id, team))?;
+        let damage = self.structures[&trap].kind.def().trap.unwrap();
+        self.destroy(trap);
+        let unit = &mut self.bots[bot];
+        unit.hp = unit.hp.saturating_sub(damage);
+        if unit.hp > 0 {
+            return None;
+        }
+        self.remove_unit(bot);
+        self.bots.remove(bot);
+        Some(bot)
     }
 
     pub fn gather(&mut self, bot: BotId, dir: Dir) -> Result<Item, ActionError> {
@@ -360,7 +399,7 @@ impl World {
         let Some((_, tier)) = self
             .map
             .resource(at)
-            .filter(|_| self.structure_on(at).is_none())
+            .filter(|_| self.visible_structure(at, self.bots[bot].team()).is_none())
         else {
             return Err(invalid("nothing to gather there"));
         };
@@ -388,7 +427,11 @@ impl World {
             (Some(other), _) if self.bots[other].team() == team => Ok(Holder::Unit(other)),
             (Some(_), _) => Err(invalid("that unit is on another team")),
             // Things dropped on a gate lie on its ground.
-            (None, Some(id)) if self.structures[&id].kind.def().gate => Ok(Holder::Ground(at)),
+            (None, Some(id))
+                if self.structures[&id].kind.def().gate || self.hidden_from(id, team) =>
+            {
+                Ok(Holder::Ground(at))
+            }
             (None, Some(id)) => {
                 let s = &self.structures[&id];
                 if !taking && s.team == team && s.owed.total() > 0 {
@@ -491,7 +534,7 @@ impl World {
         self.can_act()?;
         let at = self.target(bot, dir)?;
         let team = self.bots[bot].team();
-        if let Some(id) = self.structure_on(at) {
+        if let Some(id) = self.visible_structure(at, team) {
             let s = &self.structures[&id];
             let whole = s.work_left == 0 && s.hp == kind.def().hp;
             if s.team != team || s.kind != kind || whole {
@@ -537,7 +580,7 @@ impl World {
             }
         } else {
             let farmland = self.map.tile(at) == crate::map::Tile::Farmland;
-            if !self.free(at) || farmland || self.piles.contains_key(&(at.y, at.x)) {
+            if !self.free(at, team) || farmland || self.piles.contains_key(&(at.y, at.x)) {
                 return Err(invalid("the tile isn't clear"));
             }
         }
@@ -558,6 +601,10 @@ impl World {
             owed.remove(item, n);
         }
         self.changes.units.insert(bot);
+        // A trap the builder can't see is crushed under the new building.
+        if let Some(trap) = self.structure_on(at) {
+            self.destroy(trap);
+        }
         let id = self.place_structure(team, kind, at);
         self.structures.get_mut(&id).unwrap().owed = owed;
         self.turn.acted = true;
@@ -596,7 +643,7 @@ impl World {
             .flat_map(|y| {
                 (pos.x.saturating_sub(1)..=(pos.x + 1).min(last)).map(move |x| Coord::new(x, y))
             })
-            .find(|&at| self.free(at))
+            .find(|&at| self.free(at, team))
             .ok_or_else(|| invalid("no free tile next to the base"))?;
         self.structures
             .get_mut(&base_id)
@@ -604,7 +651,9 @@ impl World {
             .stored
             .remove(item, n);
         self.turn.acted = true;
-        Ok(self.place_unit(team, Kind::Worker, at).0)
+        let worker = self.place_unit(team, Kind::Worker, at);
+        self.spring(worker);
+        Ok(worker.0)
     }
 
     pub fn say(&mut self, bot: BotId, data: Vec<u8>) -> Result<(), ActionError> {
@@ -882,6 +931,18 @@ mod tests {
         let base = w.bases[0].unwrap();
         w.structures.get_mut(&base).unwrap().stored = Items::default();
         refused(w.spawn(commander, 10), "can't pay");
+    }
+
+    #[test]
+    fn a_worker_spawned_onto_a_hidden_trap_springs_it() {
+        let (mut w, commander, _, _) = world();
+        // The first free tile around the base, in reading order.
+        let trap = w.place_structure(B, Building::SpikeTrap, Coord::new(0, 0));
+        w.structures.get_mut(&trap).unwrap().work_left = 0;
+        let id = BotId(w.spawn(commander, 10).unwrap());
+        assert_eq!(w.bots[id].pos, Coord::new(0, 0));
+        assert_eq!(w.bots[id].hp, HP - 30);
+        assert!(!w.structures.contains_key(&trap));
     }
 
     #[test]

@@ -202,7 +202,9 @@ impl Types {
                 format!("None if {value} is None else {}", self.encode(inner, value))
             }
             Ty::Named(name) => match self.kind(name) {
-                Def::Enum(_) => value.to_string(),
+                // The host can't unpickle an Enum: send the plain string, from a member
+                // or a string.
+                Def::Enum(_) => format!("{name}({value}).value"),
                 Def::Class(_) | Def::Union(_) => format!("{value}._to()"),
             },
         }
@@ -657,7 +659,7 @@ mod tests {
             "    def count(self) -> int:",
             "        reply: int = self._query({\"type\": \"count\"})\n        return reply",
             "    def go(self, how: Kind) -> Went:",
-            "        return _from_Went(self._act({\"type\": \"go\", \"how\": how}))",
+            "        return _from_Went(self._act({\"type\": \"go\", \"how\": Kind(how).value}))",
         ] {
             assert!(py.contains(line), "missing {line:?} in:\n{py}");
         }

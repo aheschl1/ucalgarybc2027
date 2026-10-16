@@ -1,5 +1,6 @@
 // The game renderers a build bundles. `src/games.ts` is replaced at build time with an
-// import of the renderer of each game ucbc-games builds by default.
+// import of the renderer of each game ucbc-games builds by default, or of each game in
+// `UCBC_GAMES` (`make viewer GAMES="ucbc2027 pacman"` sets it).
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -17,9 +18,16 @@ export function defaultGames(manifest: string): string[] {
   return [...list.matchAll(/"([^"]+)"/g)].map(([, game]) => game as string);
 }
 
-/** Every default game with a renderer: `games/<game>/viewer`, the package `@ucbc/viewer-<game>`. */
-export function gamePackages(): string[] {
-  return defaultGames(readFileSync(FEATURES, "utf8"))
+/** The games in `UCBC_GAMES`, separated by spaces or commas; if it's unset or blank, the
+ * default ones. */
+export function selectedGames(env: string | undefined = process.env.UCBC_GAMES): string[] {
+  const listed = env?.split(/[\s,]+/).filter(Boolean) ?? [];
+  return listed.length > 0 ? listed : defaultGames(readFileSync(FEATURES, "utf8"));
+}
+
+/** Every selected game with a renderer: `games/<game>/viewer`, the package `@ucbc/viewer-<game>`. */
+export function gamePackages(games: string[] = selectedGames()): string[] {
+  return games
     .filter((game) => existsSync(new URL(`${game}/viewer/package.json`, GAMES)))
     .sort();
 }
@@ -31,7 +39,7 @@ export function gamesSource(games: string[]): string {
   return `${imports.join("\n")}\nexport const renderers = [${names.join(", ")}];\n`;
 }
 
-/** Bundles the default games' renderers. */
+/** Bundles the selected games' renderers. */
 export function games(): Plugin {
   const list = gamePackages();
   return {

@@ -2004,11 +2004,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ucbc-frontier"
+version = "0.1.11"
+dependencies = [
+ "base64",
+ "schemars",
+ "serde",
+ "serde_json",
+ "ucbc-engine",
+]
+
+[[package]]
 name = "ucbc-games"
 version = "0.1.11"
 dependencies = [
  "ucbc-2027",
  "ucbc-engine",
+ "ucbc-frontier",
  "ucbc-pacman",
  "ucbc-tictactoe",
 ]

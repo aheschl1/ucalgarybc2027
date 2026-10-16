@@ -156,7 +156,7 @@ def town() -> list[tuple[Building, int, int]]:
     later += [(Building.SMELTER, -2, 2), (Building.RADIO_TOWER, -3, 3)]
     later += [(Building.WELL, x, y) for x, y in WELLS]
     traps = [(Building.SPIKE_TRAP, dx, dy) for dx, dy in TRAPS]
-    return desk + ring() + towers + shops + later + traps + [(Building.MONUMENT, -2, 1)]
+    return desk + ring() + towers + shops + later + traps + [(Building.MONUMENT, -2, -1)]
 
 
 class Rng:
@@ -1459,9 +1459,9 @@ def wanted(kind: int) -> list[Recipe]:
         out.append(Recipe.COPPER_PICK)
     if s(Item.GEAR, 0) < 20:
         out.append(Recipe.GEAR)
-    if copper >= 36 and mind.made.get(Recipe.COPPER_SWORD, 0) < 6:
+    if copper >= 45 and mind.made.get(Recipe.COPPER_SWORD, 0) < 6:
         out.append(Recipe.COPPER_SWORD)
-    if copper >= 36 and mind.made.get(Recipe.COPPER_ARMOUR, 0) < 6:
+    if copper >= 45 and mind.made.get(Recipe.COPPER_ARMOUR, 0) < 6:
         out.append(Recipe.COPPER_ARMOUR)
     return out
 

@@ -211,6 +211,8 @@ class Mind:
         self.field: list[Pos] = []
         self.field_set: set[Pos] = set()
         self.field_at = -(10**9)
+        self.worked_until = 0
+        """Till then, the field was found all tilled and cleared."""
         self.shop: dict[Pos, tuple[Costs, int]] = {}
         self.made: dict[Recipe, int] = {}
         self.skip: dict[Pos, int] = {}
@@ -640,7 +642,8 @@ def base_store(v: View) -> tuple[Dir, Costs] | None:
 
 def visit_base(handle: FrontierHandle, v: View, keep: Costs, want: Costs) -> bool:
     """Beside the base, unloads all but `keep` and takes up to `want`; elsewhere heads
-    there. False once there's nothing left to do there."""
+    there. False once there's nothing left to do there, stepping off to leave the side
+    to others."""
     if v.seen.base is None:
         return clear_base(handle, v)
     here = base_store(v)
@@ -671,6 +674,11 @@ def visit_base(handle: FrontierHandle, v: View, keep: Costs, want: Costs) -> boo
             with suppress(ActionError):
                 handle.take(d, item, short)
                 return True
+    for side, (dx, dy) in DIRS:
+        if abs(v.me[0] + dx - mind.base[0]) + abs(v.me[1] + dy - mind.base[1]) > 1:
+            with suppress(ActionError):
+                handle.move(side)
+                break
     return False
 
 
@@ -1394,14 +1402,18 @@ def farmer(handle: FrontierHandle, v: View) -> None:
     for key, targets in (("ripe", ripe), ("plant", plant)):
         if targets and go_beside(handle, v, targets, key):
             return
-    till, clear = [], []
-    for p in mind.field:
+    till: list[Pos] = []
+    clear: list[Pos] = []
+    scan = mind.worked_until < v.tick
+    for p in mind.field if scan else []:
         if v.inside(p) and p not in blds:
             t = v.data[(p[1] - v.oy) * v.w + p[0] - v.ox]
             if t in (GRASS, DIRT):
                 till.append(p)
             elif t in (FOREST, ROCK):
                 clear.append(p)
+    if scan and not till and not clear:
+        mind.worked_until = v.tick + 20
     if till and go_beside(handle, v, till, "till"):
         return
     if not seeds and stocked:

@@ -141,9 +141,9 @@ GRANARIES = [(-2, -5), (2, -5), (-4, -12), (4, -12), (-5, -8), (5, -8)]
 BROADCAST = [Item.WHEAT, Item.APPLE, Item.WOOD, Item.STONE]
 TRAPS = trap_spots()
 TRAP_SET = set(TRAPS)
-POSTS = [((3, -1), (2, -1)), ((3, 1), (2, 1)), ((-3, -3), (-3, -2))]
+POSTS = [((3, -1), (3, -2)), ((3, 1), (3, 2)), ((-3, -3), (-3, -2))]
 WELLS = [(9, -9), (-9, -9), (0, -16)]
-IDLE = [(-1, 2), (1, 2), (-1, -2), (1, -2), (1, 3)]
+IDLE = [(0, -3), (-1, -3), (1, -3), (0, 3), (1, 3)]
 
 
 def town() -> list[tuple[Building, int, int]]:
@@ -929,7 +929,7 @@ def pick_role(pop: int) -> int:
         counts[role] = counts.get(role, 0) + 1
     mining = 0 if pop < 12 else 1 if pop < 25 else 2
     target = {
-        FARMER: max(2, pop // 6 + 1),
+        FARMER: max(2, pop // 4 + 1),
         BUILDER: 2 if pop < 20 else 3,
         WOODMAN: 3 if pop < 20 else 2 + pop // 8,
         MASON: 2 if pop < 30 else 3,
@@ -1226,7 +1226,7 @@ def farmer(handle: FrontierHandle, v: View) -> None:
         keep[Item.WHEAT] = 99
     supplies = {Item.WHEAT_SEED: 6, Item.WHEAT: 3, Item.APPLE_SEED: want_apple}
     base_food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
-    porter = (mind.id % 3 == 0 or base_food < 10) and base_food < 30
+    porter = (mind.id % 3 == 0 or (base_food < 10 and mind.id % 3 == 1)) and base_food < 30
     porter &= v.tick - mind.heard_at < 300
     apples_home = apples >= 4 and mind.stock.get(Item.APPLE, 0) < 40
     granary = not porter and not apples_home and wood == 0
@@ -1517,7 +1517,9 @@ def smith(handle: FrontierHandle, v: View) -> None:
         )
         resupply(handle, v, {i: n * max(runs, 1) for i, n in inputs.items()})
         return
-    go_beside(handle, v, [p], ("shop", p))
+    if not go_beside(handle, v, [p], ("shop", p)) and dir_to(v.me, p) is None:
+        stored, _ = mind.shop.get(p, ({}, -1))
+        mind.shop[p] = (stored, v.tick + 20)
 
 
 def work_shop(

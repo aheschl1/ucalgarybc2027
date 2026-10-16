@@ -97,9 +97,9 @@ APPLES = 31
 BASE_FULL = 920
 
 # The town, in the base's frame: x is mirrored for the right-hand team, so +x faces the
-# other team, and the farm is mostly north. Inside the wall the buildings stand on even rows and
-# columns, so the odd ones are streets; the commander's shelter is the one exception: walls
-# beside its post and a gate behind it.
+# other team, and the farm is mostly north. Inside the wall the buildings stand on even
+# rows and columns, so the odd ones are streets; the commander's shelter is the one
+# exception: walls beside its post and a gate behind it.
 POST = (0, 1)
 SHELTER = [(-1, 1), (1, 1)]
 TOWERS = [((2, -2), (3, -2)), ((2, 2), (3, 2))]
@@ -175,6 +175,8 @@ class Mind:
         self.progress: tuple[object, int, int] = (None, 0, 0)
         """The far walk under way, the closest it has come, and when."""
         self.bad: set[Pos] = set()
+        self.trail: list[Pos] = []
+        self.homing = -1
         # What the team knows.
         self.costs: dict[Building, Costs] = {}
         self.hp: dict[Building, int] = {}
@@ -701,8 +703,18 @@ def errand(v: View, keep: Costs, want: Costs) -> bool:
 
 
 def go_home(handle: FrontierHandle, v: View) -> bool:
+    """Back beside the base; from far off, back along the trail the unit came out by."""
     if dist(v.me, mind.base) > 14:
-        return go_to(handle, v, mind.base, "far-home", 2)
+        mind.homing = v.tick
+        trail = mind.trail
+        del trail[next((i for i, p in enumerate(trail) if v.inside(p)), len(trail)) + 1 :]
+        if trail and dist(v.me, trail[-1]) <= 2:
+            trail.pop()
+        if go_to(handle, v, trail[-1] if trail else mind.base, "far-home", 1):
+            return True
+        if trail:
+            trail.pop()
+        return False
 
     def sides() -> bytearray:
         goal = beside(v.tiles, [mind.base])
@@ -717,6 +729,14 @@ def go_home(handle: FrontierHandle, v: View) -> bool:
         return wiggle(handle)
     towards(handle, v.me, mind.base)
     return True
+
+
+def lay_trail(v: View) -> None:
+    """Marks the way out from the base every few tiles, to find the way back."""
+    if dist(v.me, mind.base) <= 14:
+        mind.trail = []
+    elif v.tick - mind.homing > 5 and (not mind.trail or dist(v.me, mind.trail[-1]) >= 8):
+        mind.trail = mind.trail[-63:] + [v.me]
 
 
 def clear_base(handle: FrontierHandle, v: View) -> bool:
@@ -945,6 +965,7 @@ def step(handle: FrontierHandle) -> None:
             handle.say(encode(b"H" + bytes([mind.role]) + b"".join(vein_records())))
     if (v.tick + mind.id) % 8 == 0:
         scan_veins(v)
+    lay_trail(v)
     if attack_adjacent(handle, v) or fall_back(handle, v):
         return
     hauling = mind.role == BUILDER and v.load - v.food() >= 15

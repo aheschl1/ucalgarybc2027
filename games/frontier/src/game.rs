@@ -129,6 +129,7 @@ pub struct Frontier {
     commanders: [BotId; 2],
     /// Ticks begun; the snapshot after them is numbered this.
     ticks: u32,
+    seed: u64,
     outcome: Option<Outcome>,
 }
 
@@ -178,6 +179,7 @@ impl Game for Frontier {
             world,
             commanders,
             ticks: 0,
+            seed: setup.seed,
             outcome: None,
         })
     }
@@ -216,7 +218,16 @@ impl Game for Frontier {
             Action::Gather(a) => Ok(a.reply(w.gather(bot, a.dir)?)),
             Action::Put(a) => Ok(a.reply(w.put(bot, a.dir, a.item, a.count)?)),
             Action::Take(a) => Ok(a.reply(w.take(bot, a.dir, a.item, a.count)?)),
-            Action::Build(a) => Ok(a.reply(w.build(bot, a.dir, a.building)?)),
+            Action::Build(a) => {
+                let before = w.changes.finished.len();
+                let left = w.build(bot, a.dir, a.building)?;
+                // This build finished it.
+                if w.changes.finished.len() > before && a.building.def().monument {
+                    let team = w.bots[bot].team();
+                    self.outcome = Some(Outcome::win(team).with_detail("built the monument"));
+                }
+                Ok(a.reply(left))
+            }
             Action::Till(a) => Ok(a.reply(w.till(bot, a.dir)?)),
             Action::Plant(a) => Ok(a.reply(w.plant(bot, a.dir, a.seed)?)),
             Action::Harvest(a) => Ok(a.reply(w.harvest(bot, a.dir)?)),
@@ -275,6 +286,21 @@ impl Game for Frontier {
         };
     }
 
+    /// Most points wins, then most units, then a coin toss on the set's seed.
+    fn tick_limit(&self, _max_ticks: u32) -> Outcome {
+        let w = &self.world;
+        let [a, b] = [TeamId(0), TeamId(1)];
+        let (pa, pb) = (w.score(a), w.score(b));
+        if pa != pb {
+            return Outcome::win(if pa > pb { a } else { b }).with_detail("most points");
+        }
+        let (ua, ub) = (w.units(a), w.units(b));
+        if ua != ub {
+            return Outcome::win(if ua > ub { a } else { b }).with_detail("most units");
+        }
+        Outcome::win(TeamId((self.seed % 2) as u32)).with_detail("coin toss")
+    }
+
     fn status(&self) -> GameStatus {
         match &self.outcome {
             None => GameStatus::InProgress,
@@ -285,5 +311,38 @@ impl Game for Frontier {
     fn snapshot(&self) -> Snapshot {
         self.world
             .snapshot(self.ticks, self.ticks.is_multiple_of(self.config.keyframe))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn finishing_the_monument_wins() {
+        let teams = vec![TeamId(0), TeamId(1)];
+        let setup = SetSetup::new(0, teams, 0, Some(json!({"size": 64, "flat": true})));
+        let mut game = Frontier::create(&setup).unwrap();
+        // Team 0's commander stands at (16, 33); its last work is left of it.
+        let w = &mut game.world;
+        let site = w.place_structure(TeamId(0), Building::Monument, Coord::new(15, 33));
+        w.structures.get_mut(&site).unwrap().work_left = 2;
+        let build = || {
+            serde_json::from_value(json!({"type": "build", "dir": "left", "building": "monument"}))
+        };
+        let commander = game.commanders[0];
+        game.apply_action(commander, build().unwrap()).unwrap();
+        assert_eq!(game.status(), GameStatus::InProgress);
+        game.end_step(commander);
+        game.apply_action(commander, build().unwrap()).unwrap();
+        let GameStatus::Complete(outcome) = game.status() else {
+            panic!("still in progress")
+        };
+        assert_eq!(
+            (outcome.winner, outcome.detail.as_str()),
+            (Some(TeamId(0)), "built the monument")
+        );
     }
 }

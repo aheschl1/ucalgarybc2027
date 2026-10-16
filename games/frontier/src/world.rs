@@ -80,6 +80,8 @@ pub struct Structure {
     pub work_left: u32,
     pub stored: Items,
     pub job: Option<Job>,
+    /// What its site still needs delivered before work on it can start.
+    pub owed: Items,
 }
 
 impl Structure {
@@ -119,6 +121,7 @@ enum Holder {
     Unit(BotId),
     Store(u64),
     Ground(Coord),
+    Site(u64),
 }
 
 /// What the stepping bot has done this step: one move, one other action, one `say`.
@@ -137,6 +140,8 @@ pub struct Changes {
     pub tiles: BTreeSet<Coord>,
     pub structures: BTreeSet<u64>,
     pub demolished: Vec<u64>,
+    /// Buildings whose last work was done.
+    pub finished: Vec<u64>,
     pub piles: BTreeSet<Coord>,
     pub signs: BTreeSet<Coord>,
     pub crops: BTreeSet<Coord>,
@@ -252,6 +257,7 @@ impl World {
             work_left: def.work,
             stored,
             job: None,
+            owed: Items::default(),
         };
         self.structures.insert(id, s);
         if kind == Building::Base {
@@ -272,6 +278,27 @@ impl World {
         self.drop_items(pos, carrying);
         self.changes.units.remove(&bot);
         self.changes.removed.push(bot.0);
+    }
+
+    /// Points at the tick limit: what the team's finished buildings cost, what they store,
+    /// and 5 for each unit.
+    pub fn score(&self, team: TeamId) -> u32 {
+        let buildings = self
+            .structures
+            .values()
+            .filter(|s| s.team == team && s.work_left == 0);
+        let built: u32 = buildings
+            .map(|s| s.kind.def().cost.values().sum::<u32>() + s.stored.total())
+            .sum();
+        built + 5 * self.units(team) as u32
+    }
+
+    pub fn units(&self, team: TeamId) -> usize {
+        self.bots
+            .ids()
+            .into_iter()
+            .filter(|&id| self.bots[id].team() == team)
+            .count()
     }
 
     /// Leaves `items` on the ground at `at`.
@@ -349,7 +376,8 @@ impl World {
     }
 
     /// What `put` and `take` reach on the tile in `dir`: a teammate, a finished storage
-    /// building of the team (of either team, taking: that's theft), or the ground.
+    /// building of the team (of either team, taking: that's theft), a site of the team
+    /// owed materials (putting), or the ground.
     fn holder(&self, bot: BotId, dir: Dir, taking: bool) -> Result<Holder, ActionError> {
         let at = self.target(bot, dir)?;
         let team = self.bots[bot].team();
@@ -360,6 +388,9 @@ impl World {
             (None, Some(id)) if self.structures[&id].kind.def().gate => Ok(Holder::Ground(at)),
             (None, Some(id)) => {
                 let s = &self.structures[&id];
+                if !taking && s.team == team && s.owed.total() > 0 {
+                    return Ok(Holder::Site(id));
+                }
                 match s.capacity() {
                     Some(_) if s.team == team || taking => Ok(Holder::Store(id)),
                     Some(_) => Err(invalid("not your team's storage")),
@@ -376,13 +407,14 @@ impl World {
             Holder::Unit(id) => &mut self.bots[id].carrying,
             Holder::Store(id) => &mut self.structures.get_mut(&id).unwrap().stored,
             Holder::Ground(at) => self.piles.entry((at.y, at.x)).or_default(),
+            Holder::Site(id) => &mut self.structures.get_mut(&id).unwrap().owed,
         }
     }
 
     fn touched(&mut self, holder: Holder) {
         match holder {
             Holder::Unit(id) => drop(self.changes.units.insert(id)),
-            Holder::Store(_) => {}
+            Holder::Store(_) | Holder::Site(_) => {}
             Holder::Ground(at) => {
                 if self
                     .piles
@@ -396,12 +428,14 @@ impl World {
         }
     }
 
-    /// Room left in a holder; the ground has no limit.
-    fn room(&self, holder: Holder) -> u32 {
+    /// Room left in a holder for `item`; the ground has no limit, and a site takes what
+    /// it's owed.
+    fn room(&self, holder: Holder, item: Item) -> u32 {
         match holder {
             Holder::Unit(id) => CARRY - self.bots[id].carrying.total(),
             Holder::Store(id) => self.structures[&id].room(),
             Holder::Ground(_) => u32::MAX,
+            Holder::Site(id) => self.structures[&id].owed.count(item),
         }
     }
 
@@ -411,12 +445,16 @@ impl World {
         let to = self.holder(bot, dir, false)?;
         let n = n
             .min(self.bots[bot].carrying.count(item))
-            .min(self.room(to));
+            .min(self.room(to, item));
         if n == 0 {
             return Err(invalid("nothing to put, or no room"));
         }
         self.bots[bot].carrying.remove(item, n);
-        self.held(to).add(item, n);
+        // Delivered to a site, it pays off what's owed.
+        match to {
+            Holder::Site(_) => self.held(to).remove(item, n),
+            _ => self.held(to).add(item, n),
+        }
         self.touched(to);
         self.changes.units.insert(bot);
         self.turn.acted = true;
@@ -443,8 +481,9 @@ impl World {
         Ok(n)
     }
 
-    /// Places `kind` on the free tile in `dir`, paying its cost from what the bot carries,
-    /// or works on the team's unfinished `kind` there. Returns the work left.
+    /// Places `kind` on the free tile in `dir`, paying what it can of the cost from what the
+    /// bot carries: all of it, or at least a full load, the rest owed and delivered later.
+    /// Or works on the team's unfinished `kind` there, or repairs it. Returns the work left.
     pub fn build(&mut self, bot: BotId, dir: Dir, kind: Building) -> Result<u32, ActionError> {
         self.can_act()?;
         let at = self.target(bot, dir)?;
@@ -455,10 +494,16 @@ impl World {
             if s.team != team || s.kind != kind || whole {
                 return Err(invalid("another building stands there"));
             }
+            if s.owed.total() > 0 {
+                return Err(invalid("it still needs its materials"));
+            }
             // Work on the site, or repair the finished building.
             let s = self.structures.get_mut(&id).unwrap();
             if s.work_left > 0 {
                 s.work_left -= 1;
+                if s.work_left == 0 {
+                    self.changes.finished.push(id);
+                }
             } else {
                 s.hp = (s.hp + REPAIR).min(kind.def().hp);
             }
@@ -493,15 +538,25 @@ impl World {
                 return Err(invalid("the tile isn't clear"));
             }
         }
-        let cost = &def.cost;
-        if !self.bots[bot].carrying.covers(cost) {
-            return Err(invalid("not carrying what it costs"));
+        let carrying = &self.bots[bot].carrying;
+        let paid: Vec<(Item, u32)> = def
+            .cost
+            .iter()
+            .map(|(&item, &n)| (item, n.min(carrying.count(item))))
+            .collect();
+        let whole: u32 = def.cost.values().sum();
+        let given: u32 = paid.iter().map(|p| p.1).sum();
+        if given < whole.min(CARRY) {
+            return Err(invalid("bring the whole cost, or a full load of it"));
         }
-        for (&item, &n) in cost {
+        let mut owed = Items(def.cost.clone());
+        for (item, n) in paid {
             self.bots[bot].carrying.remove(item, n);
+            owed.remove(item, n);
         }
         self.changes.units.insert(bot);
         let id = self.place_structure(team, kind, at);
+        self.structures.get_mut(&id).unwrap().owed = owed;
         self.turn.acted = true;
         Ok(self.structures[&id].work_left)
     }
@@ -698,7 +753,10 @@ mod tests {
     #[test]
     fn buildings_cost_what_the_builder_carries_and_take_work_to_finish() {
         let (mut w, _, worker, enemy) = world();
-        refused(w.build(worker, Dir::Down, Building::Chest), "not carrying");
+        refused(
+            w.build(worker, Dir::Down, Building::Chest),
+            "bring the whole cost",
+        );
         refused(w.build(worker, Dir::Down, Building::Base), "has a base");
         w.bots[worker].carrying.add(Item::Wood, 12);
         assert_eq!(w.build(worker, Dir::Down, Building::Chest).unwrap(), 4);
@@ -730,6 +788,74 @@ mod tests {
             "not your team's storage",
         );
         assert_eq!(w.take(enemy, Dir::Left, Item::Wood, 1).unwrap(), 1);
+    }
+
+    #[test]
+    fn a_big_building_takes_a_full_load_then_deliveries() {
+        let (mut w, _, worker, _) = world();
+        w.known[0].buildings.insert(Building::Monument);
+        w.bots[worker].carrying.add(Item::Wood, 19);
+        refused(w.build(worker, Dir::Down, Building::Monument), "full load");
+        w.bots[worker].carrying.add(Item::Stone, 1);
+        w.build(worker, Dir::Down, Building::Monument).unwrap();
+        assert_eq!(w.bots[worker].carrying.total(), 0);
+        let site = w.structure_on(Coord::new(2, 1)).unwrap();
+        assert_eq!(w.structures[&site].owed.count(Item::Wood), 60 - 19);
+        next_step(&mut w);
+        refused(
+            w.build(worker, Dir::Down, Building::Monument),
+            "needs its materials",
+        );
+        // Deliveries pay it off, never more than it's owed, and nothing comes back out.
+        w.bots[worker].carrying.add(Item::Stone, 20);
+        assert_eq!(w.put(worker, Dir::Down, Item::Stone, 20).unwrap(), 20);
+        assert_eq!(w.structures[&site].owed.count(Item::Stone), 60 - 21);
+        next_step(&mut w);
+        w.bots[worker].carrying.add(Item::Coal, 1);
+        refused(w.put(worker, Dir::Down, Item::Coal, 1), "no room");
+        refused(
+            w.take(worker, Dir::Down, Item::Stone, 1),
+            "not a finished storage",
+        );
+        let stores = w.observe(worker, 3).stores;
+        assert_eq!(stores.len(), 1);
+        assert!(
+            stores[0]
+                .owed
+                .iter()
+                .any(|s| s.item == Item::Gear && s.count == 20)
+        );
+        // A delivery takes no more than is owed, and none from the other team.
+        next_step(&mut w);
+        w.bots[worker].carrying = Items::default();
+        w.bots[worker].carrying.add(Item::Stone, 20);
+        w.structures.get_mut(&site).unwrap().owed = Items([(Item::Stone, 3)].into_iter().collect());
+        assert_eq!(w.put(worker, Dir::Down, Item::Stone, 20).unwrap(), 3);
+        assert_eq!(w.bots[worker].carrying.count(Item::Stone), 17);
+        // Paid off: work starts, and it's no longer a store.
+        next_step(&mut w);
+        assert_eq!(w.build(worker, Dir::Down, Building::Monument).unwrap(), 399);
+        assert!(w.observe(worker, 3).stores.is_empty());
+    }
+
+    #[test]
+    fn a_small_building_is_paid_in_full_and_the_rest_is_kept() {
+        let (mut w, _, worker, enemy) = world();
+        w.bots[worker].carrying.add(Item::Wood, 9);
+        refused(w.build(worker, Dir::Down, Building::Chest), "whole cost");
+        w.bots[worker].carrying.add(Item::Wood, 3);
+        w.build(worker, Dir::Down, Building::Chest).unwrap();
+        assert_eq!(w.bots[worker].carrying.count(Item::Wood), 2);
+        // The other team can't deliver to a site.
+        let site = w.place_structure(A, Building::Monument, Coord::new(4, 2));
+        assert!(w.structures[&site].owed.total() == 0);
+        w.structures.get_mut(&site).unwrap().owed = Items([(Item::Wood, 5)].into_iter().collect());
+        w.bots[enemy].carrying.add(Item::Wood, 1);
+        next_step(&mut w);
+        refused(
+            w.put(enemy, Dir::Down, Item::Wood, 1),
+            "not a finished storage",
+        );
     }
 
     #[test]

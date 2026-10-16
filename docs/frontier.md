@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 5.
+competition and RL environment. Status: Phase 6.
 
 ## Principles
 
@@ -48,7 +48,8 @@ queries   observe                 tiles in vision as bytes; units, buildings, gr
 actions   move dir                one tile
           gather dir              one item from forest, rock, or a vein
           put | take dir item n   to/from a teammate, the team's storage, or the ground
-          build dir building      place (paying the cost carried) or work on a site
+          build dir building      place a site, paying the whole cost or a full load of it
+                                  (the rest delivered with put); work on it; repair
           till | plant | harvest  farmland from grass or dirt; seeds near water; ripe crops
           craft dir recipe        start a known recipe at a building from what it stores
           operate dir             work a drill: its rate of items from the tile under it
@@ -119,9 +120,11 @@ tiers increase along each `upgrades` line, and there are no cycles.
 
 ## Winning
 
-1. Kill the enemy commander.
-2. Complete the Monument: top-tier inputs from every line, built over many ticks.
-3. At the tick limit, the higher score: assets, territory, food.
+1. Kill the enemy commander, or outlast it: a starving commander loses too.
+2. Finish the Monument: wood, stone, copper and iron ingots, gears, and apples, delivered
+   to its site, then 400 work.
+3. At the tick limit, the most points: what the team's finished buildings cost, what
+   they store, and 5 a unit; then the most units; then a coin toss on the seed.
 
 ## Phase 0 results
 
@@ -150,6 +153,18 @@ Consequences:
   objects; the map window stays bytes.
 - Snapshots send units as flat arrays too: replays are about 30 MiB per 10k ticks at 100
   per team before that.
+
+## Bots
+
+The Python handle decodes the rows, and has `Walker`, `beside`, `nearest`, and `towards`
+for finding walks through what a unit sees.
+
+- `starter`: the economy. The commander spawns while the base has spare food; a third of
+  the workers farm by the base's pond, the rest cut wood; all head home to unload and eat.
+- `raider`: the starter, plus every fourth worker raiding: it packs food, walks to the
+  mirror image of its own base, hits the units it meets, and steals food. On a 256 map
+  it beats the starter 2-0, killing a commander; on 1024 a raid outlasts the CLI's
+  1000-tick limit.
 
 ## Phases
 

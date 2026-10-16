@@ -94,3 +94,10 @@ hp = 250
 cost = { wood = 5, stone = 15 }
 work = 10
 tower = 6
+
+# Finishing it wins the set: the top of every line, and food for those who raise it.
+[monument]
+hp = 2000
+cost = { wood = 60, stone = 60, copper_ingot = 30, iron_ingot = 30, gear = 20, apple = 30 }
+work = 400
+monument = true

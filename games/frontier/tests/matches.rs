@@ -294,7 +294,10 @@ fn a_starved_worker_leaves_the_set() {
     assert_eq!(s[300].removed, workers);
     let steppers = |t: usize| replay.sets[0].ticks[t].steps.len();
     assert_eq!((steppers(299), steppers(300)), (4, 2));
-    assert!(replay.sets[0].result.reason == Reason::Draw);
+    // Both commanders live to the tick limit.
+    let result = &replay.sets[0].result;
+    assert_eq!(result.ticks, 320);
+    assert!(["most points", "most units", "coin toss"].contains(&result.detail.as_str()));
 }
 
 #[test]
@@ -351,4 +354,24 @@ fn killing_the_commander_wins() {
         .flat_map(|t| &t.steps)
         .flat_map(|s| &s.actions);
     assert_eq!(hits.filter(|a| a["type"] == "attack").count(), 34);
+}
+
+#[test]
+fn at_the_tick_limit_points_decide() {
+    fn spawn(ctx: &mut StepCtx<'_>, seen: &Observation) -> StepResult {
+        if seen.me.kind == Kind::Commander && ctx.tick == 0 {
+            ctx.act(&json!({"type": "spawn"})).unwrap();
+        }
+        StepResult::ok()
+    }
+    // Alike: a coin toss on the seed.
+    let replay = run(json!({"size": 64}), 1, 5, team("a", idle), team("b", idle)).unwrap();
+    assert_eq!(replay.sets[0].result.detail, "coin toss");
+    // A spawn spends 10 wood for a unit worth 5 points.
+    let replay = run(json!({"size": 64}), 1, 5, team("a", spawn), team("b", idle)).unwrap();
+    let result = &replay.sets[0].result;
+    assert_eq!(
+        (result.winner_team, result.detail.as_str()),
+        (Some(TeamId(1)), "most points")
+    );
 }

@@ -14,6 +14,7 @@ class Building(str, Enum):
     CHEST = "chest"
     GATE = "gate"
     MECH_DRILL = "mech_drill"
+    MONUMENT = "monument"
     RADIO_TOWER = "radio_tower"
     RESEARCH_DESK = "research_desk"
     SMELTER = "smelter"
@@ -234,6 +235,8 @@ class Observation:
     on them."""
 
     tick: int
+    size: int
+    """The map is `size` x `size`, mirrored left to right."""
     me: Me
     origin: Coord
     """Top-left tile of `tiles`."""
@@ -267,6 +270,7 @@ class Observation:
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
             tick=d["tick"],
+            size=d["size"],
             me=Me._from(d["me"]),
             origin=Coord._from(d["origin"]),
             width=d["width"],
@@ -364,12 +368,14 @@ class Stack:
 
 @dataclass(frozen=True)
 class Store:
-    """A finished storage building of your team that `put` and `take` reach, with what it
-    holds."""
+    """Next to you in the four directions: a finished storage building of your team, with
+    what it holds and its job, or a site of your team, with what it's still owed."""
 
     id: int
     pos: Coord
     stored: list[Stack]
+    owed: list[Stack]
+    """What its site needs delivered, with `put`, before work on it can start."""
     job: JobView | None
     """The recipe running, and the tick it ends."""
 
@@ -379,6 +385,7 @@ class Store:
             id=d["id"],
             pos=Coord._from(d["pos"]),
             stored=[Stack._from(v) for v in d["stored"]],
+            owed=[Stack._from(v) for v in d["owed"]],
             job=None if (_job := d.get("job")) is None else JobView._from(_job),
         )
 

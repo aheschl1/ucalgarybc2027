@@ -81,9 +81,15 @@ impl World {
         Err(invalid("nothing to attack there"))
     }
 
-    /// Takes a building down, leaving what it stored on its tile if it can lie there.
+    /// Takes a building down, leaving what it stored, or for a site what was paid and
+    /// delivered for it, on its tile if things can lie there.
     fn destroy(&mut self, id: u64) {
-        let s = self.structures.remove(&id).unwrap();
+        let mut s = self.structures.remove(&id).unwrap();
+        if s.work_left > 0 {
+            for (&item, &n) in &s.kind.def().cost {
+                s.stored.add(item, n - s.owed.count(item));
+            }
+        }
         if let Some(job) = &s.job {
             self.jobs.remove(&(job.done_at, id));
         }
@@ -108,7 +114,7 @@ mod tests {
     use crate::map::Map;
     use crate::rules::HP;
     use crate::view::Kind;
-    use crate::world::Turn;
+    use crate::world::{Items, Turn};
 
     const A: TeamId = TeamId(0);
     const B: TeamId = TeamId(1);
@@ -194,6 +200,16 @@ mod tests {
         assert!(w.base(B).is_some());
         next_step(&mut w);
         refused(w.build(commander, Dir::Left, Building::Base), "has a base");
+    }
+
+    #[test]
+    fn a_destroyed_site_leaves_what_was_paid_and_delivered() {
+        let (mut w, a, _) = world();
+        let site = w.place_structure(B, Building::Chest, Coord::new(5, 6));
+        let s = w.structures.get_mut(&site).unwrap();
+        (s.hp, s.owed) = (1, Items([(Item::Wood, 4)].into_iter().collect()));
+        w.attack(a, Coord::new(5, 6)).unwrap();
+        assert_eq!(w.piles[&(6, 5)].count(Item::Wood), 10 - 4);
     }
 
     #[test]

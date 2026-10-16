@@ -46,8 +46,8 @@ pub struct Me {
     pub hungry_at: u32,
 }
 
-/// A finished storage building of your team that `put` and `take` reach, with what it
-/// holds.
+/// Next to you in the four directions: a finished storage building of your team, with
+/// what it holds and its job, or a site of your team, with what it's still owed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Store {
     pub id: u64,
@@ -55,6 +55,8 @@ pub struct Store {
     pub stored: Vec<Stack>,
     /// The recipe running, and the tick it ends.
     pub job: Option<JobView>,
+    /// What its site needs delivered, with `put`, before work on it can start.
+    pub owed: Vec<Stack>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -131,6 +133,8 @@ pub struct Message {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Observation {
     pub tick: u32,
+    /// The map is `size` x `size`, mirrored left to right.
+    pub size: usize,
     pub me: Me,
     /// Your team's base, unless it was destroyed and isn't rebuilt yet.
     pub base: Option<Coord>,
@@ -286,7 +290,7 @@ impl World {
             .into_iter()
             .filter_map(|dir| self.structure_on(self.map.step(me, dir)?))
             .map(|id| (id, &self.structures[&id]))
-            .filter(|(_, s)| s.team == team && s.capacity().is_some())
+            .filter(|(_, s)| s.team == team && (s.capacity().is_some() || s.owed.total() > 0))
             .map(|(id, s)| Store {
                 id,
                 pos: s.pos,
@@ -295,6 +299,7 @@ impl World {
                     recipe: j.recipe,
                     done_at: j.done_at,
                 }),
+                owed: stacks(&s.owed.0),
             })
             .collect();
         let heard = self
@@ -308,6 +313,7 @@ impl World {
             .collect();
         Observation {
             tick: self.tick,
+            size: self.map.size(),
             me: Me {
                 id: bot.0,
                 team: team.0,

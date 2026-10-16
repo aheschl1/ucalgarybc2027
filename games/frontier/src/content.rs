@@ -108,6 +108,9 @@ pub struct BuildingDef {
     pub gate: bool,
     /// Units next to it attack within this range of it, and take half damage.
     pub tower: Option<usize>,
+    /// Finishing it wins the set.
+    #[serde(default)]
+    pub monument: bool,
     #[serde(default)]
     pub known: bool,
 }

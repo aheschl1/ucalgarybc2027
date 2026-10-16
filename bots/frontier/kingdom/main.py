@@ -126,7 +126,8 @@ def ring() -> list[tuple[Building, int, int]]:
 
 
 def trap_spots() -> list[tuple[int, int]]:
-    """Hidden spikes just outside the wall and around the farm, the east side first."""
+    """Hidden spikes in the two rings just outside the wall, east first; the farm and the
+    pond to the north are left clear."""
     spots = []
     for d in (5, 6):
         spots += [(d, dy) for dy in range(-d, d + 1)]
@@ -220,6 +221,7 @@ class Mind:
         self.shop: dict[Pos, tuple[dict[Item, int], int]] = {}
         self.made: dict[Recipe, int] = {}
         self.skip: dict[Pos, int] = {}
+        self.owed: dict[Pos, dict[Item, int]] = {}
         self.plan: list[tuple[Building, Pos]] = []
         self.post: Pos | None = None
         self.alive: dict[int, tuple[int, int]] = {}
@@ -233,10 +235,6 @@ mind = Mind()
 
 def at(dx: int, dy: int) -> Pos:
     return (mind.base[0] + mind.m * dx, mind.base[1] + dy)
-
-
-def rel(p: Pos) -> Pos:
-    return ((p[0] - mind.base[0]) * mind.m, p[1] - mind.base[1])
 
 
 def dist(a: Pos, b: Pos) -> int:
@@ -856,9 +854,8 @@ def commander(handle: FrontierHandle, v: View) -> None:
     hear(v, True)
     scan_veins(v)
     acted = attack_adjacent(handle, v)
-    post = at(0, 1)
-    if not acted and v.me != post and v.seen.base is not None:
-        go_beside(handle, v, [mind.base], "post") if dist(v.me, mind.base) > 1 else None
+    if not acted and dist(v.me, mind.base) > 1 and v.seen.base is not None:
+        go_beside(handle, v, [mind.base], "post")
     store = base_store(v)
     if store is not None and not acted:
         stored = {s.item: s.count for s in store.stored}
@@ -1392,12 +1389,20 @@ def place(handle: FrontierHandle, v: View, kind: Building, p: Pos, count: int) -
 
 def finish(handle: FrontierHandle, v: View, kind: Building, p: Pos) -> None:
     d = dir_to(v.me, p)
+    need = mind.owed.get(p, {})
+    fetch = {i: min(n, CARRY) for i, n in need.items()}
     if d is None:
-        if not go_beside(handle, v, [p], ("work", p)):
-            mind.skip[p] = v.tick + 20
+        if need and not any(v.carried.get(i) for i in need):
+            if not resupply(handle, v, fetch):
+                mind.owed.pop(p, None)
+        elif not go_beside(handle, v, [p], ("work", p)):
+            wiggle(handle)
         return
     site = next((s for s in v.seen.stores if (s.pos.x, s.pos.y) == p), None)
     owed = {s.item: s.count for s in site.owed} if site else {}
+    mind.owed[p] = owed
+    if DEBUG and kind == Building.MONUMENT:
+        print("monument", v.me, owed, v.carried, mind.skip.get(p))
     for item, n in owed.items():
         if v.carried.get(item):
             with suppress(ActionError):

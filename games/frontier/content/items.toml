@@ -1,5 +1,6 @@
 # Every item. `food` is the ticks one feeds a unit; `tool` is the vein tier a unit
-# carrying it can gather (bare hands: 1).
+# carrying it can gather (bare hands: 1). A unit hits with its best `weapon` (bare
+# hands: 3) and takes its best `armour` off every hit.
 
 [wood]
 [stone]
@@ -18,6 +19,15 @@ tool = 3
 # Tier 4 reaches nothing yet: it's for veins to come.
 [iron_pick]
 tool = 4
+
+[copper_sword]
+weapon = 10
+[iron_sword]
+weapon = 18
+[copper_armour]
+armour = 4
+[iron_armour]
+armour = 8
 
 [wheat]
 food = 100

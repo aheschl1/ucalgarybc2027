@@ -46,6 +46,8 @@ impl Crop {
 pub struct ItemDef {
     pub food: Option<u32>,
     pub tool: Option<u32>,
+    pub weapon: Option<u32>,
+    pub armour: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -101,6 +103,11 @@ pub struct BuildingDef {
     #[serde(default)]
     pub research: bool,
     pub drill: Option<DrillDef>,
+    /// Its team walks through it.
+    #[serde(default)]
+    pub gate: bool,
+    /// Units next to it attack within this range of it, and take half damage.
+    pub tower: Option<usize>,
     #[serde(default)]
     pub known: bool,
 }

@@ -3,10 +3,11 @@
 # Only `known` buildings are known at the start; a team learns another once it has
 # studied every item in `cost`.
 
+# A team starts with one; only its commander rebuilds it, and only once it's destroyed.
 [base]
 hp = 500
-cost = {}
-work = 0
+cost = { wood = 12, stone = 8 }
+work = 30
 storage = 1000
 radio = 24
 known = true
@@ -78,3 +79,18 @@ cost = { iron_ingot = 6, gear = 4 }
 work = 12
 storage = 10
 drill = { rate = 6, tier = 4, burns = "coal" }
+
+# Its team walks through; nobody else does.
+[gate]
+hp = 120
+cost = { wood = 6 }
+work = 3
+gate = true
+known = true
+
+# A unit next to it attacks anything within `range` of it, and takes half damage.
+[tower]
+hp = 250
+cost = { wood = 5, stone = 15 }
+work = 10
+tower = 6

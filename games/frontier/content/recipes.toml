@@ -51,3 +51,27 @@ at = "workbench"
 in = { iron_ingot = 1 }
 out = { gear = 2 }
 ticks = 15
+
+[copper_sword]
+at = "workbench"
+in = { wood = 1, copper_ingot = 3 }
+out = { copper_sword = 1 }
+ticks = 20
+
+[iron_sword]
+at = "workbench"
+in = { wood = 1, iron_ingot = 3 }
+out = { iron_sword = 1 }
+ticks = 30
+
+[copper_armour]
+at = "workbench"
+in = { copper_ingot = 5 }
+out = { copper_armour = 1 }
+ticks = 25
+
+[iron_armour]
+at = "workbench"
+in = { iron_ingot = 5 }
+out = { iron_armour = 1 }
+ticks = 35

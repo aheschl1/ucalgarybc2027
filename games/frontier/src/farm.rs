@@ -129,6 +129,15 @@ impl World {
         Ok(total)
     }
 
+    /// Takes the crop off `at` without a harvest; the soil starts resting.
+    pub fn uproot(&mut self, at: Coord) {
+        self.crops.remove(&(at.y, at.x));
+        if let Some(soil) = self.soil.get_mut(&(at.y, at.x)) {
+            soil.since = self.tick;
+        }
+        self.changes.crops.insert(at);
+    }
+
     /// Every unit due a meal eats the first food it carries, in id order, or loses health.
     /// Returns the units that starved to death.
     pub fn feed(&mut self) -> Vec<BotId> {
@@ -179,7 +188,8 @@ mod tests {
         rows[0] = "~.........";
         rows[9] = ".........r";
         let mut w = World::new(Map::from_text(&rows.join(" ")));
-        w.bases[0] = w.place_structure(A, Building::Base, Coord::new(5, 5));
+        let base = w.place_structure(A, Building::Base, Coord::new(5, 5));
+        w.structures.get_mut(&base).unwrap().work_left = 0;
         let worker = w.place_unit(A, Kind::Worker, Coord::new(3, 3));
         (w, worker)
     }

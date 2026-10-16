@@ -29,5 +29,10 @@ pub const WATER_RANGE: usize = 4;
 pub const FERTILE: u32 = 100;
 /// Ticks of rest that recover one point of fertility.
 pub const RECOVERY: u32 = 10;
+/// What a hit with bare hands does.
+pub const FIST: u32 = 3;
+/// Hit points one `build` restores to a damaged building: less than a sword's hit, so
+/// one repairer can't outlast an armed attacker.
+pub const REPAIR: u32 = 5;
 /// The vein tier bare hands gather.
 pub const HAND_TIER: u32 = 1;

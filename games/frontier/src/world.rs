@@ -5,11 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ucbc_engine::{ActionError, BotId, BotManager, TeamId};
 
-use crate::content::{Building, Item};
+use crate::content::{Building, Item, ItemDef};
 use crate::farm::{Planted, Soil};
 use crate::industry::{Job, Known};
 use crate::map::{Coord, Dir, Map};
-use crate::rules::{CARRY, FIRST_MEAL, HAND_TIER, HP, MESSAGE_BYTES, SAY_RANGE, SPAWN_COST};
+use crate::rules::{
+    CARRY, FIRST_MEAL, HAND_TIER, HP, MESSAGE_BYTES, REPAIR, SAY_RANGE, SPAWN_COST,
+};
 use crate::view::Kind;
 
 pub(crate) fn invalid(message: &str) -> ActionError {
@@ -45,13 +47,14 @@ impl Items {
         }
     }
 
+    /// The best of a stat among the items.
+    pub fn best(&self, stat: impl Fn(&ItemDef) -> Option<u32>) -> Option<u32> {
+        self.0.keys().filter_map(|i| stat(i.def())).max()
+    }
+
     /// The best tool tier among the items, or bare hands'.
     pub fn tool_tier(&self) -> u32 {
-        self.0
-            .keys()
-            .filter_map(|i| i.def().tool)
-            .max()
-            .unwrap_or(HAND_TIER)
+        self.best(|d| d.tool).unwrap_or(HAND_TIER)
     }
 
     pub fn covers(&self, cost: &BTreeMap<Item, u32>) -> bool {
@@ -133,6 +136,7 @@ pub struct Changes {
     pub removed: Vec<u64>,
     pub tiles: BTreeSet<Coord>,
     pub structures: BTreeSet<u64>,
+    pub demolished: Vec<u64>,
     pub piles: BTreeSet<Coord>,
     pub signs: BTreeSet<Coord>,
     pub crops: BTreeSet<Coord>,
@@ -160,7 +164,7 @@ pub struct World {
     /// Running jobs, by the tick they finish.
     pub jobs: BTreeSet<(u32, u64)>,
     /// Base structure ids, indexed by team id.
-    pub bases: [u64; 2],
+    pub bases: [Option<u64>; 2],
     pub said: Vec<Said>,
     pub heard: Vec<Said>,
     pub turn: Turn,
@@ -184,7 +188,7 @@ impl World {
             crops: BTreeMap::new(),
             known: [Known::start(), Known::start()],
             jobs: BTreeSet::new(),
-            bases: [0; 2],
+            bases: [None; 2],
             said: Vec::new(),
             heard: Vec::new(),
             turn: Turn::default(),
@@ -215,8 +219,9 @@ impl World {
         &self.known[team.0 as usize]
     }
 
-    pub fn base(&self, team: TeamId) -> &Structure {
-        &self.structures[&self.bases[team.0 as usize]]
+    /// The team's base, finished or not, unless it was destroyed.
+    pub fn base(&self, team: TeamId) -> Option<&Structure> {
+        self.bases[team.0 as usize].map(|id| &self.structures[&id])
     }
 
     pub fn place_unit(&mut self, team: TeamId, kind: Kind, at: Coord) -> BotId {
@@ -249,6 +254,9 @@ impl World {
             job: None,
         };
         self.structures.insert(id, s);
+        if kind == Building::Base {
+            self.bases[team.0 as usize] = Some(id);
+        }
         let i = self.idx(pos);
         self.structure_at[i] = id + 1;
         self.changes.structures.insert(id);
@@ -261,15 +269,20 @@ impl World {
         let i = self.idx(pos);
         self.unit_at[i] = 0;
         let carrying = std::mem::take(&mut self.bots[bot].carrying);
-        if carrying.total() > 0 {
-            let pile = self.piles.entry((pos.y, pos.x)).or_default();
-            for (item, n) in carrying.0 {
-                pile.add(item, n);
-            }
-            self.changes.piles.insert(pos);
-        }
+        self.drop_items(pos, carrying);
         self.changes.units.remove(&bot);
         self.changes.removed.push(bot.0);
+    }
+
+    /// Leaves `items` on the ground at `at`.
+    pub(crate) fn drop_items(&mut self, at: Coord, items: Items) {
+        if items.total() > 0 {
+            let pile = self.piles.entry((at.y, at.x)).or_default();
+            for (item, n) in items.0 {
+                pile.add(item, n);
+            }
+            self.changes.piles.insert(at);
+        }
     }
 
     /// Refused if the bot already used its action this step.
@@ -292,7 +305,12 @@ impl World {
         }
         let from = self.bots[bot].pos;
         let to = self.target(bot, dir)?;
-        if !self.free(to) {
+        let team = self.bots[bot].team();
+        let gate = self.structure_on(to).is_some_and(|id| {
+            let s = &self.structures[&id];
+            s.team == team && s.work_left == 0 && s.kind.def().gate
+        });
+        if !self.free(to) && !(gate && self.unit_on(to).is_none()) {
             return Err(invalid("blocked"));
         }
         let (a, b) = (self.idx(from), self.idx(to));
@@ -331,18 +349,21 @@ impl World {
     }
 
     /// What `put` and `take` reach on the tile in `dir`: a teammate, a finished storage
-    /// building of the team, or the ground.
-    fn holder(&self, bot: BotId, dir: Dir) -> Result<Holder, ActionError> {
+    /// building of the team (of either team, taking: that's theft), or the ground.
+    fn holder(&self, bot: BotId, dir: Dir, taking: bool) -> Result<Holder, ActionError> {
         let at = self.target(bot, dir)?;
         let team = self.bots[bot].team();
         match (self.unit_on(at), self.structure_on(at)) {
             (Some(other), _) if self.bots[other].team() == team => Ok(Holder::Unit(other)),
             (Some(_), _) => Err(invalid("that unit is on another team")),
+            // Things dropped on a gate lie on its ground.
+            (None, Some(id)) if self.structures[&id].kind.def().gate => Ok(Holder::Ground(at)),
             (None, Some(id)) => {
                 let s = &self.structures[&id];
                 match s.capacity() {
-                    Some(_) if s.team == team => Ok(Holder::Store(id)),
-                    _ => Err(invalid("not a storage building of your team")),
+                    Some(_) if s.team == team || taking => Ok(Holder::Store(id)),
+                    Some(_) => Err(invalid("not your team's storage")),
+                    None => Err(invalid("not a finished storage building")),
                 }
             }
             (None, None) if self.map.tile(at).walkable() => Ok(Holder::Ground(at)),
@@ -387,7 +408,7 @@ impl World {
     /// Moves up to `n` of `item` from the bot to the holder in `dir`; returns how many.
     pub fn put(&mut self, bot: BotId, dir: Dir, item: Item, n: u32) -> Result<u32, ActionError> {
         self.can_act()?;
-        let to = self.holder(bot, dir)?;
+        let to = self.holder(bot, dir, false)?;
         let n = n
             .min(self.bots[bot].carrying.count(item))
             .min(self.room(to));
@@ -405,7 +426,7 @@ impl World {
     /// Moves up to `n` of `item` from the holder in `dir` to the bot; returns how many.
     pub fn take(&mut self, bot: BotId, dir: Dir, item: Item, n: u32) -> Result<u32, ActionError> {
         self.can_act()?;
-        let from = self.holder(bot, dir)?;
+        let from = self.holder(bot, dir, true)?;
         let there = match from {
             Holder::Ground(at) => self.piles.get(&(at.y, at.x)).map_or(0, |p| p.count(item)),
             _ => self.held(from).count(item),
@@ -428,20 +449,31 @@ impl World {
         self.can_act()?;
         let at = self.target(bot, dir)?;
         let team = self.bots[bot].team();
-        if kind == Building::Base {
-            return Err(invalid("a base can't be built"));
-        }
         if let Some(id) = self.structure_on(at) {
             let s = &self.structures[&id];
-            if s.team != team || s.kind != kind || s.work_left == 0 {
+            let whole = s.work_left == 0 && s.hp == kind.def().hp;
+            if s.team != team || s.kind != kind || whole {
                 return Err(invalid("another building stands there"));
             }
+            // Work on the site, or repair the finished building.
             let s = self.structures.get_mut(&id).unwrap();
-            s.work_left -= 1;
+            if s.work_left > 0 {
+                s.work_left -= 1;
+            } else {
+                s.hp = (s.hp + REPAIR).min(kind.def().hp);
+            }
             let left = s.work_left;
             self.changes.structures.insert(id);
             self.turn.acted = true;
             return Ok(left);
+        }
+        if kind == Building::Base {
+            if self.bases[team.0 as usize].is_some() {
+                return Err(invalid("your team has a base"));
+            }
+            if self.bots[bot].kind != Kind::Commander {
+                return Err(invalid("only the commander builds a base"));
+            }
         }
         if !self.known(team).buildings.contains(&kind) {
             return Err(invalid("your team doesn't know that building"));
@@ -482,8 +514,9 @@ impl World {
         if self.bots[bot].kind != Kind::Commander {
             return Err(invalid("only a commander can spawn"));
         }
-        let base = self.base(team);
-        let (pos, base_id) = (base.pos, self.bases[team.0 as usize]);
+        let base = self.base(team).filter(|b| b.work_left == 0);
+        let base = base.ok_or_else(|| invalid("your team has no finished base"))?;
+        let (pos, base_id) = (base.pos, self.bases[team.0 as usize].unwrap());
         if self.bots[bot].pos.dist(pos) != 1 {
             return Err(invalid("the commander must stand next to the base"));
         }
@@ -588,7 +621,7 @@ mod tests {
              .....~",
         ));
         let base = w.place_structure(A, Building::Base, Coord::new(1, 1));
-        w.bases = [base, base];
+        w.structures.get_mut(&base).unwrap().work_left = 0;
         w.structures
             .get_mut(&base)
             .unwrap()
@@ -645,7 +678,7 @@ mod tests {
         next_step(&mut w);
         w.move_unit(worker, Dir::Down).unwrap();
         assert_eq!(w.put(worker, Dir::Left, Item::Wood, 5).unwrap(), 5);
-        assert_eq!(w.base(A).stored.count(Item::Wood), WOOD.1 + 5);
+        assert_eq!(w.base(A).unwrap().stored.count(Item::Wood), WOOD.1 + 5);
         // To a teammate, not to or from the other team.
         next_step(&mut w);
         w.move_unit(worker, Dir::Down).unwrap();
@@ -666,7 +699,7 @@ mod tests {
     fn buildings_cost_what_the_builder_carries_and_take_work_to_finish() {
         let (mut w, _, worker, enemy) = world();
         refused(w.build(worker, Dir::Down, Building::Chest), "not carrying");
-        refused(w.build(worker, Dir::Down, Building::Base), "can't be built");
+        refused(w.build(worker, Dir::Down, Building::Base), "has a base");
         w.bots[worker].carrying.add(Item::Wood, 12);
         assert_eq!(w.build(worker, Dir::Down, Building::Chest).unwrap(), 4);
         assert_eq!(w.bots[worker].carrying.count(Item::Wood), 2);
@@ -675,7 +708,7 @@ mod tests {
         next_step(&mut w);
         refused(
             w.put(worker, Dir::Down, Item::Wood, 1),
-            "not a storage building",
+            "not a finished storage building",
         );
         refused(w.move_unit(worker, Dir::Down), "blocked");
         for left in (0..4).rev() {
@@ -689,13 +722,14 @@ mod tests {
         );
         assert_eq!(w.put(worker, Dir::Down, Item::Wood, 2).unwrap(), 2);
         assert_eq!(w.structures[&chest].stored.count(Item::Wood), 2);
-        // Not the other team's to use.
+        // The other team can't store in it, but can steal from it.
         next_step(&mut w);
         w.move_unit(enemy, Dir::Left).unwrap();
         refused(
-            w.take(enemy, Dir::Left, Item::Wood, 1),
-            "not a storage building of your team",
+            w.put(enemy, Dir::Left, Item::Wood, 1),
+            "not your team's storage",
         );
+        assert_eq!(w.take(enemy, Dir::Left, Item::Wood, 1).unwrap(), 1);
     }
 
     #[test]
@@ -706,14 +740,17 @@ mod tests {
         let id = w.spawn(commander, 10).unwrap();
         assert_eq!(w.bots[BotId(id)].kind, Kind::Worker);
         assert!(w.bots[BotId(id)].pos.dist(Coord::new(1, 1)) == 1);
-        assert_eq!(w.base(A).stored.count(Item::Wood), WOOD.1 - SPAWN_COST.1);
+        assert_eq!(
+            w.base(A).unwrap().stored.count(Item::Wood),
+            WOOD.1 - SPAWN_COST.1
+        );
         next_step(&mut w);
         w.move_unit(commander, Dir::Down).unwrap();
         next_step(&mut w);
         refused(w.spawn(commander, 10), "next to the base");
         next_step(&mut w);
         w.move_unit(commander, Dir::Up).unwrap();
-        let base = w.bases[0];
+        let base = w.bases[0].unwrap();
         w.structures.get_mut(&base).unwrap().stored = Items::default();
         refused(w.spawn(commander, 10), "can't pay");
     }

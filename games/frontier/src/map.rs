@@ -118,6 +118,16 @@ fn noise(x: f64, y: f64, scale: f64, octaves: u32, salt: u64) -> f64 {
 }
 
 impl Map {
+    /// Grass everywhere.
+    pub fn flat(size: usize) -> Self {
+        let tiles = vec![Tile::Grass; size * size];
+        Self {
+            size,
+            left: vec![0; tiles.len()],
+            tiles,
+        }
+    }
+
     /// Mirrored left to right, so both halves, and the teams on them, are alike.
     pub fn generate(size: usize, seed: u64) -> Self {
         let scale = size as f64 / 6.0;

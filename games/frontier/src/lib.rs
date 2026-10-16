@@ -8,6 +8,7 @@ mod industry;
 mod map;
 pub mod rules;
 mod view;
+mod war;
 mod world;
 
 pub use config::Config;

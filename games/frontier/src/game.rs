@@ -12,7 +12,7 @@ use crate::content::{Building, Item, Recipe};
 use crate::industry::Learned;
 use crate::map::{Coord, Dir, Map};
 use crate::rules::START;
-use crate::view::{Kind, KnownView, Observation, Snapshot, Sown};
+use crate::view::{Hit, Kind, KnownView, Observation, Snapshot, Sown};
 use crate::world::{Turn, Unit, World};
 
 #[derive(Deserialize, JsonSchema)]
@@ -30,7 +30,8 @@ pub enum Queries {
 #[derive(Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// Move one tile onto walkable ground with nothing on it; returns where you are.
+    /// Move one tile onto walkable ground with nothing on it, or through your team's gate;
+    /// returns where you are.
     Move(Request<Heading, Coord>),
     /// Take one item from the tile in `dir`: wood from forest, stone from rock, ore and
     /// coal from veins. A tile runs out and turns to dirt.
@@ -38,11 +39,12 @@ pub enum Action {
     /// Hand items to a teammate, into your team's storage, or onto the ground; returns
     /// how many moved.
     Put(Request<Transfer, u32>),
-    /// Take items from a teammate, your team's storage, or the ground; returns how many
-    /// moved.
+    /// Take items from a teammate, storage of either team (the other team's is theft), or
+    /// the ground; returns how many moved.
     Take(Request<Transfer, u32>),
-    /// Place a building, paying its cost from what you carry, or work on your team's
-    /// unfinished one; returns the work it still needs.
+    /// Place a building your team knows, paying its cost from what you carry; work on your
+    /// team's unfinished one; or repair a damaged one a little. Returns the work it still
+    /// needs. Only the commander builds a base, and only once the old one is destroyed.
     Build(Request<Construct, u32>),
     /// Turn grass or dirt in `dir` into farmland.
     Till(Request<Heading, ()>),
@@ -61,6 +63,9 @@ pub enum Action {
     /// Spend an item you carry at a research building in `dir`; your team learns every
     /// recipe and building that uses it.
     Study(Request<Lesson, Learned>),
+    /// Hit what's on a tile next to you, or in range of your team's tower next to you:
+    /// a unit or building of the other team, or else a crop, which is destroyed.
+    Attack(Request<Coord, Hit>),
     /// Commander only, next to your base: a worker next to the base, paid from its
     /// storage. Returns its id.
     Spawn(Request<(), u64>),
@@ -143,7 +148,11 @@ impl Game for Frontier {
         }
         let config = Config::from(setup.game_config.as_ref())?;
         let size = config.size;
-        let mut map = Map::generate(size, setup.seed);
+        let mut map = if config.flat {
+            Map::flat(size)
+        } else {
+            Map::generate(size, setup.seed)
+        };
         let bases = [
             Coord::new(size / 4, size / 2),
             Coord::new(size - 1 - size / 4, size / 2),
@@ -152,7 +161,7 @@ impl Game for Frontier {
         let mut world = World::new(map);
         for team in [TeamId(0), TeamId(1)] {
             let id = world.place_structure(team, Building::Base, bases[team.0 as usize]);
-            world.bases[team.0 as usize] = id;
+            world.structures.get_mut(&id).unwrap().work_left = 0;
             for (item, n) in START {
                 world.structures.get_mut(&id).unwrap().stored.add(item, n);
             }
@@ -214,6 +223,15 @@ impl Game for Frontier {
             Action::Craft(a) => Ok(a.reply(w.craft(bot, a.dir, a.recipe)?)),
             Action::Operate(a) => Ok(a.reply(w.operate(bot, a.dir)?)),
             Action::Study(a) => Ok(a.reply(w.study(bot, a.dir, a.item)?)),
+            Action::Attack(a) => {
+                let (hit, killed) = w.attack(bot, *a)?;
+                if killed.is_some_and(|id| self.commanders.contains(&id)) {
+                    let winner = w.bots[bot].team();
+                    self.outcome =
+                        Some(Outcome::win(winner).with_detail("killed the other commander"));
+                }
+                Ok(a.reply(hit))
+            }
             Action::Spawn(a) => Ok(a.reply(w.spawn(bot, self.config.units)?)),
             Action::Say(a) => Ok(a.reply(w.say(bot, decode(&a.data)?)?)),
             Action::Mark(a) => Ok(a.reply(w.mark(bot, decode(&a.data)?)?)),

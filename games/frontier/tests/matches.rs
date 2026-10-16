@@ -91,7 +91,8 @@ fn observe_sees_a_square_clipped_to_the_map_with_flat_rows() {
         assert!(seen.units.chunks(6).any(|u| u == me));
         // The base, with its storage next to the commander.
         let base = &seen.buildings[..7];
-        assert_eq!(base[3..5], [seen.base.x as u64, seen.base.y as u64]);
+        let home = seen.base.unwrap();
+        assert_eq!(base[3..5], [home.x as u64, home.y as u64]);
         assert_eq!(seen.stores.len(), 1);
         let wood = seen.stores[0].stored.iter().find(|s| s.item == Item::Wood);
         assert_eq!(wood.unwrap().count, 50);
@@ -111,7 +112,7 @@ fn observe_sees_a_square_clipped_to_the_map_with_flat_rows() {
 fn bases_belong_to_teams_whichever_team_steps_first() {
     fn home(_: &mut StepCtx<'_>, seen: &Observation) -> StepResult {
         // Team 0's base is on the left, team 1's on the right.
-        assert_eq!(seen.base.x < 32, seen.me.team == 0);
+        assert_eq!(seen.base.unwrap().x < 32, seen.me.team == 0);
         StepResult::ok()
     }
     let replay = run(json!({"size": 64}), 2, 1, team("a", home), team("b", home)).unwrap();
@@ -316,4 +317,38 @@ fn known_lists_what_the_team_starts_knowing() {
         StepResult::ok()
     }
     run(json!({"size": 64}), 1, 1, team("a", ask), team("b", ask)).unwrap();
+}
+
+#[test]
+fn killing_the_commander_wins() {
+    fn hunt(ctx: &mut StepCtx<'_>, seen: &Observation) -> StepResult {
+        // Team 1's commander stands at (47, 33): walk below it, along a row that passes
+        // under team 0's commander, and hit it.
+        let act = match (seen.me.kind, seen.me.pos.y, seen.me.pos.x) {
+            (Kind::Commander, ..) if ctx.tick == 0 => json!({"type": "spawn"}),
+            (Kind::Commander, ..) => return StepResult::ok(),
+            (_, y, _) if y < 34 => json!({"type": "move", "dir": "down"}),
+            (_, _, x) if x < 47 => json!({"type": "move", "dir": "right"}),
+            _ => json!({"type": "attack", "x": 47, "y": 33}),
+        };
+        ctx.act(&act).unwrap();
+        StepResult::ok()
+    }
+    let config = json!({"size": 64, "flat": true});
+    let replay = run(config, 1, 200, team("a", hunt), team("b", idle)).unwrap();
+    let set = &replay.sets[0];
+    assert_eq!(set.result.winner_team, Some(TeamId(0)));
+    assert_eq!(set.result.detail, "killed the other commander");
+    // The commander dies to the 34th bare-handed hit, and the set ends with that step.
+    let last = set.ticks.last().unwrap().steps.last().unwrap();
+    assert_eq!(
+        (last.team, last.actions[0]["type"].as_str()),
+        (TeamId(0), Some("attack"))
+    );
+    let hits = set
+        .ticks
+        .iter()
+        .flat_map(|t| &t.steps)
+        .flat_map(|s| &s.actions);
+    assert_eq!(hits.filter(|a| a["type"] == "attack").count(), 34);
 }

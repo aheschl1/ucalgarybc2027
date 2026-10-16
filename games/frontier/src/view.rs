@@ -86,12 +86,24 @@ pub struct BuildingView {
     pub water: Option<usize>,
     pub research: bool,
     pub drill: Option<DrillDef>,
+    /// Its team walks through it.
+    pub gate: bool,
+    /// Units next to it attack within this range of it, and take half damage.
+    pub tower: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct KnownView {
     pub recipes: Vec<RecipeView>,
     pub buildings: Vec<BuildingView>,
+}
+
+/// What an `attack` did, and the health its target has left; 0 means it died or fell.
+/// A crop attacked is destroyed outright.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Hit {
+    pub damage: u32,
+    pub left: u32,
 }
 
 /// What `plant` sowed, and the tick it ripens.
@@ -120,8 +132,8 @@ pub struct Message {
 pub struct Observation {
     pub tick: u32,
     pub me: Me,
-    /// Your team's base.
-    pub base: Coord,
+    /// Your team's base, unless it was destroyed and isn't rebuilt yet.
+    pub base: Option<Coord>,
     /// Top-left tile of `tiles`.
     pub origin: Coord,
     pub width: usize,
@@ -171,6 +183,8 @@ pub struct Snapshot {
     /// `[x, y, tile]` for tiles that changed.
     pub tiles: Vec<u64>,
     pub buildings: Vec<u64>,
+    /// Buildings destroyed.
+    pub demolished: Vec<u64>,
     /// `[x, y, item, count]`. A tile's rows replace whatever was on it; a single row with
     /// a count of 0 means nothing is.
     pub piles: Vec<u64>,
@@ -303,7 +317,7 @@ impl World {
                 hp: unit.hp,
                 hungry_at: unit.hungry_at,
             },
-            base: self.base(team).pos,
+            base: self.base(team).filter(|b| b.work_left == 0).map(|b| b.pos),
             origin,
             width,
             height,
@@ -386,6 +400,7 @@ impl World {
                 .flat_map(|&at| [at.x as u64, at.y as u64, self.map.tile(at) as u64])
                 .collect(),
             buildings,
+            demolished: c.demolished.clone(),
             piles,
             crops,
             cleared,
@@ -418,6 +433,8 @@ impl World {
                 water: b.water,
                 research: b.research,
                 drill: b.drill.clone(),
+                gate: b.gate,
+                tower: b.tower,
             }
         });
         KnownView {

@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 4.
+competition and RL environment. Status: Phase 5.
 
 ## Principles
 
@@ -14,6 +14,8 @@ competition and RL environment. Status: Phase 4.
 
 ## World
 
+- `game_config`: `size`, `units` (the cap), `vision`, `keyframe`, and `flat` (grass but
+  for the starting areas, for learning on).
 - Grid up to 4096 x 4096 (1024 x 1024 is the target), generated from the seed and
   mirrored left to right: grass, forest, rock, water, coal, copper and iron veins. Each
   base gets a forest grove, rock, and a pond beside it. Resources are finite; a tile gathered
@@ -28,7 +30,7 @@ competition and RL environment. Status: Phase 4.
 - The commander spawns units on tiles next to the base, standing next to it, paid from
   the base's storage. The base has HP; while it's destroyed there's no spawning. Only
   the commander can rebuild it.
-- The commander dies: the team loses.
+- The commander is killed or starves: the team loses.
 - Unit ability comes from equipment (tools, weapons, armour), not unit types.
 - A unit eats from what it carries when its last meal runs out (an item's `food` is
   the ticks it feeds); with nothing to eat it loses 1 HP a tick and dies at 0. A
@@ -51,10 +53,12 @@ actions   move dir                one tile
           craft dir recipe        start a known recipe at a building from what it stores
           operate dir             work a drill: its rate of items from the tile under it
           study dir item          spend an item at a research building, learning what it unlocks
+          attack x y              hit a unit or building of the other team, or a crop, next
+                                  to you or in range of your tower next to you
           spawn                   commander, next to the base, paid from its storage
           say bytes               to teammates in range or on the radio network, next tick
           mark bytes              sign on your tile, readable by anyone who sees it
-later     attack
+later     traps
 ```
 
 Ids for items, buildings, and recipes are generated enums in the SDK. Their details are
@@ -105,8 +109,13 @@ tiers increase along each `upgrades` line, and there are no cycles.
   `operate`; a steam drill burns coal and reaches iron. Smelters, drills, and most
   recipes start unknown: a team learns one once it has studied every item it uses, so
   knowledge follows the materials it has found.
-- **War:** attack, steal from storage or units and carry it home, burn crops, wreck
-  buildings. Walls by material tier, manned towers, traps.
+- **War:** a hit does the attacker's best weapon (fists 3) less the target's best
+  armour, at least 1. A killed unit drops what it carried; a destroyed building spills
+  its storage. `take` reaches the other team's storage, so stealing is a walk there and
+  back. Attacking a crop destroys it. A unit next to its team's tower reaches the
+  tower's range and takes half damage. Gates let only their team through; walls come in
+  material tiers; `build` repairs a damaged building a little (less than a sword hit). A destroyed base stops spawning
+  until the commander rebuilds it. Traps come later.
 
 ## Winning
 

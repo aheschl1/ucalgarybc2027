@@ -43,6 +43,10 @@ seedless_until = 0
 
 def step(handle: FrontierHandle) -> None:
     seen = handle.observe()
+    if seen.base is None:
+        # Destroyed: this bot doesn't rebuild it.
+        return
+    base = (seen.base.x, seen.base.y)
     carried = {s.item: s.count for s in seen.me.carrying}
     food = sum(carried.get(f, 0) for f in FOOD)
     if seen.me.kind == Kind.COMMANDER:
@@ -56,9 +60,9 @@ def step(handle: FrontierHandle) -> None:
     full = sum(carried.values()) >= CARRY or (farmer and carried.get(Item.WHEAT, 0) >= 8 + PACKED)
     needs_seeds = farmer and not carried.get(Item.WHEAT_SEED) and seen.tick >= seedless_until
     if hungry or full or needs_seeds:
-        home(handle, seen, tiles, me, carried, farmer)
+        home(handle, seen, tiles, me, base, carried, farmer)
     elif farmer:
-        farm(handle, seen, tiles, me, carried)
+        farm(handle, seen, tiles, me, base, carried)
     else:
         chop(handle, seen, tiles, me)
 
@@ -86,11 +90,11 @@ def home(
     seen: Observation,
     tiles: Tiles,
     me: Pos,
+    base: Pos,
     carried: dict[Item, int],
     farmer: bool,
 ) -> None:
     """Beside the base, unload one kind of item or take food or seeds; else head there."""
-    base = (seen.base.x, seen.base.y)
     keep = {Item.WHEAT: PACKED, Item.WHEAT_SEED: SEEDS if farmer else 0}
     if seen.stores:
         d = toward(seen, seen.stores[0].pos)
@@ -119,10 +123,15 @@ def home(
 
 
 def farm(
-    handle: FrontierHandle, seen: Observation, tiles: Tiles, me: Pos, carried: dict[Item, int]
+    handle: FrontierHandle,
+    seen: Observation,
+    tiles: Tiles,
+    me: Pos,
+    base: Pos,
+    carried: dict[Item, int],
 ) -> None:
     """Harvest what's ripe, plant empty farmland, till the rest of the field."""
-    bx, by = seen.base.x, seen.base.y
+    bx, by = base
     field = [(x, y) for y in range(by - 10, by - 1) for x in range(bx - 4, bx + 5)]
     growing = {(c.x, c.y): c.ripe_at for c in crops(seen)}
     ripe = [at for at in field if at in growing and growing[at] <= seen.tick]

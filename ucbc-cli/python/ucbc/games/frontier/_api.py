@@ -12,12 +12,14 @@ from ucbc.handle import Handle
 class Building(str, Enum):
     BASE = "base"
     CHEST = "chest"
+    GATE = "gate"
     MECH_DRILL = "mech_drill"
     RADIO_TOWER = "radio_tower"
     RESEARCH_DESK = "research_desk"
     SMELTER = "smelter"
     STEAM_DRILL = "steam_drill"
     STONE_WALL = "stone_wall"
+    TOWER = "tower"
     WELL = "well"
     WOOD_WALL = "wood_wall"
     WORKBENCH = "workbench"
@@ -32,9 +34,13 @@ class BuildingView:
     cost: list[Stack]
     work: int
     research: bool
+    gate: bool
+    """Its team walks through it."""
     drill: DrillDef | None
     radio: int | None
     storage: int | None
+    tower: int | None
+    """Units next to it attack within this range of it, and take half damage."""
     upgrades: Building | None
     water: int | None
 
@@ -46,9 +52,11 @@ class BuildingView:
             cost=[Stack._from(v) for v in d["cost"]],
             work=d["work"],
             research=d["research"],
+            gate=d["gate"],
             drill=None if (_drill := d.get("drill")) is None else DrillDef._from(_drill),
             radio=d.get("radio"),
             storage=d.get("storage"),
+            tower=d.get("tower"),
             upgrades=None if (_upgrades := d.get("upgrades")) is None else Building(_upgrades),
             water=d.get("water"),
         )
@@ -97,18 +105,38 @@ class DrillDef:
         )
 
 
+@dataclass(frozen=True)
+class Hit:
+    """What an `attack` did, and the health its target has left; 0 means it died or fell.
+    A crop attacked is destroyed outright."""
+
+    damage: int
+    left: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            damage=d["damage"],
+            left=d["left"],
+        )
+
+
 class Item(str, Enum):
     APPLE = "apple"
     APPLE_SEED = "apple_seed"
     CHARCOAL = "charcoal"
     COAL = "coal"
+    COPPER_ARMOUR = "copper_armour"
     COPPER_INGOT = "copper_ingot"
     COPPER_ORE = "copper_ore"
     COPPER_PICK = "copper_pick"
+    COPPER_SWORD = "copper_sword"
     GEAR = "gear"
+    IRON_ARMOUR = "iron_armour"
     IRON_INGOT = "iron_ingot"
     IRON_ORE = "iron_ore"
     IRON_PICK = "iron_pick"
+    IRON_SWORD = "iron_sword"
     STONE = "stone"
     STONE_PICK = "stone_pick"
     WHEAT = "wheat"
@@ -207,8 +235,6 @@ class Observation:
 
     tick: int
     me: Me
-    base: Coord
-    """Your team's base."""
     origin: Coord
     """Top-left tile of `tiles`."""
     width: int
@@ -234,13 +260,14 @@ class Observation:
     """Your team's storage in the four directions next to you."""
     heard: list[Message]
     """What teammates said last tick that reached you."""
+    base: Coord | None
+    """Your team's base, unless it was destroyed and isn't rebuilt yet."""
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
         return cls(
             tick=d["tick"],
             me=Me._from(d["me"]),
-            base=Coord._from(d["base"]),
             origin=Coord._from(d["origin"]),
             width=d["width"],
             height=d["height"],
@@ -253,17 +280,22 @@ class Observation:
             signs=[Sign._from(v) for v in d["signs"]],
             stores=[Store._from(v) for v in d["stores"]],
             heard=[Message._from(v) for v in d["heard"]],
+            base=None if (_base := d.get("base")) is None else Coord._from(_base),
         )
 
 
 class Recipe(str, Enum):
     CHARCOAL = "charcoal"
+    COPPER_ARMOUR = "copper_armour"
     COPPER_INGOT = "copper_ingot"
     COPPER_INGOT_CHARCOAL = "copper_ingot_charcoal"
     COPPER_PICK = "copper_pick"
+    COPPER_SWORD = "copper_sword"
     GEAR = "gear"
+    IRON_ARMOUR = "iron_armour"
     IRON_INGOT = "iron_ingot"
     IRON_PICK = "iron_pick"
+    IRON_SWORD = "iron_sword"
     STONE_PICK = "stone_pick"
 
 
@@ -365,7 +397,8 @@ class FrontierApi(Handle):
         return KnownView._from(self._query({"type": "known"}))
 
     def move(self, dir: Dir) -> Coord:
-        """Move one tile onto walkable ground with nothing on it; returns where you are."""
+        """Move one tile onto walkable ground with nothing on it, or through your team's gate;
+        returns where you are."""
         return Coord._from(self._act({"type": "move", "dir": Dir(dir).value}))
 
     def gather(self, dir: Dir) -> Item:
@@ -380,14 +413,15 @@ class FrontierApi(Handle):
         return reply
 
     def take(self, dir: Dir, item: Item, count: int) -> int:
-        """Take items from a teammate, your team's storage, or the ground; returns how many
-        moved."""
+        """Take items from a teammate, storage of either team (the other team's is theft), or
+        the ground; returns how many moved."""
         reply: int = self._act({"type": "take", "dir": Dir(dir).value, "item": Item(item).value, "count": count})
         return reply
 
     def build(self, dir: Dir, building: Building) -> int:
-        """Place a building, paying its cost from what you carry, or work on your team's
-        unfinished one; returns the work it still needs."""
+        """Place a building your team knows, paying its cost from what you carry; work on your
+        team's unfinished one; or repair a damaged one a little. Returns the work it still
+        needs. Only the commander builds a base, and only once the old one is destroyed."""
         reply: int = self._act({"type": "build", "dir": Dir(dir).value, "building": Building(building).value})
         return reply
 
@@ -422,6 +456,11 @@ class FrontierApi(Handle):
         """Spend an item you carry at a research building in `dir`; your team learns every
         recipe and building that uses it."""
         return Learned._from(self._act({"type": "study", "dir": Dir(dir).value, "item": Item(item).value}))
+
+    def attack(self, x: int, y: int) -> Hit:
+        """Hit what's on a tile next to you, or in range of your team's tower next to you:
+        a unit or building of the other team, or else a crop, which is destroyed."""
+        return Hit._from(self._act({"type": "attack", "x": x, "y": y}))
 
     def spawn(self) -> int:
         """Commander only, next to your base: a worker next to the base, paid from its

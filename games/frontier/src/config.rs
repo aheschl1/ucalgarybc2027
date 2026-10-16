@@ -1,5 +1,5 @@
 //! `game_config`, every field optional: `{"size": 1024, "units": 100, "vision": 16,
-//! "keyframe": 100}`.
+//! "keyframe": 100, "flat": false}`.
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -16,6 +16,8 @@ pub struct Config {
     pub vision: usize,
     /// A snapshot lists every unit once every `keyframe` ticks, and only changes between.
     pub keyframe: u32,
+    /// Grass everywhere but the bases' starting areas: a simple map to start learning on.
+    pub flat: bool,
 }
 
 impl Default for Config {
@@ -25,6 +27,7 @@ impl Default for Config {
             units: 100,
             vision: 16,
             keyframe: 100,
+            flat: false,
         }
     }
 }

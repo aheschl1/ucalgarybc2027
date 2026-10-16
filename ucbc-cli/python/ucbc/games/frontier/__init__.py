@@ -56,6 +56,8 @@ __all__ = [
 WALKABLE = frozenset((0, 1, 4, 8))
 """Tile bytes a unit can walk on: grass, forest, dirt, farmland."""
 
+FREE = bytes(t in WALKABLE for t in range(256))
+
 STEPS = {Dir.UP: (0, -1), Dir.DOWN: (0, 1), Dir.LEFT: (-1, 0), Dir.RIGHT: (1, 0)}
 
 KINDS = list(Kind)
@@ -166,7 +168,7 @@ class Walker:
         """Plans a shortest walk through the view, around units and buildings, to a tile
         marked in `goal` (indexed as the view's tiles); False if there's none."""
         w, h, ox, oy = tiles.width, tiles.height, tiles.origin.x, tiles.origin.y
-        free = bytearray(t in WALKABLE for t in tiles.data)
+        free = bytearray(tiles.data.translate(FREE))
         for rows, width in ((seen.units, 6), (seen.buildings, 7)):
             for i in range(0, len(rows), width):
                 free[(rows[i + 4] - oy) * w + rows[i + 3] - ox] = 0
@@ -192,12 +194,6 @@ class Walker:
                     prev[j] = i
                     queue.append(j)
         return False
-
-    def go(
-        self, handle: FrontierApi, seen: Observation, tiles: Tiles, me: Pos, goal: bytearray
-    ) -> bool:
-        """Keeps on the walk, or plans one to `goal` and starts it."""
-        return self.step(handle, me) or (self.plan(seen, tiles, me, goal) and self.step(handle, me))
 
 
 def beside(tiles: Tiles, targets: Iterable[Pos]) -> bytearray:

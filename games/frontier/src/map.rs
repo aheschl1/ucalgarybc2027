@@ -82,11 +82,11 @@ pub const RESOURCES: [(Tile, Item, u16, u32); 6] = [
     (Tile::Titanium, Item::Titanium, 10, 4),
 ];
 
-/// Titanium is the highest rock at least this far in from the side, as a share of the
-/// map's width: between the bases, a quarter of the way in. One tile for every this many
-/// tiles of the map's width, on each half.
+/// Titanium is the highest land at least this far in from the side, as a share of the
+/// map's width: between the bases, which are a quarter of the way in. This many tiles a
+/// half, whatever the map's size: enough for one Monument and the study that teaches it.
 const TITANIUM_BAND: f64 = 0.35;
-const TITANIUM_RARITY: usize = 32;
+const TITANIUM_TILES: usize = 4;
 
 pub struct Map {
     size: usize,
@@ -166,15 +166,21 @@ impl Map {
                 });
             }
         }
-        // A few seams, mirrored, that a team has to go out for.
+        // One seam, mirrored, that a team has to go out for. Any land but a vein will do,
+        // so a band without rock still gets it; the highest is nearly always rock.
         let band = (TITANIUM_BAND * size as f64) as usize;
-        let mut rock: Vec<(f64, usize, usize)> = (0..size)
+        let mut land: Vec<(f64, usize, usize)> = (0..size)
             .flat_map(|y| (band..size / 2).map(move |x| (x, y)))
-            .filter(|&(x, y)| tiles[y * size + x] == Tile::Rock)
+            .filter(|&(x, y)| {
+                matches!(
+                    tiles[y * size + x],
+                    Tile::Rock | Tile::Grass | Tile::Forest | Tile::Dirt
+                )
+            })
             .map(|(x, y)| (noise(x as f64, y as f64, scale, 5, seed), x, y))
             .collect();
-        rock.sort_by(|a, b| b.0.total_cmp(&a.0));
-        for &(_, x, y) in rock.iter().take(size / TITANIUM_RARITY) {
+        land.sort_by(|a, b| b.0.total_cmp(&a.0));
+        for &(_, x, y) in land.iter().take(TITANIUM_TILES) {
             tiles[y * size + x] = Tile::Titanium;
             tiles[y * size + size - 1 - x] = Tile::Titanium;
         }
@@ -327,7 +333,7 @@ mod tests {
         let titanium: Vec<usize> = (0..size * size)
             .filter(|&i| map.tiles[i] == Tile::Titanium)
             .collect();
-        assert_eq!(titanium.len(), 2 * size / TITANIUM_RARITY);
+        assert_eq!(titanium.len(), 2 * TITANIUM_TILES);
         let band = (TITANIUM_BAND * size as f64) as usize;
         assert!(
             titanium

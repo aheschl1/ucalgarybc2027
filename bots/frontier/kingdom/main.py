@@ -30,6 +30,7 @@ Pos = tuple[int, int]
 CARRY = 20
 GRASS, FOREST, ROCK, WATER, DIRT, COAL, COPPER, IRON, FARMLAND = range(9)
 FREE = bytes(t in (GRASS, FOREST, DIRT, FARMLAND) for t in range(256))
+DIGITS = b"01" + b"1" * 254
 DIGGABLE = bytes(t in (GRASS, FOREST, DIRT, FARMLAND, ROCK) for t in range(256))
 MASK = [bytes(tile) + b"\x01" + bytes(255 - tile) for tile in range(9)]
 WET = b"0" * WATER + b"1" + b"0" * (255 - WATER)
@@ -310,6 +311,14 @@ def grid(v: View, table: bytes = FREE) -> bytearray:
     return free
 
 
+def bits(cells: bytes | bytearray, w: int, h: int) -> int:
+    """A 0/1 byte per tile as one integer, a bit per tile, rows `w + 1` bits apart; the
+    spare bit ending each row keeps shifts from wrapping."""
+    text = cells.translate(DIGITS)
+    rows = b"0".join(text[y * w : (y + 1) * w] for y in range(h)) + b"0"
+    return int(rows[::-1], 2)
+
+
 def bfs(
     v: View,
     goal: bytes | bytearray,
@@ -320,61 +329,71 @@ def bfs(
 ) -> list[Pos] | None:
     """A shortest walk to a tile in `goal`, or beside one when `near`, within `reach` of
     here if given; failing that, to the reachable tile nearest `toward` if given. The
-    next step is last."""
-    free = grid(v, table)
-    w, n = v.w, len(free)
+    next step is last. The search spreads a whole ring of tiles at a time as bit masks."""
+    w, h = v.w, v.h
+    row = w + 1
     mx, my = v.me[0] - v.ox, v.me[1] - v.oy
+    left = bits(grid(v, table), w, h)
     if reach:
         x0, x1 = max(mx - reach, 0), min(mx + reach + 1, w)
-        y0, y1 = max(my - reach, 0), min(my + reach + 1, v.h)
-        free[: y0 * w] = bytes(y0 * w)
-        free[y1 * w :] = bytes(n - y1 * w)
-        for y in range(y0, y1):
-            free[y * w : y * w + x0] = bytes(x0)
-            free[y * w + x1 : (y + 1) * w] = bytes(w - x1)
-    start = my * w + mx
-    prev = [-1] * n
-    prev[start] = start
-    queue = [start]
-    end = -1
-    for i in queue:
-        x = i % w
-        if near:
-            hit = (
-                (x and goal[i - 1])
-                or (x + 1 < w and goal[i + 1])
-                or (i >= w and goal[i - w])
-                or (i + w < n and goal[i + w])
-            )
-        else:
-            hit = goal[i]
+        span = ((1 << (x1 - x0)) - 1) << x0
+        box = 0
+        for y in range(max(my - reach, 0), min(my + reach + 1, h)):
+            box |= span << (y * row)
+        left &= box
+    target = bits(goal, w, h)
+    if near:
+        target = target << 1 | target >> 1 | target << row | target >> row
+    start = 1 << (my * row + mx)
+    if target & start:
+        return []
+    left &= ~start
+    rings = [start]
+    ring = start
+    hit = 0
+    while ring:
+        ring = (ring << 1 | ring >> 1 | ring << row | ring >> row) & left
+        left ^= ring
+        rings.append(ring)
+        hit = ring & target
         if hit:
-            end = i
             break
-        if x and free[i - 1] and prev[i - 1] < 0:
-            prev[i - 1] = i
-            queue.append(i - 1)
-        if x + 1 < w and free[i + 1] and prev[i + 1] < 0:
-            prev[i + 1] = i
-            queue.append(i + 1)
-        j = i - w
-        if j >= 0 and free[j] and prev[j] < 0:
-            prev[j] = i
-            queue.append(j)
-        j = i + w
-        if j < n and free[j] and prev[j] < 0:
-            prev[j] = i
-            queue.append(j)
-    if end < 0:
+    if not hit:
         if toward is None:
             return None
-        tx, ty = toward[0] - v.ox, toward[1] - v.oy
-        end = min(queue, key=lambda i: max(abs(i % w - tx), abs(i // w - ty)))
+        seen = 0
+        for r in rings:
+            seen |= r
+        hit = nearest_bit(seen, row, h, toward[0] - v.ox, toward[1] - v.oy)
+        if not hit:
+            return None
+        k = next(k for k in range(len(rings)) if rings[k] & hit)
+        del rings[k + 1 :]
+    c = (hit & -hit).bit_length() - 1
     path = []
-    while end != start:
-        path.append((end % w + v.ox, end // w + v.oy))
-        end = prev[end]
+    for k in range(len(rings) - 2, -1, -1):
+        path.append((c % row + v.ox, c // row + v.oy))
+        prev = rings[k]
+        for nb in (c - 1, c + 1, c - row, c + row):
+            if nb >= 0 and prev >> nb & 1:
+                c = nb
+                break
     return path
+
+
+def nearest_bit(cells: int, row: int, h: int, tx: int, ty: int) -> int:
+    """The bit of the tile among `cells` nearest (tx, ty), searching out ring by ring."""
+    w = row - 1
+    tx, ty = min(max(tx, 0), w - 1), min(max(ty, 0), h - 1)
+    for r in range(max(w, h)):
+        for y in range(ty - r, ty + r + 1):
+            if not 0 <= y < h:
+                continue
+            xs = range(tx - r, tx + r + 1) if abs(y - ty) == r else (tx - r, tx + r)
+            for x in xs:
+                if 0 <= x < w and cells >> (y * row + x) & 1:
+                    return 1 << (y * row + x)
+    return 0
 
 
 def step_path(handle: FrontierHandle, v: View) -> bool:
@@ -859,7 +878,7 @@ def spawn(handle: FrontierHandle, v: View, stored: dict[Item, int]) -> None:
     farmland = len(v.seen.soil) // 3
     c = v.seen.crops
     trees = sum(1 for i in range(2, len(c), 4) if c[i] == 0)
-    fed = 10 + int(farmland * 0.7) + 5 * trees
+    fed = 8 + farmland // 2 + 4 * trees
     gap = 2 if mind.spawned < len(EARLY) else 12
     if mind.assigned and v.tick - mind.assigned[-1][2] < gap:
         return
@@ -885,7 +904,7 @@ def pick_role(pop: int) -> int:
     target = {
         FARMER: max(2, pop // 6 + 1),
         BUILDER: 2 if pop < 20 else 3,
-        WOODMAN: 3 if pop < 20 else 4,
+        WOODMAN: 3 if pop < 20 else 2 + pop // 8,
         MASON: 2 if pop < 30 else 3,
         SMITH: 1 if pop < 25 else 2,
         GUARD: 1 if pop < 12 else 3 if pop < 25 else 5,
@@ -1043,7 +1062,7 @@ def farm_forest(v: View) -> bytearray:
 
 def hoarder(handle: FrontierHandle, v: View) -> None:
     """Fills chests in the wild, unless the base runs short of wood."""
-    short = mind.stock.get(Item.WOOD, 0) < 100 and v.tick - mind.heard_at < 400
+    short = mind.stock.get(Item.WOOD, 0) < 100 and v.tick - mind.heard_at < 1500
     gather(handle, v, FOREST, Item.WOOD, not (short and dist(v.me, mind.base) <= 40))
 
 
@@ -1349,7 +1368,7 @@ def wanted(kind: int) -> list[Recipe]:
     if BUILDINGS[kind] == Building.SMELTER:
         out = [Recipe.COPPER_INGOT, Recipe.COPPER_INGOT_CHARCOAL] if copper < 40 else []
         out.append(Recipe.IRON_INGOT)
-        if s(Item.COPPER_ORE, 0) >= 2 and s(Item.CHARCOAL, 0) < 8 and s(Item.WOOD, 0) >= 60:
+        if s(Item.COPPER_ORE, 0) >= 2 and s(Item.CHARCOAL, 0) < 8 and s(Item.WOOD, 0) >= 150:
             out.append(Recipe.CHARCOAL)
         return out
     out = []

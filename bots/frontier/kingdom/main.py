@@ -199,6 +199,8 @@ class Mind:
         self.heard_at = -(10**6)
         self.base_total = 0
         self.unload = ""
+        self.carrying: dict[Item, int] = {}
+        self.target: tuple[Building, Pos] | None = None
         self.progress: dict[tuple[object, Pos], tuple[int, int]] = {}
         self.veins: dict[int, Pos] = {}
         self.explore: Pos | None = None
@@ -759,6 +761,8 @@ def needs_food(v: View) -> bool:
 
 
 def food_want(role: int) -> int:
+    if role == HOARDER:
+        return 9
     return 3 if role in (FARMER, BUILDER, SMITH, GUARD) else 6
 
 
@@ -801,7 +805,8 @@ def step(handle: FrontierHandle) -> None:
         scan_veins(v)
     if attack_adjacent(handle, v):
         return
-    if needs_food(v):
+    hauling = mind.role == BUILDER and v.load - v.food() >= 15
+    if needs_food(v) and not (hauling and v.seen.me.hungry_at - v.tick > 20):
         load = v.load - v.food()
         far = dist(v.me, mind.base) > HOARD_FROM
         if mind.role == HOARDER and load >= 10 and far and stash(handle, v):
@@ -1322,9 +1327,11 @@ def builder(handle: FrontierHandle, v: View) -> None:
         finish(handle, v, kind, p)
         return
     if fresh:
-        kind, p = (
-            fresh[0] if fresh[0][0] == Building.MONUMENT else fresh[mind.id % min(2, len(fresh))]
-        )
+        if fresh[0][0] == Building.MONUMENT:
+            mind.target = fresh[0]
+        elif mind.target not in fresh:
+            mind.target = fresh[mind.id % min(2, len(fresh))]
+        kind, p = mind.target
         place(handle, v, kind, p, sum(1 for k, _ in fresh if k == kind))
         return
     if repair and v.tick - mind.stock_at < 200:
@@ -1345,9 +1352,10 @@ def builder(handle: FrontierHandle, v: View) -> None:
 def place(handle: FrontierHandle, v: View, kind: Building, p: Pos, count: int) -> None:
     """Places `kind` at `p`, fetching the cost of up to `count` of them in one trip."""
     cost = COST[kind]
-    load = {i: min(n, CARRY) for i, n in cost.items()}
-    if kind == Building.MONUMENT:
-        load = {Item.WOOD: 20}
+    load, room = {}, CARRY
+    for item, n in cost.items():
+        load[item] = min(n, room)
+        room -= load[item]
     short = any(v.carried.get(i, 0) < n for i, n in load.items())
     per = max(1, sum(load.values()))
     more = {i: n * max(1, min(count, (CARRY - 4) // per)) for i, n in load.items()}
@@ -1421,8 +1429,9 @@ MADE = {
 
 
 def wanted(kind: int) -> list[Recipe]:
-    """What a workbench or smelter should make next, most wanted first."""
-    s = mind.stock.get
+    """What a workbench or smelter should make next, most wanted first, counting what the
+    smith carries as still in the base."""
+    s = plus(mind.stock, mind.carrying).get
     copper = s(Item.COPPER_INGOT, 0)
     if BUILDINGS[kind] == Building.SMELTER:
         out = [Recipe.COPPER_INGOT, Recipe.COPPER_INGOT_CHARCOAL] if copper < 40 else []
@@ -1464,6 +1473,7 @@ def smith(handle: FrontierHandle, v: View) -> None:
     """Studies what the team has found, and keeps the workbench and smelters busy."""
     known(handle, v, 200)
     infer_studied()
+    mind.carrying = v.carried
     desks = v.own(BUILDINGS.index(Building.RESEARCH_DESK))
     for item in STUDY:
         if item not in mind.studied and desks and (mind.stock.get(item) or v.carried.get(item)):

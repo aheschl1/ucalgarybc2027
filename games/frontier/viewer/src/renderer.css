@@ -167,3 +167,105 @@
   gap: 0.3rem;
 }
 
+
+.fr-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.3rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 6px;
+  background: var(--ucbc-panel);
+  color: var(--ucbc-fg);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.fr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.fr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 6px;
+  background: var(--ucbc-panel);
+  color: var(--ucbc-fg);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.fr-chip:hover {
+  border-color: var(--ucbc-muted);
+}
+
+.fr-chip.fr-on {
+  border-color: #e879f9;
+  box-shadow: inset 0 0 0 1px #e879f9;
+}
+
+/* A building's look on the board, in a neutral colour, with its letter. */
+.fr-icon {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  border: 1px solid #111111;
+  border-radius: 2px;
+  background: #8b929c;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.fr-wall {
+  background: #4c5056;
+}
+
+.fr-store,
+.fr-trap {
+  border: 2px solid #8b929c;
+  background: #111111;
+}
+
+.fr-heart {
+  box-shadow: inset 0 0 0 3px #8b929c;
+  background: #ffffff;
+  color: #111111;
+}
+
+.fr-tower {
+  color: #111111;
+}
+
+.fr-count {
+  padding-left: 0.2rem;
+  border-left: 3px solid;
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-zero {
+  color: var(--ucbc-muted);
+}
+
+.fr-unit {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #111111;
+  background: var(--ucbc-team-0);
+}
+
+.fr-commander {
+  margin: 0 4px;
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px #111111;
+}

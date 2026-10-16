@@ -77,7 +77,7 @@ it("plays forward one delta at a time", () => {
   expect(w.tiles[2 * SIZE + 2]).toBe(4);
   expect([...w.piles]).toEqual([3 * SIZE]);
   w = t.worldAt(2);
-  expect(w.crops.get(SIZE + 1)).toBe(50);
+  expect(w.crops.get(SIZE + 1)).toEqual({ kind: "wheat", ripeAt: 50 });
   w = t.worldAt(4);
   expect(w.units.size).toBe(0);
   expect(w.crops.size).toBe(0);

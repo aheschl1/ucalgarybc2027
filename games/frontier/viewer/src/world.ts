@@ -25,6 +25,9 @@ export const BUILDINGS = [
   "workbench",
 ] as const satisfies readonly Building[];
 
+/** In id order, as content/crops.toml's crops sort. */
+export const CROPS = ["apple_tree", "wheat"] as const;
+
 // Every building is named: this fails to compile if one is missing.
 const _all: Exclude<Building, (typeof BUILDINGS)[number]> extends never ? true : never = true;
 
@@ -48,6 +51,11 @@ export interface Structure {
   workLeft: number;
 }
 
+export interface Crop {
+  kind: (typeof CROPS)[number];
+  ripeAt: number;
+}
+
 export interface World {
   size: number;
   vision: number;
@@ -60,8 +68,8 @@ export interface World {
   structures: Map<number, Structure>;
   /** Tiles with things on the ground, as `y * size + x`. */
   piles: Set<number>;
-  /** Crops by tile, `y * size + x`, and the tick each ripens. */
-  crops: Map<number, number>;
+  /** Crops by tile, `y * size + x`. */
+  crops: Map<number, Crop>;
   signs: Set<number>;
   /** Each team's points, as the tick limit would count them. */
   points: Points[];
@@ -108,7 +116,11 @@ function applyEntities(w: World, s: Snapshot) {
     piled.set(at, (piled.get(at) ?? 0) + count!);
   }
   for (const [at, count] of piled) (count > 0 ? w.piles.add(at) : w.piles.delete(at));
-  for (const [x, y, , ripeAt] of rows(s.crops, 4)) w.crops.set(y! * w.size + x!, ripeAt!);
+  for (const [x, y, crop, ripeAt] of rows(s.crops, 4)) {
+    const kind = CROPS[crop!];
+    if (!kind) throw new Error(`unknown crop ${crop}`);
+    w.crops.set(y! * w.size + x!, { kind, ripeAt: ripeAt! });
+  }
   for (const [x, y] of rows(s.cleared, 2)) w.crops.delete(y! * w.size + x!);
   for (const { pos, data } of s.signs) {
     const at = pos.y * w.size + pos.x;

@@ -3,11 +3,12 @@ import "./renderer.css";
 import { useFrame, useSelection, type GameRenderer } from "@ucbc/viewer";
 
 import type { Points } from "./api.gen.ts";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 
-import { Board, MARKS, TERRAIN } from "./board.tsx";
+import { Board, GLYPHS, MARKS, SHAPES, TERRAIN } from "./board.tsx";
 import { Keys, LineChart } from "./chart.tsx";
-import { timeline, type History, type World } from "./world.ts";
+import { matches, setFind, useFind } from "./find.ts";
+import { BUILDINGS, CROPS, timeline, type History, type World } from "./world.ts";
 
 const total = (p: Points | undefined) => (p ? p.buildings + p.stored + p.units : 0);
 const TEAM_LINE = ["var(--fr-team-0)", "var(--fr-team-1)"];
@@ -76,26 +77,109 @@ function Selected({ id, w }: { id: number; w: World }) {
   );
 }
 
-const LEGEND: [string, string][] = [
+const name = (id: string) => id.replace(/_/g, " ");
+
+/** A building or crop: its mark, name, and counts. Clicking searches for it, or clears
+ * the search if it already is. */
+function Chip({ id, query, mark, counts, title }: { id: string; query: string; mark: ReactNode; counts: ReactNode; title: string }) {
+  const on = matches(query, id);
+  return (
+    <button
+      type="button"
+      title={title}
+      className={`fr-chip${on ? " fr-on" : ""}`}
+      onClick={() => setFind(on && query.trim() === name(id) ? "" : name(id))}
+    >
+      {mark}
+      <span className="fr-chip-name">{name(id)}</span>
+      {counts}
+    </button>
+  );
+}
+
+/** Every kind of building and crop and how many there are, and a search that rings them
+ * on the map. */
+function Built({ w, names }: { w: World; names: string[] }) {
+  const query = useFind();
+  const structures = [...w.structures.values()];
+  const crops = [...w.crops.values()];
+  return (
+    <div className="fr-built">
+      <input
+        type="search"
+        className="fr-search"
+        placeholder="Find a building or crop"
+        value={query}
+        onChange={(e) => setFind(e.target.value)}
+      />
+      <div className="fr-chips">
+        {BUILDINGS.map((b) => {
+          const mine = [0, 1].map((t) => structures.filter((s) => s.team === t && s.building === b));
+          const done = mine.map((m) => m.filter((s) => s.workLeft === 0).length);
+          const title = names.map((n, t) => `${n}: ${done[t]} built, ${mine[t]!.length - done[t]!} being built`).join("\n");
+          return (
+            <Chip
+              key={b}
+              id={b}
+              query={query}
+              title={title}
+              mark={<span className={`fr-icon fr-${SHAPES[b]}`}>{GLYPHS[b]}</span>}
+              counts={done.map((n, t) => (
+                <span key={t} className={`fr-count${n ? "" : " fr-zero"}`} style={{ borderColor: `var(--ucbc-team-${t})` }}>
+                  {n}
+                </span>
+              ))}
+            />
+          );
+        })}
+        {CROPS.map((kind) => {
+          const all = crops.filter((c) => c.kind === kind);
+          const ripe = all.filter((c) => c.ripeAt <= w.tick).length;
+          return (
+            <Chip
+              key={kind}
+              id={kind}
+              query={query}
+              title={`${all.length - ripe} growing, ${ripe} ripe`}
+              mark={<span className="ucbc-swatch" style={{ background: MARKS.crop }} />}
+              counts={[all.length - ripe, ripe].map((n, i) => (
+                <span key={i} className={`fr-count${n ? "" : " fr-zero"}`} style={{ borderColor: i ? MARKS.ripe : MARKS.crop }}>
+                  {n}
+                </span>
+              ))}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const LEGEND: [string, string, string?][] = [
   ...TERRAIN,
   ["crop", MARKS.crop],
   ["ripe crop", MARKS.ripe],
-  ["things on the ground", MARKS.pile],
-  ["attacked this tick", MARKS.hit],
+  ["on the ground", MARKS.pile],
+  ["attacked", MARKS.hit],
+  ["found", "transparent", MARKS.found],
 ];
 
 function Legend() {
   return (
     <div className="fr-legend">
-      {LEGEND.map(([name, colour]) => (
-        <span key={name}>
-          <span className="ucbc-swatch" style={{ background: colour }} />
-          {name}
+      {LEGEND.map(([label, colour, ring]) => (
+        <span key={label}>
+          <span className="ucbc-swatch" style={{ background: colour, outline: ring && `2px solid ${ring}` }} />
+          {label}
         </span>
       ))}
       <span>
-        Units are small squares, buildings larger; a ringed unit is a commander, a white centre a
-        base, a dark square with a coloured edge a trap, which the other team can't see.
+        <span className="fr-unit" />
+        unit
+      </span>
+      <span>
+        <span className="fr-unit fr-commander" />
+        commander
       </span>
     </div>
   );
@@ -169,12 +253,14 @@ function Info() {
     <>
       <Counts w={w} />
       {selected == null ? null : <Selected id={selected} w={w} />}
-      <Progress history={t.history()} tick={w.tick} names={names} w={w} />
+      <Built w={w} names={names} />
       <Legend />
+      <Progress history={t.history()} tick={w.tick} names={names} w={w} />
     </>
   );
 }
 
 /** Draws the map with its units, buildings, crops, and things on the ground; counts each
- * team's points, units, and buildings; shows the selected unit and a legend. */
+ * team's points, units, and buildings, and each kind built; finds buildings and crops;
+ * shows the selected unit and a legend. */
 export const renderer: GameRenderer = { game: "frontier", Board, Info };

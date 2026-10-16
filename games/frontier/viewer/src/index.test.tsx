@@ -5,10 +5,14 @@ import { ViewerContext, type BotId, type Frame, type SetReplay } from "@ucbc/vie
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { setFind } from "./find.ts";
 import { renderer } from "./index.tsx";
 
 const { Board, Info } = renderer;
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  setFind("");
+});
 
 const SIZE = 8;
 const set: SetReplay = {
@@ -86,4 +90,18 @@ it("selects the unit clicked and shows it", () => {
     ["Health", "100 / 100"],
     ["Carrying", "4 of 20 items"],
   ]);
+});
+
+it("counts each kind built, and searches for one when it is clicked", () => {
+  const info = render(at(<Info />)).container;
+  const chip = (name: string) =>
+    [...info.querySelectorAll<HTMLButtonElement>(".fr-chip")].find((c) => c.querySelector(".fr-chip-name")?.textContent === name)!;
+  expect(chip("base").textContent).toBe("Bbase10");
+  expect(chip("chest").title).toBe("alpha: 0 built, 0 being built\nbeta: 0 built, 1 being built");
+
+  fireEvent.click(chip("chest"));
+  expect(info.querySelector<HTMLInputElement>(".fr-search")!.value).toBe("chest");
+  expect(chip("chest").className).toContain("fr-on");
+  fireEvent.click(chip("chest"));
+  expect(info.querySelector<HTMLInputElement>(".fr-search")!.value).toBe("");
 });

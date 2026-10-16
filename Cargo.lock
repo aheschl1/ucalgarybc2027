@@ -2009,7 +2009,19 @@ version = "0.1.11"
 dependencies = [
  "ucbc-2027",
  "ucbc-engine",
+ "ucbc-pacman",
  "ucbc-tictactoe",
+]
+
+[[package]]
+name = "ucbc-pacman"
+version = "0.1.11"
+dependencies = [
+ "base64",
+ "schemars",
+ "serde",
+ "serde_json",
+ "ucbc-engine",
 ]
 
 [[package]]

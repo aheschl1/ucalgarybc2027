@@ -12,6 +12,8 @@ pub fn registry() -> GameRegistry {
     registry.register::<ucbc_tictactoe::TicTacToe>();
     #[cfg(feature = "ucbc2027")]
     registry.register::<ucbc_2027::Ucbc2027>();
+    #[cfg(feature = "pacman")]
+    registry.register::<ucbc_pacman::Pacman>();
     registry
 }
 

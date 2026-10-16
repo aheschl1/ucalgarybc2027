@@ -9,14 +9,16 @@ description = "Every game the engine can be built with, and which ones a build i
 # the tests and for tooling that covers every game, like SDK and viewer-type generation.
 [features]
 default = ["ucbc2027"]
-all = ["tictactoe", "ucbc2027"]
+all = ["tictactoe", "ucbc2027", "pacman"]
 tictactoe = ["dep:ucbc-tictactoe"]
 ucbc2027 = ["dep:ucbc-2027"]
+pacman = ["dep:ucbc-pacman"]
 
 [dependencies]
 ucbc-engine = { workspace = true }
 ucbc-tictactoe = { path = "../games/tictactoe", optional = true }
 ucbc-2027 = { path = "../games/ucbc2027", optional = true }
+ucbc-pacman = { path = "../games/pacman", optional = true }
 
 [lints]
 workspace = true

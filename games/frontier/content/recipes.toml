@@ -1,0 +1,53 @@
+# Every recipe: made at a building of kind `at` from `in` (fuel included), giving `out`
+# `ticks` after it starts. Only `known` recipes are known at the start; a team learns
+# another once it has studied every item in `in`.
+
+[stone_pick]
+at = "workbench"
+in = { wood = 2, stone = 3 }
+out = { stone_pick = 1 }
+ticks = 10
+known = true
+
+[charcoal]
+at = "smelter"
+in = { wood = 4 }
+out = { charcoal = 2 }
+ticks = 20
+known = true
+
+[copper_ingot]
+at = "smelter"
+in = { copper_ore = 2, coal = 1 }
+out = { copper_ingot = 1 }
+ticks = 30
+
+[copper_ingot_charcoal]
+at = "smelter"
+in = { copper_ore = 2, charcoal = 2 }
+out = { copper_ingot = 1 }
+ticks = 30
+
+[copper_pick]
+at = "workbench"
+in = { wood = 2, copper_ingot = 3 }
+out = { copper_pick = 1 }
+ticks = 20
+
+[iron_ingot]
+at = "smelter"
+in = { iron_ore = 2, coal = 2 }
+out = { iron_ingot = 1 }
+ticks = 40
+
+[iron_pick]
+at = "workbench"
+in = { wood = 2, iron_ingot = 3 }
+out = { iron_pick = 1 }
+ticks = 30
+
+[gear]
+at = "workbench"
+in = { iron_ingot = 1 }
+out = { gear = 2 }
+ticks = 15

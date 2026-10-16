@@ -12,10 +12,46 @@ from ucbc.handle import Handle
 class Building(str, Enum):
     BASE = "base"
     CHEST = "chest"
+    MECH_DRILL = "mech_drill"
     RADIO_TOWER = "radio_tower"
+    RESEARCH_DESK = "research_desk"
+    SMELTER = "smelter"
+    STEAM_DRILL = "steam_drill"
     STONE_WALL = "stone_wall"
     WELL = "well"
     WOOD_WALL = "wood_wall"
+    WORKBENCH = "workbench"
+
+
+@dataclass(frozen=True)
+class BuildingView:
+    """A building's cost and what it does; behaviours it lacks are absent."""
+
+    building: Building
+    hp: int
+    cost: list[Stack]
+    work: int
+    research: bool
+    drill: DrillDef | None
+    radio: int | None
+    storage: int | None
+    upgrades: Building | None
+    water: int | None
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            building=Building(d["building"]),
+            hp=d["hp"],
+            cost=[Stack._from(v) for v in d["cost"]],
+            work=d["work"],
+            research=d["research"],
+            drill=None if (_drill := d.get("drill")) is None else DrillDef._from(_drill),
+            radio=d.get("radio"),
+            storage=d.get("storage"),
+            upgrades=None if (_upgrades := d.get("upgrades")) is None else Building(_upgrades),
+            water=d.get("water"),
+        )
 
 
 @dataclass(frozen=True)
@@ -43,21 +79,87 @@ class Dir(str, Enum):
     RIGHT = "right"
 
 
+@dataclass(frozen=True)
+class DrillDef:
+    rate: int
+    """Items one `operate` takes from the tile under it."""
+    tier: int
+    """The highest vein tier it reaches."""
+    burns: Item | None
+    """Burned from its storage, one per `operate`."""
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            rate=d["rate"],
+            tier=d["tier"],
+            burns=None if (_burns := d.get("burns")) is None else Item(_burns),
+        )
+
+
 class Item(str, Enum):
     APPLE = "apple"
     APPLE_SEED = "apple_seed"
+    CHARCOAL = "charcoal"
     COAL = "coal"
+    COPPER_INGOT = "copper_ingot"
     COPPER_ORE = "copper_ore"
+    COPPER_PICK = "copper_pick"
+    GEAR = "gear"
+    IRON_INGOT = "iron_ingot"
     IRON_ORE = "iron_ore"
+    IRON_PICK = "iron_pick"
     STONE = "stone"
+    STONE_PICK = "stone_pick"
     WHEAT = "wheat"
     WHEAT_SEED = "wheat_seed"
     WOOD = "wood"
 
 
+@dataclass(frozen=True)
+class JobView:
+    recipe: Recipe
+    done_at: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            recipe=Recipe(d["recipe"]),
+            done_at=d["done_at"],
+        )
+
+
 class Kind(str, Enum):
     COMMANDER = "commander"
     WORKER = "worker"
+
+
+@dataclass(frozen=True)
+class KnownView:
+    recipes: list[RecipeView]
+    buildings: list[BuildingView]
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            recipes=[RecipeView._from(v) for v in d["recipes"]],
+            buildings=[BuildingView._from(v) for v in d["buildings"]],
+        )
+
+
+@dataclass(frozen=True)
+class Learned:
+    """What a `study` taught the team."""
+
+    recipes: list[Recipe]
+    buildings: list[Building]
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            recipes=[Recipe(v) for v in d["recipes"]],
+            buildings=[Building(v) for v in d["buildings"]],
+        )
 
 
 @dataclass(frozen=True)
@@ -154,6 +256,37 @@ class Observation:
         )
 
 
+class Recipe(str, Enum):
+    CHARCOAL = "charcoal"
+    COPPER_INGOT = "copper_ingot"
+    COPPER_INGOT_CHARCOAL = "copper_ingot_charcoal"
+    COPPER_PICK = "copper_pick"
+    GEAR = "gear"
+    IRON_INGOT = "iron_ingot"
+    IRON_PICK = "iron_pick"
+    STONE_PICK = "stone_pick"
+
+
+@dataclass(frozen=True)
+class RecipeView:
+    recipe: Recipe
+    at: Building
+    """The building it's made at."""
+    inputs: list[Stack]
+    outputs: list[Stack]
+    ticks: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            recipe=Recipe(d["recipe"]),
+            at=Building(d["at"]),
+            inputs=[Stack._from(v) for v in d["inputs"]],
+            outputs=[Stack._from(v) for v in d["outputs"]],
+            ticks=d["ticks"],
+        )
+
+
 @dataclass(frozen=True)
 class Sign:
     """Bytes on a tile or over the radio, base64."""
@@ -205,6 +338,8 @@ class Store:
     id: int
     pos: Coord
     stored: list[Stack]
+    job: JobView | None
+    """The recipe running, and the tick it ends."""
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
@@ -212,6 +347,7 @@ class Store:
             id=d["id"],
             pos=Coord._from(d["pos"]),
             stored=[Stack._from(v) for v in d["stored"]],
+            job=None if (_job := d.get("job")) is None else JobView._from(_job),
         )
 
 
@@ -222,6 +358,11 @@ class FrontierApi(Handle):
         """What you see: tiles and what is on them within your vision, what you carry, the
         storage next to you, and what you heard."""
         return Observation._from(self._query({"type": "observe"}))
+
+    def known(self) -> KnownView:
+        """The recipes and buildings your team knows, in full. The rest are learned with
+        `study`."""
+        return KnownView._from(self._query({"type": "known"}))
 
     def move(self, dir: Dir) -> Coord:
         """Move one tile onto walkable ground with nothing on it; returns where you are."""
@@ -264,6 +405,23 @@ class FrontierApi(Handle):
         nothing grows on it."""
         reply: int = self._act({"type": "harvest", "dir": Dir(dir).value})
         return reply
+
+    def craft(self, dir: Dir, recipe: Recipe) -> int:
+        """Start a recipe your team knows at the building in `dir` that makes it, from what
+        it stores; the outputs appear in its storage when it ends. Returns that tick."""
+        reply: int = self._act({"type": "craft", "dir": Dir(dir).value, "recipe": Recipe(recipe).value})
+        return reply
+
+    def operate(self, dir: Dir) -> int:
+        """Work the drill in `dir`: what it digs from the tile under it goes to you, up to
+        its rate; a drill that burns fuel takes one from its storage. Returns how many."""
+        reply: int = self._act({"type": "operate", "dir": Dir(dir).value})
+        return reply
+
+    def study(self, dir: Dir, item: Item) -> Learned:
+        """Spend an item you carry at a research building in `dir`; your team learns every
+        recipe and building that uses it."""
+        return Learned._from(self._act({"type": "study", "dir": Dir(dir).value, "item": Item(item).value}))
 
     def spawn(self) -> int:
         """Commander only, next to your base: a worker next to the base, paid from its

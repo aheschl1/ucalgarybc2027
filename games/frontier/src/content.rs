@@ -20,6 +20,12 @@ impl Building {
     }
 }
 
+impl Recipe {
+    pub fn def(self) -> &'static RecipeDef {
+        &content().recipes[&self]
+    }
+}
+
 impl Crop {
     pub fn def(self) -> &'static CropDef {
         &content().crops[&self]
@@ -39,6 +45,31 @@ impl Crop {
 #[serde(deny_unknown_fields)]
 pub struct ItemDef {
     pub food: Option<u32>,
+    pub tool: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecipeDef {
+    pub at: Building,
+    #[serde(rename = "in")]
+    pub inputs: BTreeMap<Item, u32>,
+    #[serde(rename = "out")]
+    pub outputs: BTreeMap<Item, u32>,
+    pub ticks: u32,
+    #[serde(default)]
+    pub known: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, serde::Serialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DrillDef {
+    /// Items one `operate` takes from the tile under it.
+    pub rate: u32,
+    /// The highest vein tier it reaches.
+    pub tier: u32,
+    /// Burned from its storage, one per `operate`.
+    pub burns: Option<Item>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -66,12 +97,19 @@ pub struct BuildingDef {
     pub radio: Option<usize>,
     /// Range it waters farmland in.
     pub water: Option<usize>,
+    /// Units `study` items at it.
+    #[serde(default)]
+    pub research: bool,
+    pub drill: Option<DrillDef>,
+    #[serde(default)]
+    pub known: bool,
 }
 
 pub struct Content {
     pub items: BTreeMap<Item, ItemDef>,
     pub buildings: BTreeMap<Building, BuildingDef>,
     pub crops: BTreeMap<Crop, CropDef>,
+    pub recipes: BTreeMap<Recipe, RecipeDef>,
 }
 
 pub fn content() -> &'static Content {
@@ -81,12 +119,18 @@ pub fn content() -> &'static Content {
         buildings: toml::from_str(include_str!("../content/buildings.toml"))
             .expect("buildings.toml"),
         crops: toml::from_str(include_str!("../content/crops.toml")).expect("crops.toml"),
+        recipes: toml::from_str(include_str!("../content/recipes.toml")).expect("recipes.toml"),
     })
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
+    use crate::industry::Known;
+    use crate::map::RESOURCES;
+    use crate::rules::{HAND_TIER, START};
 
     /// Each `upgrades` line ends at a building that upgrades nothing, without a cycle.
     #[test]
@@ -115,6 +159,105 @@ mod tests {
             assert_eq!(Crop::from_seed(def.seed), Some(crop));
             assert!(!def.gives.is_empty(), "{crop:?}");
             assert!(def.seed.def().food.is_none(), "{crop:?}'s seed is food");
+        }
+    }
+
+    /// A team starting with nothing but its base reaches every item, recipe, and
+    /// building: it gathers what its best tool or a drill it can build reaches, grows its
+    /// seeds, crafts the recipes it knows at buildings it can build, and, once it can
+    /// build a research building, studies everything it has.
+    #[test]
+    fn a_team_reaches_everything() {
+        let c = content();
+        let mut known = Known::start();
+        let mut had: BTreeSet<Item> = START.map(|(item, _)| item).into_iter().collect();
+        loop {
+            let before = (had.len(), known.recipes.len(), known.buildings.len());
+            let buildable = |b: &Building| b.def().cost.keys().all(|i| had.contains(i));
+            let usable: Vec<&BuildingDef> = known
+                .buildings
+                .iter()
+                .filter(|b| buildable(b))
+                .map(|b| b.def())
+                .collect();
+            let tools = had.iter().filter_map(|i| i.def().tool);
+            let drills = usable
+                .iter()
+                .filter_map(|b| b.drill.as_ref().map(|d| d.tier));
+            let reach = tools.chain(drills).fold(HAND_TIER, u32::max);
+            let mut new: Vec<Item> = RESOURCES
+                .iter()
+                .filter(|r| r.3 <= reach)
+                .map(|r| r.1)
+                .collect();
+            new.extend(
+                c.crops
+                    .values()
+                    .filter(|crop| had.contains(&crop.seed))
+                    .flat_map(|crop| crop.gives.keys()),
+            );
+            for recipe in &known.recipes {
+                let r = recipe.def();
+                if known.buildings.contains(&r.at)
+                    && buildable(&r.at)
+                    && r.inputs.keys().all(|i| had.contains(i))
+                {
+                    new.extend(r.outputs.keys());
+                }
+            }
+            let research = usable.iter().any(|b| b.research);
+            had.extend(new);
+            if research {
+                for &item in &had {
+                    known.study(item);
+                }
+            }
+            if before == (had.len(), known.recipes.len(), known.buildings.len()) {
+                break;
+            }
+        }
+        let missing = |all: Vec<String>| all.is_empty();
+        let items: Vec<String> = c
+            .items
+            .keys()
+            .filter(|i| !had.contains(i))
+            .map(|i| format!("{i:?}"))
+            .collect();
+        let recipes: Vec<String> = c
+            .recipes
+            .keys()
+            .filter(|r| !known.recipes.contains(r))
+            .map(|r| format!("{r:?}"))
+            .collect();
+        let buildings: Vec<String> = c
+            .buildings
+            .keys()
+            .filter(|b| !known.buildings.contains(b))
+            .map(|b| format!("{b:?}"))
+            .collect();
+        assert!(
+            missing(items.clone()) && missing(recipes.clone()) && missing(buildings.clone()),
+            "never reached: {items:?} {recipes:?} {buildings:?}"
+        );
+    }
+
+    /// Recipes are made where things are stored, and drills that burn fuel can hold it.
+    #[test]
+    fn behaviours_have_what_they_need() {
+        let c = content();
+        for (recipe, def) in &c.recipes {
+            assert!(
+                def.at.def().storage.is_some(),
+                "{recipe:?} is made where nothing is stored"
+            );
+        }
+        for (building, def) in &c.buildings {
+            if def.drill.as_ref().is_some_and(|d| d.burns.is_some()) {
+                assert!(
+                    def.storage.is_some(),
+                    "{building:?} burns fuel it can't hold"
+                );
+            }
         }
     }
 }

@@ -295,3 +295,25 @@ fn a_starved_worker_leaves_the_set() {
     assert_eq!((steppers(299), steppers(300)), (4, 2));
     assert!(replay.sets[0].result.reason == Reason::Draw);
 }
+
+#[test]
+fn known_lists_what_the_team_starts_knowing() {
+    fn ask(ctx: &mut StepCtx<'_>, _: &Observation) -> StepResult {
+        let known = ctx.query(&json!({"type": "known"})).unwrap();
+        let recipes: Vec<&str> = known["recipes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["recipe"].as_str().unwrap())
+            .collect();
+        assert!(recipes.contains(&"stone_pick") && !recipes.contains(&"copper_ingot"));
+        let desk = known["buildings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|b| b["building"] == "research_desk");
+        assert_eq!(desk.unwrap()["research"], true);
+        StepResult::ok()
+    }
+    run(json!({"size": 64}), 1, 1, team("a", ask), team("b", ask)).unwrap();
+}

@@ -7,7 +7,12 @@ pub const CARRY: u32 = 20;
 /// What a spawn takes from the base's storage.
 pub const SPAWN_COST: (Item, u32) = (Item::Wood, 10);
 /// What a base starts with.
-pub const START: [(Item, u32); 3] = [(Item::Wood, 50), (Item::Wheat, 40), (Item::WheatSeed, 10)];
+pub const START: [(Item, u32); 4] = [
+    (Item::Wood, 50),
+    (Item::Wheat, 40),
+    (Item::WheatSeed, 10),
+    (Item::AppleSeed, 2),
+];
 /// How far a unit's own `say` reaches, without the radio network.
 pub const SAY_RANGE: usize = 12;
 /// Longest `say` or `mark`, in bytes.
@@ -24,3 +29,5 @@ pub const WATER_RANGE: usize = 4;
 pub const FERTILE: u32 = 100;
 /// Ticks of rest that recover one point of fertility.
 pub const RECOVERY: u32 = 10;
+/// The vein tier bare hands gather.
+pub const HAND_TIER: u32 = 1;

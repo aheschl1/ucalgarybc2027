@@ -61,18 +61,24 @@ impl Tile {
         )
     }
 
-    /// What gathering it gives, and how much a fresh tile holds.
-    fn resource(self) -> Option<(Item, u16)> {
-        match self {
-            Tile::Forest => Some((Item::Wood, 20)),
-            Tile::Rock => Some((Item::Stone, 30)),
-            Tile::Coal => Some((Item::Coal, 40)),
-            Tile::Copper => Some((Item::CopperOre, 40)),
-            Tile::Iron => Some((Item::IronOre, 40)),
-            _ => None,
-        }
+    /// What gathering it gives, how much a fresh tile holds, and the tool tier it needs.
+    fn resource(self) -> Option<(Item, u16, u32)> {
+        RESOURCES
+            .iter()
+            .find(|r| r.0 == self)
+            .map(|&(_, item, n, tier)| (item, n, tier))
     }
 }
+
+/// The tiles that give an item: the item, how much a fresh tile holds, and the tool tier
+/// gathering it needs.
+pub const RESOURCES: [(Tile, Item, u16, u32); 5] = [
+    (Tile::Forest, Item::Wood, 20, 1),
+    (Tile::Rock, Item::Stone, 30, 1),
+    (Tile::Coal, Item::Coal, 40, 1),
+    (Tile::Copper, Item::CopperOre, 40, 2),
+    (Tile::Iron, Item::IronOre, 40, 3),
+];
 
 pub struct Map {
     size: usize,
@@ -143,12 +149,13 @@ impl Map {
         }
         let left = tiles
             .iter()
-            .map(|t| t.resource().map_or(0, |(_, n)| n))
+            .map(|t| t.resource().map_or(0, |(_, n, _)| n))
             .collect();
         Self { size, tiles, left }
     }
 
-    /// A square map from rows of `.` grass, `f` forest, `r` rock, `~` water, `c` coal.
+    /// A square map from rows of `.` grass, `f` forest, `r` rock, `~` water, `c` coal,
+    /// `u` copper, `i` iron.
     #[cfg(test)]
     pub fn from_text(text: &str) -> Self {
         let tiles: Vec<Tile> = text
@@ -160,6 +167,8 @@ impl Map {
                 'r' => Tile::Rock,
                 '~' => Tile::Water,
                 'c' => Tile::Coal,
+                'u' => Tile::Copper,
+                'i' => Tile::Iron,
                 _ => panic!("unknown tile {c:?}"),
             })
             .collect();
@@ -167,7 +176,7 @@ impl Map {
         assert_eq!(size * size, tiles.len(), "not square");
         let left = tiles
             .iter()
-            .map(|t| t.resource().map_or(0, |(_, n)| n))
+            .map(|t| t.resource().map_or(0, |(_, n, _)| n))
             .collect();
         Self { size, tiles, left }
     }
@@ -205,15 +214,15 @@ impl Map {
         (to.x < self.size && to.y < self.size).then_some(to)
     }
 
-    /// What gathering the tile gives, if anything.
-    pub fn resource(&self, at: Coord) -> Option<Item> {
-        self.tile(at).resource().map(|(item, _)| item)
+    /// What gathering the tile gives, and the tool tier it needs.
+    pub fn resource(&self, at: Coord) -> Option<(Item, u32)> {
+        self.tile(at).resource().map(|(item, _, tier)| (item, tier))
     }
 
     /// Takes one item from the tile. A tile gathered out turns to dirt.
     pub fn gather(&mut self, at: Coord) -> Option<Item> {
         let i = at.y * self.size + at.x;
-        let (item, _) = self.tiles[i].resource()?;
+        let (item, ..) = self.tiles[i].resource()?;
         self.left[i] -= 1;
         if self.left[i] == 0 {
             self.tiles[i] = Tile::Dirt;
@@ -225,7 +234,7 @@ impl Map {
     fn paint(&mut self, x: usize, y: usize, tile: Tile) {
         for x in [x, self.size - 1 - x] {
             self.tiles[y * self.size + x] = tile;
-            self.left[y * self.size + x] = tile.resource().map_or(0, |(_, n)| n);
+            self.left[y * self.size + x] = tile.resource().map_or(0, |(_, n, _)| n);
         }
     }
 

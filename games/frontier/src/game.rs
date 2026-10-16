@@ -8,10 +8,11 @@ use ucbc_engine::{
 };
 
 use crate::config::Config;
-use crate::content::{Building, Item};
+use crate::content::{Building, Item, Recipe};
+use crate::industry::Learned;
 use crate::map::{Coord, Dir, Map};
 use crate::rules::START;
-use crate::view::{Kind, Observation, Snapshot, Sown};
+use crate::view::{Kind, KnownView, Observation, Snapshot, Sown};
 use crate::world::{Turn, Unit, World};
 
 #[derive(Deserialize, JsonSchema)]
@@ -20,6 +21,9 @@ pub enum Queries {
     /// What you see: tiles and what is on them within your vision, what you carry, the
     /// storage next to you, and what you heard.
     Observe(Request<(), Observation>),
+    /// The recipes and buildings your team knows, in full. The rest are learned with
+    /// `study`.
+    Known(Request<(), KnownView>),
 }
 
 /// Each step a unit may move once, take one other action (all but `say`), and `say` once.
@@ -48,6 +52,15 @@ pub enum Action {
     /// many items. Fertile soil gives more, and each harvest wears it; it recovers while
     /// nothing grows on it.
     Harvest(Request<Heading, u32>),
+    /// Start a recipe your team knows at the building in `dir` that makes it, from what
+    /// it stores; the outputs appear in its storage when it ends. Returns that tick.
+    Craft(Request<Order, u32>),
+    /// Work the drill in `dir`: what it digs from the tile under it goes to you, up to
+    /// its rate; a drill that burns fuel takes one from its storage. Returns how many.
+    Operate(Request<Heading, u32>),
+    /// Spend an item you carry at a research building in `dir`; your team learns every
+    /// recipe and building that uses it.
+    Study(Request<Lesson, Learned>),
     /// Commander only, next to your base: a worker next to the base, paid from its
     /// storage. Returns its id.
     Spawn(Request<(), u64>),
@@ -74,6 +87,18 @@ pub struct Transfer {
 pub struct Seed {
     pub dir: Dir,
     pub seed: Item,
+}
+
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+pub struct Order {
+    pub dir: Dir,
+    pub recipe: Recipe,
+}
+
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+pub struct Lesson {
+    pub dir: Dir,
+    pub item: Item,
 }
 
 #[derive(Clone, Copy, Deserialize, JsonSchema)]
@@ -163,6 +188,7 @@ impl Game for Frontier {
         w.changes = Default::default();
         w.heard = std::mem::take(&mut w.said);
         w.tick = self.ticks;
+        w.finish_jobs();
         self.ticks += 1;
         w.bots.ids()
     }
@@ -170,6 +196,7 @@ impl Game for Frontier {
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         match query {
             Queries::Observe(q) => Ok(q.reply(self.world.observe(bot, self.config.vision))),
+            Queries::Known(q) => Ok(q.reply(self.world.known_view(self.world.bots[bot].team()))),
         }
     }
 
@@ -184,6 +211,9 @@ impl Game for Frontier {
             Action::Till(a) => Ok(a.reply(w.till(bot, a.dir)?)),
             Action::Plant(a) => Ok(a.reply(w.plant(bot, a.dir, a.seed)?)),
             Action::Harvest(a) => Ok(a.reply(w.harvest(bot, a.dir)?)),
+            Action::Craft(a) => Ok(a.reply(w.craft(bot, a.dir, a.recipe)?)),
+            Action::Operate(a) => Ok(a.reply(w.operate(bot, a.dir)?)),
+            Action::Study(a) => Ok(a.reply(w.study(bot, a.dir, a.item)?)),
             Action::Spawn(a) => Ok(a.reply(w.spawn(bot, self.config.units)?)),
             Action::Say(a) => Ok(a.reply(w.say(bot, decode(&a.data)?)?)),
             Action::Mark(a) => Ok(a.reply(w.mark(bot, decode(&a.data)?)?)),

@@ -1,15 +1,17 @@
 //! What leaves the game: the `observe` reply and the replay snapshot. Units, buildings,
 //! and ground items go as flat integer rows, which a bot decodes only if it needs to.
 
+use std::collections::BTreeMap;
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use ucbc_engine::BotId;
+use ucbc_engine::{BotId, TeamId};
 
-use crate::content::{Crop, Item};
+use crate::content::{Building, Crop, DrillDef, Item, Recipe};
 use crate::map::{Coord, Dir};
-use crate::world::{Items, World};
+use crate::world::World;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -24,9 +26,8 @@ pub struct Stack {
     pub count: u32,
 }
 
-fn stacks(items: &Items) -> Vec<Stack> {
+fn stacks(items: &BTreeMap<Item, u32>) -> Vec<Stack> {
     items
-        .0
         .iter()
         .map(|(&item, &count)| Stack { item, count })
         .collect()
@@ -52,6 +53,45 @@ pub struct Store {
     pub id: u64,
     pub pos: Coord,
     pub stored: Vec<Stack>,
+    /// The recipe running, and the tick it ends.
+    pub job: Option<JobView>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct JobView {
+    pub recipe: Recipe,
+    pub done_at: u32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RecipeView {
+    pub recipe: Recipe,
+    /// The building it's made at.
+    pub at: Building,
+    pub inputs: Vec<Stack>,
+    pub outputs: Vec<Stack>,
+    pub ticks: u32,
+}
+
+/// A building's cost and what it does; behaviours it lacks are absent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct BuildingView {
+    pub building: Building,
+    pub upgrades: Option<Building>,
+    pub hp: u32,
+    pub cost: Vec<Stack>,
+    pub work: u32,
+    pub storage: Option<u32>,
+    pub radio: Option<usize>,
+    pub water: Option<usize>,
+    pub research: bool,
+    pub drill: Option<DrillDef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct KnownView {
+    pub recipes: Vec<RecipeView>,
+    pub buildings: Vec<BuildingView>,
 }
 
 /// What `plant` sowed, and the tick it ripens.
@@ -236,7 +276,11 @@ impl World {
             .map(|(id, s)| Store {
                 id,
                 pos: s.pos,
-                stored: stacks(&s.stored),
+                stored: stacks(&s.stored.0),
+                job: s.job.as_ref().map(|j| JobView {
+                    recipe: j.recipe,
+                    done_at: j.done_at,
+                }),
             })
             .collect();
         let heard = self
@@ -255,7 +299,7 @@ impl World {
                 team: team.0,
                 kind: unit.kind,
                 pos: me,
-                carrying: stacks(&unit.carrying),
+                carrying: stacks(&unit.carrying.0),
                 hp: unit.hp,
                 hungry_at: unit.hungry_at,
             },
@@ -346,6 +390,39 @@ impl World {
             crops,
             cleared,
             signs: sign_at.into_iter().map(|at| self.sign(at)).collect(),
+        }
+    }
+
+    pub fn known_view(&self, team: TeamId) -> KnownView {
+        let known = self.known(team);
+        let recipes = known.recipes.iter().map(|&recipe| {
+            let r = recipe.def();
+            RecipeView {
+                recipe,
+                at: r.at,
+                inputs: stacks(&r.inputs),
+                outputs: stacks(&r.outputs),
+                ticks: r.ticks,
+            }
+        });
+        let buildings = known.buildings.iter().map(|&building| {
+            let b = building.def();
+            BuildingView {
+                building,
+                upgrades: b.upgrades,
+                hp: b.hp,
+                cost: stacks(&b.cost),
+                work: b.work,
+                storage: b.storage,
+                radio: b.radio,
+                water: b.water,
+                research: b.research,
+                drill: b.drill.clone(),
+            }
+        });
+        KnownView {
+            recipes: recipes.collect(),
+            buildings: buildings.collect(),
         }
     }
 }

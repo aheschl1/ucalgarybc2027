@@ -15,6 +15,7 @@ from ucbc.games.frontier._api import (
     Item,
     Kind,
     Observation,
+    Recipe,
 )
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "Kind",
     "Observation",
     "PileRow",
+    "Recipe",
     "Tiles",
     "UnitRow",
     "buildings",

@@ -7,8 +7,9 @@ use ucbc_engine::{ActionError, BotId, BotManager, TeamId};
 
 use crate::content::{Building, Item};
 use crate::farm::{Planted, Soil};
+use crate::industry::{Job, Known};
 use crate::map::{Coord, Dir, Map};
-use crate::rules::{CARRY, FIRST_MEAL, HP, MESSAGE_BYTES, SAY_RANGE, SPAWN_COST};
+use crate::rules::{CARRY, FIRST_MEAL, HAND_TIER, HP, MESSAGE_BYTES, SAY_RANGE, SPAWN_COST};
 use crate::view::Kind;
 
 pub(crate) fn invalid(message: &str) -> ActionError {
@@ -44,6 +45,15 @@ impl Items {
         }
     }
 
+    /// The best tool tier among the items, or bare hands'.
+    pub fn tool_tier(&self) -> u32 {
+        self.0
+            .keys()
+            .filter_map(|i| i.def().tool)
+            .max()
+            .unwrap_or(HAND_TIER)
+    }
+
     pub fn covers(&self, cost: &BTreeMap<Item, u32>) -> bool {
         cost.iter().all(|(&item, &n)| self.count(item) >= n)
     }
@@ -66,9 +76,19 @@ pub struct Structure {
     pub hp: u32,
     pub work_left: u32,
     pub stored: Items,
+    pub job: Option<Job>,
 }
 
 impl Structure {
+    /// Room left in its storage, keeping room for what a running job will make.
+    pub fn room(&self) -> u32 {
+        let pending = self
+            .job
+            .as_ref()
+            .map_or(0, |j| j.recipe.def().outputs.values().sum());
+        self.capacity().unwrap_or(0) - self.stored.total() - pending
+    }
+
     pub fn capacity(&self) -> Option<u32> {
         (self.work_left == 0)
             .then_some(self.kind.def().storage)
@@ -135,6 +155,10 @@ pub struct World {
     /// Farmland, by (y, x).
     pub soil: BTreeMap<(usize, usize), Soil>,
     pub crops: BTreeMap<(usize, usize), Planted>,
+    /// What each team knows, indexed by team id.
+    pub known: [Known; 2],
+    /// Running jobs, by the tick they finish.
+    pub jobs: BTreeSet<(u32, u64)>,
     /// Base structure ids, indexed by team id.
     pub bases: [u64; 2],
     pub said: Vec<Said>,
@@ -158,6 +182,8 @@ impl World {
             signs: BTreeMap::new(),
             soil: BTreeMap::new(),
             crops: BTreeMap::new(),
+            known: [Known::start(), Known::start()],
+            jobs: BTreeSet::new(),
             bases: [0; 2],
             said: Vec::new(),
             heard: Vec::new(),
@@ -183,6 +209,10 @@ impl World {
         self.map.tile(at).walkable()
             && self.unit_on(at).is_none()
             && self.structure_on(at).is_none()
+    }
+
+    pub fn known(&self, team: TeamId) -> &Known {
+        &self.known[team.0 as usize]
     }
 
     pub fn base(&self, team: TeamId) -> &Structure {
@@ -216,6 +246,7 @@ impl World {
             hp: def.hp,
             work_left: def.work,
             stored,
+            job: None,
         };
         self.structures.insert(id, s);
         let i = self.idx(pos);
@@ -278,8 +309,15 @@ impl World {
         if self.bots[bot].carrying.total() >= CARRY {
             return Err(invalid("carrying all it can"));
         }
-        if self.structure_on(at).is_some() || self.map.resource(at).is_none() {
+        let Some((_, tier)) = self
+            .map
+            .resource(at)
+            .filter(|_| self.structure_on(at).is_none())
+        else {
             return Err(invalid("nothing to gather there"));
+        };
+        if tier > self.bots[bot].carrying.tool_tier() {
+            return Err(invalid("needs a better tool"));
         }
         let before = self.map.tile(at);
         let item = self.map.gather(at).expect("checked above");
@@ -341,10 +379,7 @@ impl World {
     fn room(&self, holder: Holder) -> u32 {
         match holder {
             Holder::Unit(id) => CARRY - self.bots[id].carrying.total(),
-            Holder::Store(id) => {
-                let s = &self.structures[&id];
-                s.capacity().unwrap() - s.stored.total()
-            }
+            Holder::Store(id) => self.structures[&id].room(),
             Holder::Ground(_) => u32::MAX,
         }
     }
@@ -408,11 +443,25 @@ impl World {
             self.turn.acted = true;
             return Ok(left);
         }
-        let cost = &kind.def().cost;
-        let farmland = self.map.tile(at) == crate::map::Tile::Farmland;
-        if !self.free(at) || farmland || self.piles.contains_key(&(at.y, at.x)) {
-            return Err(invalid("the tile isn't clear"));
+        if !self.known(team).buildings.contains(&kind) {
+            return Err(invalid("your team doesn't know that building"));
         }
+        let def = kind.def();
+        if let Some(drill) = &def.drill {
+            match self.map.resource(at) {
+                Some((_, tier)) if !self.map.tile(at).walkable() && tier <= drill.tier => {}
+                Some(_) if !self.map.tile(at).walkable() => {
+                    return Err(invalid("the drill can't reach that vein"));
+                }
+                _ => return Err(invalid("a drill stands on rock or a vein")),
+            }
+        } else {
+            let farmland = self.map.tile(at) == crate::map::Tile::Farmland;
+            if !self.free(at) || farmland || self.piles.contains_key(&(at.y, at.x)) {
+                return Err(invalid("the tile isn't clear"));
+            }
+        }
+        let cost = &def.cost;
         if !self.bots[bot].carrying.covers(cost) {
             return Err(invalid("not carrying what it costs"));
         }

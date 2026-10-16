@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 3.
+competition and RL environment. Status: Phase 4.
 
 ## Principles
 
@@ -42,15 +42,19 @@ the four neighbours.
 ```text
 queries   observe                 tiles in vision as bytes; units, buildings, ground items as
                                   flat integer rows; signs; adjacent storage; what was heard
+          known                   the team's recipes and buildings, in full
 actions   move dir                one tile
           gather dir              one item from forest, rock, or a vein
           put | take dir item n   to/from a teammate, the team's storage, or the ground
           build dir building      place (paying the cost carried) or work on a site
           till | plant | harvest  farmland from grass or dirt; seeds near water; ripe crops
+          craft dir recipe        start a known recipe at a building from what it stores
+          operate dir             work a drill: its rate of items from the tile under it
+          study dir item          spend an item at a research building, learning what it unlocks
           spawn                   commander, next to the base, paid from its storage
           say bytes               to teammates in range or on the radio network, next tick
           mark bytes              sign on your tile, readable by anyone who sees it
-later     known, use, attack
+later     attack
 ```
 
 Ids for items, buildings, and recipes are generated enums in the SDK. Their details are
@@ -94,9 +98,13 @@ tiers increase along each `upgrades` line, and there are no cycles.
   scales with fertility, which a harvest wears and rest recovers (fertilizer from
   industry later). Wheat ripens fast and wears the soil; apple trees take 600 ticks,
   then regrow fruit forever.
-- **Industry:** tool tier limits ore tier. Ore, smelted with fuel, makes ingots; a
-  workshop makes parts, tools, weapons, armour; drills tier from mechanical to steam to
-  powered.
+- **Industry:** recipes are data (`content/recipes.toml`); fuel is an input like any
+  other. The best tool a unit carries limits the veins it gathers: hands take coal,
+  copper needs a stone pick, iron a copper pick. A craft at a workbench or smelter runs
+  as a batch from its storage. A drill stands on rock or a vein and digs its rate per
+  `operate`; a steam drill burns coal and reaches iron. Smelters, drills, and most
+  recipes start unknown: a team learns one once it has studied every item it uses, so
+  knowledge follows the materials it has found.
 - **War:** attack, steal from storage or units and carry it home, burn crops, wreck
   buildings. Walls by material tier, manned towers, traps.
 

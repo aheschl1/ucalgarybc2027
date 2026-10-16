@@ -1,4 +1,4 @@
-//! Generates the `Item`, `Building`, and `Crop` enums from the content files' keys, so ids are
+//! Generates the `Item`, `Building`, `Crop`, and `Recipe` enums from the content files' keys, so ids are
 //! types in Rust and in the generated SDK while their details stay data. Variants are in
 //! alphabetical order, whatever the file's: observations send a variant as its position.
 
@@ -38,5 +38,6 @@ fn main() {
     enum_of(&mut out, "Item", &variants("content/items.toml"));
     enum_of(&mut out, "Building", &variants("content/buildings.toml"));
     enum_of(&mut out, "Crop", &variants("content/crops.toml"));
+    enum_of(&mut out, "Recipe", &variants("content/recipes.toml"));
     fs::write(format!("{}/ids.rs", env::var("OUT_DIR").unwrap()), out).unwrap();
 }

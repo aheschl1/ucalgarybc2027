@@ -470,7 +470,7 @@ impl World {
     fn touched(&mut self, holder: Holder) {
         match holder {
             Holder::Unit(id) => drop(self.changes.units.insert(id)),
-            Holder::Store(_) | Holder::Site(_) => {}
+            Holder::Store(id) | Holder::Site(id) => drop(self.changes.structures.insert(id)),
             Holder::Ground(at) => {
                 if self
                     .piles
@@ -660,6 +660,7 @@ impl World {
             .unwrap()
             .stored
             .remove(item, n);
+        self.changes.structures.insert(base_id);
         self.turn.acted = true;
         let worker = self.place_unit(team, Kind::Worker, at);
         self.spring(worker);

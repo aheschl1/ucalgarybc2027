@@ -9,7 +9,7 @@ use ucbc_engine::{
     Bot, BotFailure, BotResourceLimit, EngineError, GameRegistry, MatchConfig, MatchRunner,
     MatchSpec, Reason, Replay, SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
 };
-use ucbc_frontier::{Frontier, Item, Kind, Observation, Snapshot};
+use ucbc_frontier::{Building, Frontier, Item, Kind, Observation, Snapshot};
 
 const LIMITS: BotResourceLimit = BotResourceLimit::new(500, 1 << 30);
 
@@ -140,11 +140,22 @@ fn snapshots_carry_the_map_once_then_deltas_and_keyframes() {
     assert!(s[0].keyframe);
     assert_eq!((s[0].units.len() / 7, s[0].buildings.len() / 7), (2, 2));
     assert!(s[1..].iter().all(|x| x.map.is_none()));
-    // After tick 0: only the new worker; the idle commander and the bases didn't change.
+    // The initial state lists what each base stores, and every building's storage.
+    let base = s[0].buildings[0];
+    let wood = |x: &Snapshot| {
+        x.stored
+            .chunks(3)
+            .find(|r| r[0] == base && r[1] == Item::Wood as u64)
+            .map(|r| r[2])
+    };
+    assert_eq!(map.storage[Building::Base as usize], 1000);
+    assert_eq!(wood(&s[0]), Some(50));
+    // After tick 0: only the new worker, and the base that paid for it, changed.
     assert!(!s[1].keyframe);
     assert_eq!(s[1].units.len() / 7, 1);
     assert_eq!(s[1].units[2], Kind::Worker as u64);
-    assert!(s[1].buildings.is_empty());
+    assert_eq!((s[1].buildings.len() / 7, s[1].buildings[0]), (1, base));
+    assert_eq!(wood(&s[1]), Some(40));
     // After four ticks: a keyframe of everything, at the cap of 3.
     assert!(s[4].keyframe);
     assert_eq!(s[4].units.len() / 7, 3 + 1);

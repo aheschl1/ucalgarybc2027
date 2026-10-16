@@ -15,9 +15,13 @@ function snap(tick: number, s: Partial<Snapshot> = {}): Snapshot {
     tick,
     keyframe: false,
     units: [],
+    carrying: [],
     removed: [],
     tiles: [],
     buildings: [],
+    stored: [],
+    owed: [],
+    jobs: [],
     demolished: [],
     piles: [],
     crops: [],
@@ -41,17 +45,28 @@ function set(snapshots: Snapshot[]): SetReplay {
 
 // Six ticks on a 4x4 map: a unit walks right and leaves; forest tiles are gathered out;
 // a pile of two kinds is taken from; a crop is planted and cleared; the base falls; a
-// sign goes up and comes down. Tick 3 is a keyframe.
+// sign goes up and comes down; the base stores wheat, then starts a job. Tick 3 is a
+// keyframe.
 const replay = set([
   snap(0, {
     keyframe: true,
-    map: { size: SIZE, vision: 2, tiles: btoa(String.fromCharCode(...new Uint8Array(SIZE * SIZE).fill(1))) },
+    map: { size: SIZE, vision: 2, tiles: btoa(String.fromCharCode(...new Uint8Array(SIZE * SIZE).fill(1))), storage: [] },
     units: [7, 0, 1, 0, 0, 100, 0],
     buildings: [3, 1, 0, 3, 3, 500, 0],
+    stored: [3, 17, 40],
   }),
-  snap(1, { units: [7, 0, 1, 1, 0, 100, 1], tiles: [2, 2, 4], piles: [0, 3, 13, 2, 0, 3, 19, 1] }),
-  snap(2, { piles: [0, 3, 19, 1], crops: [1, 1, 1, 50] }),
-  snap(3, { keyframe: true, units: [7, 0, 1, 2, 0, 90, 1], buildings: [3, 1, 0, 3, 3, 500, 0], piles: [0, 3, 19, 1], crops: [1, 1, 1, 50] }),
+  snap(1, { units: [7, 0, 1, 1, 0, 100, 1], carrying: [7, 19, 1], tiles: [2, 2, 4], piles: [0, 3, 13, 2, 0, 3, 19, 1] }),
+  snap(2, { piles: [0, 3, 19, 1], crops: [1, 1, 1, 50], buildings: [3, 1, 0, 3, 3, 500, 0], stored: [3, 17, 38], jobs: [3, 2, 60] }),
+  snap(3, {
+    keyframe: true,
+    units: [7, 0, 1, 2, 0, 90, 1],
+    carrying: [7, 19, 1],
+    buildings: [3, 1, 0, 3, 3, 500, 0],
+    stored: [3, 17, 38],
+    jobs: [3, 2, 60],
+    piles: [0, 3, 19, 1],
+    crops: [1, 1, 1, 50],
+  }),
   snap(4, { removed: [7], cleared: [1, 1], piles: [0, 3, 0, 0] }),
   snap(5, { demolished: [3], signs: [{ pos: { x: 1, y: 0 }, data: "aGk=" }] }),
   snap(6, { signs: [{ pos: { x: 1, y: 0 }, data: "" }], tiles: [0, 0, 4] }),
@@ -67,6 +82,8 @@ function summary(w: World) {
     piles: [...w.piles].sort(),
     crops: [...w.crops].sort(),
     signs: [...w.signs].sort(),
+    carrying: [...w.carrying],
+    contents: [...w.contents],
   });
 }
 
@@ -75,14 +92,19 @@ it("plays forward one delta at a time", () => {
   let w = t.worldAt(0);
   expect(w.units.get(7)).toMatchObject({ x: 0, commander: false });
   expect(w.structures.get(3)?.building).toBe("base");
+  expect(w.contents.get(3)).toEqual({ stored: [["wheat", 40]], owed: [], job: undefined });
+  expect(w.carrying.get(7)).toEqual([]);
   w = t.worldAt(1);
   expect(w.units.get(7)).toMatchObject({ x: 1, carried: 1 });
+  expect(w.carrying.get(7)).toEqual([["wood", 1]]);
   expect(w.tiles[2 * SIZE + 2]).toBe(4);
   expect([...w.piles]).toEqual([3 * SIZE]);
   w = t.worldAt(2);
   expect(w.crops.get(SIZE + 1)).toEqual({ kind: "wheat", ripeAt: 50 });
+  expect(w.contents.get(3)).toEqual({ stored: [["wheat", 38]], owed: [], job: { recipe: "copper_ingot", doneAt: 60 } });
   w = t.worldAt(4);
   expect(w.units.size).toBe(0);
+  expect(w.carrying.size).toBe(0);
   expect(w.crops.size).toBe(0);
   expect(w.piles.size).toBe(0);
   expect(w.structures.size).toBe(1);

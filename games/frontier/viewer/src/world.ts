@@ -4,7 +4,7 @@
 
 import type { SetReplay } from "@ucbc/viewer";
 
-import type { Building, Points, Snapshot } from "./api.gen.ts";
+import type { Building, Item, Points, Recipe, Snapshot } from "./api.gen.ts";
 
 /** In id order, as observations and snapshots index them. */
 export const BUILDINGS = [
@@ -25,11 +25,63 @@ export const BUILDINGS = [
   "workbench",
 ] as const satisfies readonly Building[];
 
+/** In id order. */
+export const ITEMS = [
+  "apple",
+  "apple_seed",
+  "charcoal",
+  "coal",
+  "copper_armour",
+  "copper_ingot",
+  "copper_ore",
+  "copper_pick",
+  "copper_sword",
+  "gear",
+  "iron_armour",
+  "iron_ingot",
+  "iron_ore",
+  "iron_pick",
+  "iron_sword",
+  "stone",
+  "stone_pick",
+  "wheat",
+  "wheat_seed",
+  "wood",
+] as const satisfies readonly Item[];
+
+/** In id order. */
+export const RECIPES = [
+  "charcoal",
+  "copper_armour",
+  "copper_ingot",
+  "copper_ingot_charcoal",
+  "copper_pick",
+  "copper_sword",
+  "gear",
+  "iron_armour",
+  "iron_ingot",
+  "iron_pick",
+  "iron_sword",
+  "stone_pick",
+] as const satisfies readonly Recipe[];
+
 /** In id order, as content/crops.toml's crops sort. */
 export const CROPS = ["apple_tree", "wheat"] as const;
 
-// Every building is named: this fails to compile if one is missing.
+// Every building, item, and recipe is named: these fail to compile if one is missing.
 const _all: Exclude<Building, (typeof BUILDINGS)[number]> extends never ? true : never = true;
+const _items: Exclude<Item, (typeof ITEMS)[number]> extends never ? true : never = true;
+const _recipes: Exclude<Recipe, (typeof RECIPES)[number]> extends never ? true : never = true;
+
+export type Stack = [Item, number];
+
+/** What a building holds. */
+export interface Contents {
+  stored: Stack[];
+  /** What a site still needs delivered. */
+  owed: Stack[];
+  job?: { recipe: Recipe; doneAt: number };
+}
 
 export interface Unit {
   id: number;
@@ -71,6 +123,12 @@ export interface World {
   /** Crops by tile, `y * size + x`. */
   crops: Map<number, Crop>;
   signs: Set<number>;
+  /** What each unit carries, by unit id; empty in replays from before it was recorded. */
+  carrying: Map<number, Stack[]>;
+  /** What each building holds, by building id. */
+  contents: Map<number, Contents>;
+  /** Each kind of building's storage, by building id order; 0 for none. */
+  storage: number[];
   /** Each team's points, as the tick limit would count them. */
   points: Points[];
 }
@@ -98,17 +156,32 @@ function applyEntities(w: World, s: Snapshot) {
     w.piles.clear();
     w.crops.clear();
     w.signs.clear();
+    w.carrying.clear();
+    w.contents.clear();
   }
   for (const [id, team, kind, x, y, hp, carried] of rows(s.units, 7)) {
     w.units.set(id!, { id: id!, team: team!, commander: kind === 0, x: x!, y: y!, hp: hp!, carried: carried! });
   }
-  for (const id of s.removed) w.units.delete(id);
+  const carrying = stacks(s.carrying);
+  for (const [id] of rows(s.units, 7)) w.carrying.set(id!, carrying.get(id!) ?? []);
+  for (const id of s.removed) {
+    w.units.delete(id);
+    w.carrying.delete(id);
+  }
   for (const [id, team, b, x, y, hp, workLeft] of rows(s.buildings, 7)) {
     const building = BUILDINGS[b!];
     if (!building) throw new Error(`unknown building ${b}`);
     w.structures.set(id!, { id: id!, team: team!, building, x: x!, y: y!, hp: hp!, workLeft: workLeft! });
   }
-  for (const id of s.demolished) w.structures.delete(id);
+  const [stored, owed] = [stacks(s.stored), stacks(s.owed)];
+  const jobs = new Map(rows(s.jobs ?? [], 3).map(([id, r, at]) => [id!, { recipe: RECIPES[r!]!, doneAt: at! }]));
+  for (const [id] of rows(s.buildings, 7)) {
+    w.contents.set(id!, { stored: stored.get(id!) ?? [], owed: owed.get(id!) ?? [], job: jobs.get(id!) });
+  }
+  for (const id of s.demolished) {
+    w.structures.delete(id);
+    w.contents.delete(id);
+  }
   // A tile's pile rows replace what was there; a count of 0 means nothing is.
   const piled = new Map<number, number>();
   for (const [x, y, , count] of rows(s.piles, 4)) {
@@ -129,6 +202,17 @@ function applyEntities(w: World, s: Snapshot) {
   }
   w.tick = s.tick;
   w.points = s.points;
+}
+
+/** `[holder, item, count]` rows by holder. Older replays have none. */
+function stacks(flat: number[] | undefined): Map<number, Stack[]> {
+  const out = new Map<number, Stack[]>();
+  for (const [holder, item, n] of rows(flat ?? [], 3)) {
+    const list = out.get(holder!) ?? [];
+    list.push([ITEMS[item!]!, n!]);
+    out.set(holder!, list);
+  }
+  return out;
 }
 
 function applyTiles(w: World, s: Snapshot) {
@@ -164,6 +248,9 @@ export class Timeline {
       piles: new Set(),
       crops: new Map(),
       signs: new Set(),
+      carrying: new Map(),
+      contents: new Map(),
+      storage: map.storage ?? [],
       points: [],
     };
     applyEntities(this.world, this.snapshots[0]!);

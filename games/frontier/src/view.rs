@@ -9,9 +9,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::{BotId, TeamId};
 
-use crate::content::{Building, Crop, DrillDef, Item, Recipe};
+use crate::content::{Building, Crop, DrillDef, Item, Recipe, content};
 use crate::map::{Coord, Dir};
-use crate::world::World;
+use crate::world::{Items, World};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -183,6 +183,8 @@ pub struct MapView {
     pub vision: usize,
     /// `size * size` tile bytes as in [`Observation::tiles`], base64.
     pub tiles: String,
+    /// Each kind of building's storage, in building id order; 0 for none.
+    pub storage: Vec<u32>,
 }
 
 /// The set after a tick, as a change from the one before; a keyframe lists every unit,
@@ -195,10 +197,18 @@ pub struct Snapshot {
     pub keyframe: bool,
     /// `[id, team, kind, x, y, hp, carried]`
     pub units: Vec<u64>,
+    /// `[unit, item, count]` for everything each unit in `units` carries.
+    pub carrying: Vec<u64>,
     pub removed: Vec<u64>,
     /// `[x, y, tile]` for tiles that changed.
     pub tiles: Vec<u64>,
     pub buildings: Vec<u64>,
+    /// `[building, item, count]` for everything each building in `buildings` stores.
+    pub stored: Vec<u64>,
+    /// `[building, item, count]` for what each site in `buildings` still needs delivered.
+    pub owed: Vec<u64>,
+    /// `[building, recipe, done_at]` for each building in `buildings` with a job running.
+    pub jobs: Vec<u64>,
     /// Buildings destroyed.
     pub demolished: Vec<u64>,
     /// `[x, y, item, count]`. A tile's rows replace whatever was on it; a single row with
@@ -212,6 +222,13 @@ pub struct Snapshot {
     pub signs: Vec<Sign>,
     /// Each team's points, as the tick limit would count them now.
     pub points: Vec<Points>,
+}
+
+/// `[holder, item, count]` for each kind of item in `items`.
+fn item_rows(holder: u64, items: &Items, out: &mut Vec<u64>) {
+    for (&item, &n) in &items.0 {
+        out.extend([holder, item as u64, u64::from(n)]);
+    }
 }
 
 impl World {
@@ -360,19 +377,27 @@ impl World {
         } else {
             c.units.iter().copied().collect()
         };
-        let mut units = Vec::new();
+        let (mut units, mut carrying) = (Vec::new(), Vec::new());
         for id in unit_ids {
             self.unit_row(id, &mut units);
-            units.push(u64::from(self.bots[id].carrying.total()));
+            let held = &self.bots[id].carrying;
+            units.push(u64::from(held.total()));
+            item_rows(id.0, held, &mut carrying);
         }
         let structure_ids: Vec<u64> = if keyframe {
             self.structures.keys().copied().collect()
         } else {
             c.structures.iter().copied().collect()
         };
-        let mut buildings = Vec::new();
+        let (mut buildings, mut stored, mut owed, mut jobs) = (vec![], vec![], vec![], vec![]);
         for id in structure_ids {
             self.structure_row(id, &mut buildings);
+            let s = &self.structures[&id];
+            item_rows(id, &s.stored, &mut stored);
+            item_rows(id, &s.owed, &mut owed);
+            if let Some(j) = &s.job {
+                jobs.extend([id, j.recipe as u64, u64::from(j.done_at)]);
+            }
         }
         let pile_at: Vec<Coord> = if keyframe {
             self.piles.keys().map(|&(y, x)| Coord::new(x, y)).collect()
@@ -411,9 +436,15 @@ impl World {
                 size: self.map.size(),
                 vision: self.vision,
                 tiles: BASE64.encode(self.map.bytes()),
+                storage: content()
+                    .buildings
+                    .values()
+                    .map(|b| b.storage.unwrap_or(0))
+                    .collect(),
             }),
             keyframe,
             units,
+            carrying,
             removed: c.removed.clone(),
             tiles: c
                 .tiles
@@ -421,6 +452,9 @@ impl World {
                 .flat_map(|&at| [at.x as u64, at.y as u64, self.map.tile(at) as u64])
                 .collect(),
             buildings,
+            stored,
+            owed,
+            jobs,
             demolished: c.demolished.clone(),
             piles,
             crops,

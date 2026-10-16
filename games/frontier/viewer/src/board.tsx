@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 
 import type { Action, Building } from "./api.gen.ts";
 import { found, useFind } from "./find.ts";
+import { picked } from "./store.ts";
 import { timeline, type World } from "./world.ts";
 
 /** Tile bytes' names and colours, in byte order. */
@@ -112,7 +113,14 @@ function terrain(w: World): Terrain | null {
 /** Draws `w`, keeping markers a few screen pixels wide however far the board is zoomed
  * out. `hits` are the tiles attacked in the frame's tick; buildings and crops matching
  * `query` are ringed, and other buildings faded. */
-function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits: Set<number>, query: string) {
+function draw(
+  canvas: HTMLCanvasElement,
+  w: World,
+  selected: number | null,
+  building: number | null,
+  hits: Set<number>,
+  query: string,
+) {
   const ctx = canvas.getContext("2d");
   const ground = terrain(w);
   if (!ctx || !ground) return;
@@ -234,15 +242,20 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
     ctx.lineWidth = width;
     ctx.stroke();
   }
+  const outline = (x: number, y: number, side: number) => {
+    for (const [colour, width] of [[OUTLINE, 4 * px], ["#ffffff", 2 * px]] as const) {
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = width;
+      ctx.strokeRect(x, y, side, side);
+    }
+  };
+  const s = building == null ? undefined : w.structures.get(building);
+  if (s) {
+    const side = Math.max(cell * 1.4, 11 * px);
+    outline((s.x + 0.5) * cell - side / 2, (s.y + 0.5) * cell - side / 2, side);
+  }
   const chosen = selected == null ? undefined : w.units.get(selected);
   if (chosen) {
-    const outline = (x: number, y: number, side: number) => {
-      for (const [colour, width] of [[OUTLINE, 4 * px], ["#ffffff", 2 * px]] as const) {
-        ctx.strokeStyle = colour;
-        ctx.lineWidth = width;
-        ctx.strokeRect(x, y, side, side);
-      }
-    };
     const r = w.vision;
     outline((chosen.x - r) * cell, (chosen.y - r) * cell, (2 * r + 1) * cell);
     const side = Math.max(cell, 8 * px);
@@ -251,12 +264,14 @@ function draw(canvas: HTMLCanvasElement, w: World, selected: number | null, hits
 }
 
 /** The map, drawn on a canvas, redrawn on each frame and zoom. Clicking a unit selects
- * it and outlines what it sees; clicking anywhere else clears the selection. Tiles
+ * it and outlines what it sees; clicking a building picks it; clicking anywhere else
+ * clears both. Tiles
  * attacked in the frame's tick are crossed in red, and what the search finds is ringed. */
 export function Board() {
   const { set, tick } = useFrame();
   const { selected, select } = useSelection();
   const query = useFind();
+  const building = picked.use();
   const canvas = useRef<HTMLCanvasElement>(null);
   const t = timeline(set);
   const index = tick ? set.ticks.indexOf(tick) + 1 : 0;
@@ -271,7 +286,7 @@ export function Board() {
     let pending = 0;
     const redraw = () => {
       cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(() => draw(c, t.worldAt(index), selected, hits, query));
+      pending = requestAnimationFrame(() => draw(c, t.worldAt(index), selected, building, hits, query));
     };
     redraw();
     // The viewer zooms the board's container with a transform.
@@ -281,7 +296,7 @@ export function Board() {
       cancelAnimationFrame(pending);
       zoom.disconnect();
     };
-  }, [t, index, selected, tick, w.size, query]);
+  }, [t, index, selected, building, tick, w.size, query]);
 
   return (
     <canvas
@@ -290,16 +305,21 @@ export function Board() {
       width={px}
       height={px}
       onClick={(e) => {
-        // The nearest unit to the click, within its tile or a few screen pixels.
+        // The nearest unit to the click, within its tile or a few screen pixels, or else
+        // the nearest building.
         const r = e.currentTarget.getBoundingClientRect();
         const x = ((e.clientX - r.left) / r.width) * w.size;
         const y = ((e.clientY - r.top) / r.height) * w.size;
         const reach = Math.max(0.75, (6 * w.size) / r.width);
-        const near = [...t.worldAt(index).units.values()]
-          .map((u) => ({ u, d: Math.max(Math.abs(u.x + 0.5 - x), Math.abs(u.y + 0.5 - y)) }))
-          .filter(({ d }) => d <= reach)
-          .sort((a, b) => a.d - b.d);
-        select(near[0]?.u.id ?? null);
+        const nearest = <T extends { x: number; y: number }>(all: Iterable<T>) =>
+          [...all]
+            .map((o) => ({ o, d: Math.max(Math.abs(o.x + 0.5 - x), Math.abs(o.y + 0.5 - y)) }))
+            .filter(({ d }) => d <= reach)
+            .sort((a, b) => a.d - b.d)[0]?.o;
+        const now = t.worldAt(index);
+        const unit = nearest(now.units.values());
+        select(unit?.id ?? null);
+        picked.set(unit ? null : (nearest(now.structures.values())?.id ?? null));
       }}
     />
   );

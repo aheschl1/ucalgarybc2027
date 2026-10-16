@@ -1,21 +1,11 @@
 // What the search box asks for, shared by the panel and the board.
 
-import { useSyncExternalStore } from "react";
-
+import { store } from "./store.ts";
 import { BUILDINGS, CROPS } from "./world.ts";
 
-let query = "";
-const listeners = new Set<() => void>();
-const subscribe = (l: () => void) => (listeners.add(l), () => listeners.delete(l));
-
-export function setFind(q: string) {
-  query = q;
-  for (const l of listeners) l();
-}
-
-export function useFind(): string {
-  return useSyncExternalStore(subscribe, () => query);
-}
+const query = store("");
+export const setFind = query.set;
+export const useFind = query.use;
 
 /** A building or crop id as people write it: `research_desk` is "research desk". */
 export const name = (id: string) => id.replace(/_/g, " ");

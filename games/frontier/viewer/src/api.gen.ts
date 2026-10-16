@@ -136,6 +136,10 @@ export interface FrontierApi {
 export interface Snapshot {
   buildings: number[];
   /**
+   * `[unit, item, count]` for everything each unit in `units` carries.
+   */
+  carrying: number[];
+  /**
    * `[x, y]` per tile whose crop is gone.
    */
   cleared: number[];
@@ -147,8 +151,16 @@ export interface Snapshot {
    * Buildings destroyed.
    */
   demolished: number[];
+  /**
+   * `[building, recipe, done_at]` for each building in `buildings` with a job running.
+   */
+  jobs: number[];
   keyframe: boolean;
   map?: MapView | null;
+  /**
+   * `[building, item, count]` for what each site in `buildings` still needs delivered.
+   */
+  owed: number[];
   /**
    * `[x, y, item, count]`. A tile's rows replace whatever was on it; a single row with
    * a count of 0 means nothing is.
@@ -163,6 +175,10 @@ export interface Snapshot {
    * An empty sign was taken down.
    */
   signs: Sign[];
+  /**
+   * `[building, item, count]` for everything each building in `buildings` stores.
+   */
+  stored: number[];
   tick: number;
   /**
    * `[x, y, tile]` for tiles that changed.
@@ -178,6 +194,10 @@ export interface Snapshot {
  */
 export interface MapView {
   size: number;
+  /**
+   * Each kind of building's storage, in building id order; 0 for none.
+   */
+  storage: number[];
   /**
    * `size * size` tile bytes as in [`Observation::tiles`], base64.
    */

@@ -8,7 +8,8 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { Board, GLYPHS, MARKS, SHAPES, TERRAIN } from "./board.tsx";
 import { Keys, LineChart } from "./chart.tsx";
 import { found, name, setFind, useFind } from "./find.ts";
-import { BUILDINGS, CROPS, timeline, type History, type World } from "./world.ts";
+import { picked } from "./store.ts";
+import { BUILDINGS, CROPS, timeline, type History, type Stack, type World } from "./world.ts";
 
 const total = (p: Points | undefined) => (p ? p.buildings + p.stored + p.units : 0);
 const TEAM_LINE = ["var(--fr-team-0)", "var(--fr-team-1)"];
@@ -54,26 +55,79 @@ function Counts({ w }: { w: World }) {
   );
 }
 
-function Selected({ id, w }: { id: number; w: World }) {
+/** Items as "12 wood, 3 stone", or "nothing". */
+function Stacks({ stacks }: { stacks: Stack[] }) {
+  if (!stacks.length) return <span className="ucbc-muted">nothing</span>;
+  return <>{stacks.map(([item, n]) => `${n} ${name(item)}`).join(", ")}</>;
+}
+
+/** A unit or building: a line saying what and where it is, then what it holds. */
+function Detail({ head, facts, rows }: { head: ReactNode; facts: string[]; rows: [string, ReactNode][] }) {
+  return (
+    <div className="fr-detail">
+      <div className="fr-detail-head">
+        {head}
+        <span className="ucbc-muted">{facts.join(" · ")}</span>
+      </div>
+      <table className="ucbc-table">
+        <tbody>
+          {rows.map(([k, v]) => (
+            <tr key={k}>
+              <th>{k}</th>
+              <td>{v}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Selected({ id, w, names }: { id: number; w: World; names: string[] }) {
   const u = w.units.get(id);
   if (!u) return <div className="ucbc-muted">{`Bot ${id} is not on the board: it died, or isn't spawned yet.`}</div>;
-  const rows: [string, string][] = [
-    ["Unit", u.commander ? "commander" : "worker"],
-    ["At", `${u.x}, ${u.y}`],
-    ["Health", `${u.hp} / 100`],
-    ["Carrying", `${u.carried} of 20 items`],
-  ];
+  const items = w.carrying.get(id) ?? [];
   return (
-    <table className="ucbc-table fr-detail">
-      <tbody>
-        {rows.map(([k, v]) => (
-          <tr key={k}>
-            <th>{k}</th>
-            <td>{v}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <Detail
+      head={
+        <>
+          <span className="fr-unit" style={{ background: `var(--ucbc-team-${u.team})` }} />
+          <strong>{u.commander ? "commander" : "worker"}</strong>
+        </>
+      }
+      facts={[names[u.team]!, `${u.x}, ${u.y}`, `${u.hp} HP`]}
+      rows={[
+        // Replays from before contents were recorded have only the count.
+        ["Carrying", <>{`${u.carried} of 20`}{items.length ? <>{": "}<Stacks stacks={items} /></> : null}</>],
+      ]}
+    />
+  );
+}
+
+function Picked({ id, w, names }: { id: number; w: World; names: string[] }) {
+  const s = w.structures.get(id);
+  if (!s) return <div className="ucbc-muted">That building is gone.</div>;
+  const held = w.contents.get(id) ?? { stored: [], owed: [] };
+  const room = w.storage[BUILDINGS.indexOf(s.building)] ?? 0;
+  const total = held.stored.reduce((n, [, c]) => n + c, 0);
+  const rows: [string, ReactNode][] = [];
+  if (s.workLeft > 0) rows.push(["Being built", <>{`${s.workLeft} work left; owed `}<Stacks stacks={held.owed} /></>]);
+  else if (room) rows.push(["Storage", <>{`${total} of ${room}: `}<Stacks stacks={held.stored} /></>]);
+  if (held.job) {
+    const left = held.job.doneAt - w.tick;
+    rows.push(["Making", `${name(held.job.recipe)}, ${left > 0 ? `ready in ${left} ticks` : "ready"}`]);
+  }
+  return (
+    <Detail
+      head={
+        <>
+          <span className={`fr-icon fr-${SHAPES[s.building]}`}>{GLYPHS[s.building]}</span>
+          <strong>{name(s.building)}</strong>
+        </>
+      }
+      facts={[names[s.team]!, `${s.x}, ${s.y}`, `${s.hp} HP`]}
+      rows={rows}
+    />
   );
 }
 
@@ -103,7 +157,10 @@ function Chip({ id, on, mark, counts, label }: { id: string; on: boolean; mark: 
 function Built({ w, names }: { w: World; names: string[] }) {
   const { set } = useFrame();
   const query = useFind();
-  useEffect(() => setFind(""), [set]);
+  useEffect(() => {
+    setFind("");
+    picked.set(null);
+  }, [set]);
   const kinds = found(query);
   // Per kind and team: finished, then being built.
   const built = new Map<string, [number, number][]>(BUILDINGS.map((b) => [b, [[0, 0], [0, 0]]]));
@@ -259,13 +316,14 @@ function Progress({ history, tick, names, w }: { history: History; tick: number;
 function Info() {
   const { set, tick } = useFrame();
   const { selected } = useSelection();
+  const building = picked.use();
   const names = useNames();
   const t = timeline(set);
   const w = t.worldAt(tick ? set.ticks.indexOf(tick) + 1 : 0);
   return (
     <>
       <Counts w={w} />
-      {selected == null ? null : <Selected id={selected} w={w} />}
+      {selected != null ? <Selected id={selected} w={w} names={names} /> : building != null ? <Picked id={building} w={w} names={names} /> : null}
       <Built w={w} names={names} />
       <Progress history={t.history()} tick={w.tick} names={names} w={w} />
       <Legend />

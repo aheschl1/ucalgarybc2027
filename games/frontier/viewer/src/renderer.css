@@ -8,9 +8,17 @@
   cursor: pointer;
 }
 
+.fr-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
 .fr-detail th {
   position: static;
-  width: 6rem;
+  width: 5.5rem;
 }
 
 .fr-legend {

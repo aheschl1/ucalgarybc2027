@@ -115,6 +115,7 @@ impl World {
         let done_at = self.tick + def.ticks;
         s.job = Some(Job { recipe, done_at });
         self.jobs.insert((done_at, id));
+        self.changes.structures.insert(id);
         self.turn.acted = true;
         Ok(done_at)
     }
@@ -128,6 +129,7 @@ impl World {
             for (&item, &n) in &job.recipe.def().outputs {
                 s.stored.add(item, n);
             }
+            self.changes.structures.insert(id);
         }
     }
 
@@ -152,6 +154,7 @@ impl World {
         }
         if let Some(fuel) = drill.burns {
             self.structures.get_mut(&id).unwrap().stored.remove(fuel, 1);
+            self.changes.structures.insert(id);
         }
         let before = self.map.tile(pos);
         let mut n = 0;

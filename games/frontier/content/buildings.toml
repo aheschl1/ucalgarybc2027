@@ -5,7 +5,7 @@
 hp = 500
 cost = {}
 work = 0
-storage = 200
+storage = 1000
 radio = 24
 
 [chest]
@@ -30,3 +30,9 @@ hp = 80
 cost = { wood = 20, stone = 10 }
 work = 10
 radio = 40
+
+[well]
+hp = 100
+cost = { stone = 10 }
+work = 5
+water = 4

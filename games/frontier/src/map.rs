@@ -50,11 +50,15 @@ pub enum Tile {
     Coal = 5,
     Copper = 6,
     Iron = 7,
+    Farmland = 8,
 }
 
 impl Tile {
     pub fn walkable(self) -> bool {
-        matches!(self, Tile::Grass | Tile::Forest | Tile::Dirt)
+        matches!(
+            self,
+            Tile::Grass | Tile::Forest | Tile::Dirt | Tile::Farmland
+        )
     }
 
     /// What gathering it gives, and how much a fresh tile holds.
@@ -176,6 +180,19 @@ impl Map {
         self.tiles[at.y * self.size + at.x]
     }
 
+    pub fn set(&mut self, at: Coord, tile: Tile) {
+        self.tiles[at.y * self.size + at.x] = tile;
+    }
+
+    /// Whether water lies within `range` of `at`.
+    pub fn water_near(&self, at: Coord, range: usize) -> bool {
+        let last = self.size - 1;
+        (at.y.saturating_sub(range)..=(at.y + range).min(last)).any(|y| {
+            (at.x.saturating_sub(range)..=(at.x + range).min(last))
+                .any(|x| self.tile(Coord::new(x, y)) == Tile::Water)
+        })
+    }
+
     /// The neighbouring tile, or None off the edge.
     pub fn step(&self, at: Coord, dir: Dir) -> Option<Coord> {
         let (x, y) = (at.x, at.y);
@@ -213,13 +230,15 @@ impl Map {
     }
 
     /// Readies the left half's base at `base`, and its mirror: clear ground around it,
-    /// a forest grove to its west, and rock to its south, whatever the noise made there.
+    /// a forest grove to its west, rock to its south, and a pond to its north, whatever
+    /// the noise made there.
     pub fn settle(&mut self, base: Coord) {
         let (x, y) = (base.x, base.y);
         for (xs, ys, tile) in [
             (x - 4..=x + 4, y - 4..=y + 4, Tile::Grass),
             (x - 9..=x - 5, y - 6..=y + 6, Tile::Forest),
             (x - 2..=x + 2, y + 5..=y + 7, Tile::Rock),
+            (x - 1..=x + 1, y - 7..=y - 5, Tile::Water),
         ] {
             for y in ys {
                 for x in xs.clone() {
@@ -295,6 +314,7 @@ mod tests {
                 }
             }
             assert!(forest && rock, "seed {seed}");
+            assert!(map.water_near(Coord::new(16, 28), 2), "seed {seed}");
         }
     }
 

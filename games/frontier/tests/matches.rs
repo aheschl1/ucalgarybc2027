@@ -9,7 +9,7 @@ use ucbc_engine::{
     Bot, BotFailure, BotResourceLimit, EngineError, GameRegistry, MatchConfig, MatchRunner,
     MatchSpec, Reason, Replay, SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
 };
-use ucbc_frontier::{Frontier, Kind, Observation, Snapshot};
+use ucbc_frontier::{Frontier, Item, Kind, Observation, Snapshot};
 
 const LIMITS: BotResourceLimit = BotResourceLimit::new(500, 1 << 30);
 
@@ -86,13 +86,15 @@ fn observe_sees_a_square_clipped_to_the_map_with_flat_rows() {
             0,
             x as u64,
             seen.me.pos.y as u64,
+            seen.me.hp.into(),
         ];
-        assert!(seen.units.chunks(5).any(|u| u == me));
+        assert!(seen.units.chunks(6).any(|u| u == me));
         // The base, with its storage next to the commander.
         let base = &seen.buildings[..7];
         assert_eq!(base[3..5], [seen.base.x as u64, seen.base.y as u64]);
         assert_eq!(seen.stores.len(), 1);
-        assert_eq!(seen.stores[0].stored[0].count, 50);
+        let wood = seen.stores[0].stored.iter().find(|s| s.item == Item::Wood);
+        assert_eq!(wood.unwrap().count, 50);
         StepResult::ok()
     }
     run(
@@ -135,16 +137,16 @@ fn snapshots_carry_the_map_once_then_deltas_and_keyframes() {
     let map = s[0].map.as_ref().unwrap();
     assert_eq!(BASE64.decode(&map.tiles).unwrap().len(), 64 * 64);
     assert!(s[0].keyframe);
-    assert_eq!((s[0].units.len() / 6, s[0].buildings.len() / 7), (2, 2));
+    assert_eq!((s[0].units.len() / 7, s[0].buildings.len() / 7), (2, 2));
     assert!(s[1..].iter().all(|x| x.map.is_none()));
     // After tick 0: only the new worker; the idle commander and the bases didn't change.
     assert!(!s[1].keyframe);
-    assert_eq!(s[1].units.len() / 6, 1);
+    assert_eq!(s[1].units.len() / 7, 1);
     assert_eq!(s[1].units[2], Kind::Worker as u64);
     assert!(s[1].buildings.is_empty());
     // After four ticks: a keyframe of everything, at the cap of 3.
     assert!(s[4].keyframe);
-    assert_eq!(s[4].units.len() / 6, 3 + 1);
+    assert_eq!(s[4].units.len() / 7, 3 + 1);
 }
 
 #[test]
@@ -212,9 +214,9 @@ fn a_failing_commander_loses_and_a_failing_worker_leaves_its_tile() {
     let s = snapshots(&replay, 0);
     // The worker spawned in tick 0 fails in tick 1, which frees its tile and its place
     // under the cap: tick 2 spawns another on the same tile.
-    let first = &s[1].units[..6];
+    let first = &s[1].units[..7];
     assert_eq!(s[2].removed, vec![first[0]]);
-    let second = &s[3].units[..6];
+    let second = &s[3].units[..7];
     assert_ne!(second[0], first[0]);
     assert_eq!(second[3..5], first[3..5]);
 }
@@ -230,4 +232,66 @@ fn rejects_bad_config() {
     assert!(bad(json!({"size": 10})).contains("outside 64..=4096"));
     assert!(bad(json!({"colour": "red"})).contains("unknown field"));
     assert!(bad(json!({"size": 64, "vision": 65})).contains("vision 65 is over size 64"));
+}
+
+#[test]
+fn a_team_whose_commander_starves_loses() {
+    fn eat(ctx: &mut StepCtx<'_>, seen: &Observation) -> StepResult {
+        // The commander starts below its base.
+        if seen.me.kind == Kind::Commander && seen.me.carrying.is_empty() {
+            ctx.act(&json!({"type": "take", "dir": "up", "item": "wheat", "count": 5}))
+                .unwrap();
+        }
+        StepResult::ok()
+    }
+    // First meal at tick 200, then 100 ticks losing a point of health each.
+    let replay = run(
+        json!({"size": 64}),
+        1,
+        400,
+        team("a", idle),
+        team("b", idle),
+    )
+    .unwrap();
+    let result = &replay.sets[0].result;
+    assert_eq!(result.reason, Reason::Draw);
+    assert_eq!(result.detail, "both commanders starved");
+    assert_eq!(result.ticks, 300);
+
+    let replay = run(json!({"size": 64}), 1, 400, team("a", eat), team("b", idle)).unwrap();
+    let result = &replay.sets[0].result;
+    assert_eq!(result.winner_team, Some(TeamId(0)));
+    assert_eq!(result.detail, "the other commander starved");
+}
+
+#[test]
+fn a_starved_worker_leaves_the_set() {
+    fn spawn_then_eat(ctx: &mut StepCtx<'_>, seen: &Observation) -> StepResult {
+        if seen.me.kind == Kind::Commander {
+            let act = match ctx.tick {
+                0 => json!({"type": "spawn"}),
+                _ if seen.me.carrying.is_empty() => {
+                    json!({"type": "take", "dir": "up", "item": "wheat", "count": 5})
+                }
+                _ => return StepResult::ok(),
+            };
+            ctx.act(&act).unwrap();
+        }
+        StepResult::ok()
+    }
+    let replay = run(
+        json!({"size": 64}),
+        1,
+        320,
+        team("a", spawn_then_eat),
+        team("b", spawn_then_eat),
+    )
+    .unwrap();
+    let s = snapshots(&replay, 0);
+    let workers: Vec<u64> = s[1].units.chunks(7).map(|u| u[0]).collect();
+    // Spawned in tick 0: first meal due at 200, dead 100 ticks later, in tick 299.
+    assert_eq!(s[300].removed, workers);
+    let steppers = |t: usize| replay.sets[0].ticks[t].steps.len();
+    assert_eq!((steppers(299), steppers(300)), (4, 2));
+    assert!(replay.sets[0].result.reason == Reason::Draw);
 }

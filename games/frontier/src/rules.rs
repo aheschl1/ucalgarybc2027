@@ -7,8 +7,20 @@ pub const CARRY: u32 = 20;
 /// What a spawn takes from the base's storage.
 pub const SPAWN_COST: (Item, u32) = (Item::Wood, 10);
 /// What a base starts with.
-pub const START: (Item, u32) = (Item::Wood, 50);
+pub const START: [(Item, u32); 3] = [(Item::Wood, 50), (Item::Wheat, 40), (Item::WheatSeed, 10)];
 /// How far a unit's own `say` reaches, without the radio network.
 pub const SAY_RANGE: usize = 12;
 /// Longest `say` or `mark`, in bytes.
 pub const MESSAGE_BYTES: usize = 64;
+/// A unit's health; it dies at 0.
+pub const HP: u32 = 100;
+/// Ticks a new unit goes before its first meal.
+pub const FIRST_MEAL: u32 = 200;
+/// Health a unit with nothing to eat loses each tick.
+pub const STARVING: u32 = 1;
+/// Farmland needs water within this range, or a well's.
+pub const WATER_RANGE: usize = 4;
+/// Fresh farmland's fertility, and the most it recovers to.
+pub const FERTILE: u32 = 100;
+/// Ticks of rest that recover one point of fertility.
+pub const RECOVERY: u32 = 10;

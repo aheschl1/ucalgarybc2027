@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ucbc_engine::BotId;
 
-use crate::content::Item;
+use crate::content::{Crop, Item};
 use crate::map::{Coord, Dir};
 use crate::world::{Items, World};
 
@@ -39,6 +39,10 @@ pub struct Me {
     pub kind: Kind,
     pub pos: Coord,
     pub carrying: Vec<Stack>,
+    pub hp: u32,
+    /// The tick you next eat, from what you carry; with nothing to eat, you lose health
+    /// every tick from then on.
+    pub hungry_at: u32,
 }
 
 /// A finished storage building of your team that `put` and `take` reach, with what it
@@ -48,6 +52,13 @@ pub struct Store {
     pub id: u64,
     pub pos: Coord,
     pub stored: Vec<Stack>,
+}
+
+/// What `plant` sowed, and the tick it ripens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Sown {
+    pub crop: Crop,
+    pub ripe_at: u32,
 }
 
 /// Bytes on a tile or over the radio, base64.
@@ -76,15 +87,21 @@ pub struct Observation {
     pub width: usize,
     pub height: usize,
     /// `width * height` bytes, base64, row by row: 0 grass, 1 forest, 2 rock, 3 water,
-    /// 4 dirt, 5 coal, 6 copper, 7 iron. Grass, forest, and dirt are walkable.
+    /// 4 dirt, 5 coal, 6 copper, 7 iron, 8 farmland. Grass, forest, dirt, and farmland
+    /// are walkable.
     pub tiles: String,
-    /// `[id, team, kind, x, y]` per unit in view, you included; kind 0 commander, 1 worker.
+    /// `[id, team, kind, x, y, hp]` per unit in view, you included; kind 0 commander,
+    /// 1 worker.
     pub units: Vec<u64>,
     /// `[id, team, building, x, y, hp, work_left]` per building in view; `building` is an
     /// index into the building ids.
     pub buildings: Vec<u64>,
     /// `[x, y, item, count]` per kind of item lying on a tile in view.
     pub piles: Vec<u64>,
+    /// `[x, y, crop, ripe_at]` per crop in view; `crop` is an index into the crop ids.
+    pub crops: Vec<u64>,
+    /// `[x, y, fertility]` per farmland tile in view, out of 100.
+    pub soil: Vec<u64>,
     pub signs: Vec<Sign>,
     /// Your team's storage in the four directions next to you.
     pub stores: Vec<Store>,
@@ -108,7 +125,7 @@ pub struct Snapshot {
     pub tick: u32,
     pub map: Option<MapView>,
     pub keyframe: bool,
-    /// `[id, team, kind, x, y, carried]`
+    /// `[id, team, kind, x, y, hp, carried]`
     pub units: Vec<u64>,
     pub removed: Vec<u64>,
     /// `[x, y, tile]` for tiles that changed.
@@ -117,6 +134,10 @@ pub struct Snapshot {
     /// `[x, y, item, count]`. A tile's rows replace whatever was on it; a single row with
     /// a count of 0 means nothing is.
     pub piles: Vec<u64>,
+    /// `[x, y, crop, ripe_at]` per crop that changed.
+    pub crops: Vec<u64>,
+    /// `[x, y]` per tile whose crop is gone.
+    pub cleared: Vec<u64>,
     /// An empty sign was taken down.
     pub signs: Vec<Sign>,
 }
@@ -125,7 +146,8 @@ impl World {
     fn unit_row(&self, id: BotId, out: &mut Vec<u64>) {
         let u = &self.bots[id];
         let team = u64::from(u.team().0);
-        out.extend([id.0, team, u.kind as u64, u.pos.x as u64, u.pos.y as u64]);
+        let (x, y) = (u.pos.x as u64, u.pos.y as u64);
+        out.extend([id.0, team, u.kind as u64, x, y, u64::from(u.hp)]);
     }
 
     fn structure_row(&self, id: u64, out: &mut Vec<u64>) {
@@ -152,6 +174,17 @@ impl World {
         }
     }
 
+    fn crop_row(&self, at: Coord, out: &mut Vec<u64>) {
+        if let Some(p) = self.crops.get(&(at.y, at.x)) {
+            out.extend([
+                at.x as u64,
+                at.y as u64,
+                p.crop as u64,
+                u64::from(p.ripe_at),
+            ]);
+        }
+    }
+
     fn sign(&self, at: Coord) -> Sign {
         let data = self.signs.get(&(at.y, at.x)).map_or(&[][..], Vec::as_slice);
         Sign {
@@ -160,7 +193,7 @@ impl World {
         }
     }
 
-    pub fn observe(&self, bot: BotId, tick: u32, vision: usize) -> Observation {
+    pub fn observe(&self, bot: BotId, vision: usize) -> Observation {
         let unit = &self.bots[bot];
         let me = unit.pos;
         let last = self.map.size() - 1;
@@ -169,6 +202,7 @@ impl World {
         let height = (me.y + vision).min(last) - origin.y + 1;
         let (x0, x1) = (origin.x, origin.x + width - 1);
         let (mut units, mut buildings, mut piles, mut signs) = (vec![], vec![], vec![], vec![]);
+        let (mut crops, mut soil) = (vec![], vec![]);
         for y in origin.y..origin.y + height {
             for x in x0..=x1 {
                 let at = Coord::new(x, y);
@@ -181,6 +215,11 @@ impl World {
             }
             for &(y, x) in self.piles.range((y, x0)..=(y, x1)).map(|(k, _)| k) {
                 self.pile_rows(Coord::new(x, y), &mut piles);
+            }
+            for &(y, x) in self.soil.range((y, x0)..=(y, x1)).map(|(k, _)| k) {
+                let at = Coord::new(x, y);
+                self.crop_row(at, &mut crops);
+                soil.extend([x as u64, y as u64, u64::from(self.fertility(at))]);
             }
             signs.extend(
                 self.signs
@@ -210,13 +249,15 @@ impl World {
             })
             .collect();
         Observation {
-            tick,
+            tick: self.tick,
             me: Me {
                 id: bot.0,
                 team: team.0,
                 kind: unit.kind,
                 pos: me,
                 carrying: stacks(&unit.carrying),
+                hp: unit.hp,
+                hungry_at: unit.hungry_at,
             },
             base: self.base(team).pos,
             origin,
@@ -226,6 +267,8 @@ impl World {
             units,
             buildings,
             piles,
+            crops,
+            soil,
             signs,
             stores,
             heard,
@@ -266,6 +309,19 @@ impl World {
                 piles.extend([at.x as u64, at.y as u64, 0, 0]);
             }
         }
+        let crop_at: Vec<Coord> = if keyframe {
+            self.crops.keys().map(|&(y, x)| Coord::new(x, y)).collect()
+        } else {
+            c.crops.iter().copied().collect()
+        };
+        let (mut crops, mut cleared) = (vec![], vec![]);
+        for at in crop_at {
+            let before = crops.len();
+            self.crop_row(at, &mut crops);
+            if crops.len() == before {
+                cleared.extend([at.x as u64, at.y as u64]);
+            }
+        }
         let sign_at: Vec<Coord> = if keyframe {
             self.signs.keys().map(|&(y, x)| Coord::new(x, y)).collect()
         } else {
@@ -287,6 +343,8 @@ impl World {
                 .collect(),
             buildings,
             piles,
+            crops,
+            cleared,
             signs: sign_at.into_iter().map(|at| self.sign(at)).collect(),
         }
     }

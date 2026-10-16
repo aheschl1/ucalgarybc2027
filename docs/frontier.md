@@ -1,7 +1,7 @@
 # Frontier (plan)
 
 A 2-team survival-industry-war game on a large generated map, built as a long-horizon
-competition and RL environment. Status: Phase 2.
+competition and RL environment. Status: Phase 3.
 
 ## Principles
 
@@ -16,7 +16,7 @@ competition and RL environment. Status: Phase 2.
 
 - Grid up to 4096 x 4096 (1024 x 1024 is the target), generated from the seed and
   mirrored left to right: grass, forest, rock, water, coal, copper and iron veins. Each
-  base gets a forest grove and rock beside it. Resources are finite; a tile gathered
+  base gets a forest grove, rock, and a pond beside it. Resources are finite; a tile gathered
   out turns to dirt.
 - Snapshots are deltas. `initial_state` carries the map; each tick carries changed
   units, buildings, tiles, ground items, and signs; a keyframe lists all of them every
@@ -30,7 +30,9 @@ competition and RL environment. Status: Phase 2.
   the commander can rebuild it.
 - The commander dies: the team loses.
 - Unit ability comes from equipment (tools, weapons, armour), not unit types.
-- Food upkeep per unit; starvation lowers output, then HP. Hard population cap per team.
+- A unit eats from what it carries when its last meal runs out (an item's `food` is
+  the ticks it feeds); with nothing to eat it loses 1 HP a tick and dies at 0. A
+  starving commander loses the set. Hard population cap per team.
 
 ## Instruction set
 
@@ -44,10 +46,11 @@ actions   move dir                one tile
           gather dir              one item from forest, rock, or a vein
           put | take dir item n   to/from a teammate, the team's storage, or the ground
           build dir building      place (paying the cost carried) or work on a site
+          till | plant | harvest  farmland from grass or dirt; seeds near water; ripe crops
           spawn                   commander, next to the base, paid from its storage
           say bytes               to teammates in range or on the radio network, next tick
           mark bytes              sign on your tile, readable by anyone who sees it
-later     known, till | plant | harvest, use, attack
+later     known, use, attack
 ```
 
 Ids for items, buildings, and recipes are generated enums in the SDK. Their details are
@@ -86,9 +89,11 @@ tiers increase along each `upgrades` line, and there are no cycles.
 
 ## Pillars
 
-- **Farming:** till, plant, irrigate, harvest. Fertility falls with use and recovers by
-  rotation or fertilizer from industry. Fast low-yield crops vs slow orchards that yield
-  forever.
+- **Farming:** crops are data (`content/crops.toml`). Planting needs water within 4
+  tiles, or a well. A crop stores the tick it ripens; anyone may harvest it. The yield
+  scales with fertility, which a harvest wears and rest recovers (fertilizer from
+  industry later). Wheat ripens fast and wears the soil; apple trees take 600 ticks,
+  then regrow fruit forever.
 - **Industry:** tool tier limits ore tier. Ore, smelted with fuel, makes ingots; a
   workshop makes parts, tools, weapons, armour; drills tier from mechanical to steam to
   powered.

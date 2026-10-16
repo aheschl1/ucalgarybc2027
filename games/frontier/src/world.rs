@@ -6,11 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use ucbc_engine::{ActionError, BotId, BotManager, TeamId};
 
 use crate::content::{Building, Item};
+use crate::farm::{Planted, Soil};
 use crate::map::{Coord, Dir, Map};
-use crate::rules::{CARRY, MESSAGE_BYTES, SAY_RANGE, SPAWN_COST};
+use crate::rules::{CARRY, FIRST_MEAL, HP, MESSAGE_BYTES, SAY_RANGE, SPAWN_COST};
 use crate::view::Kind;
 
-fn invalid(message: &str) -> ActionError {
+pub(crate) fn invalid(message: &str) -> ActionError {
     ActionError::Invalid(message.into())
 }
 
@@ -52,6 +53,9 @@ pub struct Unit {
     pub kind: Kind,
     pub pos: Coord,
     pub carrying: Items,
+    pub hp: u32,
+    /// The tick it next eats.
+    pub hungry_at: u32,
 }
 
 /// A placed building, finished once `work_left` is 0.
@@ -111,9 +115,12 @@ pub struct Changes {
     pub structures: BTreeSet<u64>,
     pub piles: BTreeSet<Coord>,
     pub signs: BTreeSet<Coord>,
+    pub crops: BTreeSet<Coord>,
 }
 
 pub struct World {
+    /// The tick in play.
+    pub tick: u32,
     pub map: Map,
     pub bots: BotManager<Unit>,
     /// Bot id + 1 on each tile, 0 if none.
@@ -125,6 +132,9 @@ pub struct World {
     /// Keyed (y, x), so a row of the map is a range.
     pub piles: BTreeMap<(usize, usize), Items>,
     pub signs: BTreeMap<(usize, usize), Vec<u8>>,
+    /// Farmland, by (y, x).
+    pub soil: BTreeMap<(usize, usize), Soil>,
+    pub crops: BTreeMap<(usize, usize), Planted>,
     /// Base structure ids, indexed by team id.
     pub bases: [u64; 2],
     pub said: Vec<Said>,
@@ -137,6 +147,7 @@ impl World {
     pub fn new(map: Map) -> Self {
         let tiles = map.size() * map.size();
         Self {
+            tick: 0,
             map,
             bots: BotManager::new(),
             unit_at: vec![0; tiles],
@@ -145,6 +156,8 @@ impl World {
             next_structure: 0,
             piles: BTreeMap::new(),
             signs: BTreeMap::new(),
+            soil: BTreeMap::new(),
+            crops: BTreeMap::new(),
             bases: [0; 2],
             said: Vec::new(),
             heard: Vec::new(),
@@ -177,15 +190,14 @@ impl World {
     }
 
     pub fn place_unit(&mut self, team: TeamId, kind: Kind, at: Coord) -> BotId {
-        let carrying = Items::default();
-        let id = self.bots.spawn(
-            team,
-            Unit {
-                kind,
-                pos: at,
-                carrying,
-            },
-        );
+        let unit = Unit {
+            kind,
+            pos: at,
+            carrying: Items::default(),
+            hp: HP,
+            hungry_at: self.tick + FIRST_MEAL,
+        };
+        let id = self.bots.spawn(team, unit);
         let i = self.idx(at);
         self.unit_at[i] = id.0 + 1;
         self.changes.units.insert(id);
@@ -230,14 +242,14 @@ impl World {
     }
 
     /// Refused if the bot already used its action this step.
-    fn can_act(&self) -> Result<(), ActionError> {
+    pub(crate) fn can_act(&self) -> Result<(), ActionError> {
         if self.turn.acted {
             return Err(invalid("already acted this step"));
         }
         Ok(())
     }
 
-    fn target(&self, bot: BotId, dir: Dir) -> Result<Coord, ActionError> {
+    pub(crate) fn target(&self, bot: BotId, dir: Dir) -> Result<Coord, ActionError> {
         self.map
             .step(self.bots[bot].pos, dir)
             .ok_or_else(|| invalid("off the map"))
@@ -397,7 +409,8 @@ impl World {
             return Ok(left);
         }
         let cost = &kind.def().cost;
-        if !self.free(at) || self.piles.contains_key(&(at.y, at.x)) {
+        let farmland = self.map.tile(at) == crate::map::Tile::Farmland;
+        if !self.free(at) || farmland || self.piles.contains_key(&(at.y, at.x)) {
             return Err(invalid("the tile isn't clear"));
         }
         if !self.bots[bot].carrying.covers(cost) {
@@ -508,7 +521,8 @@ impl World {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rules::START;
+
+    const WOOD: (Item, u32) = (Item::Wood, 50);
 
     const A: TeamId = TeamId(0);
     const B: TeamId = TeamId(1);
@@ -530,7 +544,7 @@ mod tests {
             .get_mut(&base)
             .unwrap()
             .stored
-            .add(START.0, START.1);
+            .add(WOOD.0, WOOD.1);
         let commander = w.place_unit(A, Kind::Commander, Coord::new(1, 2));
         let worker = w.place_unit(A, Kind::Worker, Coord::new(2, 0));
         let enemy = w.place_unit(B, Kind::Worker, Coord::new(4, 1));
@@ -582,7 +596,7 @@ mod tests {
         next_step(&mut w);
         w.move_unit(worker, Dir::Down).unwrap();
         assert_eq!(w.put(worker, Dir::Left, Item::Wood, 5).unwrap(), 5);
-        assert_eq!(w.base(A).stored.count(Item::Wood), START.1 + 5);
+        assert_eq!(w.base(A).stored.count(Item::Wood), WOOD.1 + 5);
         // To a teammate, not to or from the other team.
         next_step(&mut w);
         w.move_unit(worker, Dir::Down).unwrap();
@@ -643,7 +657,7 @@ mod tests {
         let id = w.spawn(commander, 10).unwrap();
         assert_eq!(w.bots[BotId(id)].kind, Kind::Worker);
         assert!(w.bots[BotId(id)].pos.dist(Coord::new(1, 1)) == 1);
-        assert_eq!(w.base(A).stored.count(Item::Wood), START.1 - SPAWN_COST.1);
+        assert_eq!(w.base(A).stored.count(Item::Wood), WOOD.1 - SPAWN_COST.1);
         next_step(&mut w);
         w.move_unit(commander, Dir::Down).unwrap();
         next_step(&mut w);

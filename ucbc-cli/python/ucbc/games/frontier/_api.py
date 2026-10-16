@@ -14,6 +14,7 @@ class Building(str, Enum):
     CHEST = "chest"
     RADIO_TOWER = "radio_tower"
     STONE_WALL = "stone_wall"
+    WELL = "well"
     WOOD_WALL = "wood_wall"
 
 
@@ -30,6 +31,11 @@ class Coord:
         )
 
 
+class Crop(str, Enum):
+    APPLE_TREE = "apple_tree"
+    WHEAT = "wheat"
+
+
 class Dir(str, Enum):
     UP = "up"
     DOWN = "down"
@@ -38,10 +44,14 @@ class Dir(str, Enum):
 
 
 class Item(str, Enum):
+    APPLE = "apple"
+    APPLE_SEED = "apple_seed"
     COAL = "coal"
     COPPER_ORE = "copper_ore"
     IRON_ORE = "iron_ore"
     STONE = "stone"
+    WHEAT = "wheat"
+    WHEAT_SEED = "wheat_seed"
     WOOD = "wood"
 
 
@@ -57,6 +67,10 @@ class Me:
     kind: Kind
     pos: Coord
     carrying: list[Stack]
+    hp: int
+    hungry_at: int
+    """The tick you next eat, from what you carry; with nothing to eat, you lose health
+    every tick from then on."""
 
     @classmethod
     def _from(cls, d: dict[str, Any]) -> Self:
@@ -66,6 +80,8 @@ class Me:
             kind=Kind(d["kind"]),
             pos=Coord._from(d["pos"]),
             carrying=[Stack._from(v) for v in d["carrying"]],
+            hp=d["hp"],
+            hungry_at=d["hungry_at"],
         )
 
 
@@ -97,14 +113,20 @@ class Observation:
     height: int
     tiles: str
     """`width * height` bytes, base64, row by row: 0 grass, 1 forest, 2 rock, 3 water,
-    4 dirt, 5 coal, 6 copper, 7 iron. Grass, forest, and dirt are walkable."""
+    4 dirt, 5 coal, 6 copper, 7 iron, 8 farmland. Grass, forest, dirt, and farmland
+    are walkable."""
     units: list[int]
-    """`[id, team, kind, x, y]` per unit in view, you included; kind 0 commander, 1 worker."""
+    """`[id, team, kind, x, y, hp]` per unit in view, you included; kind 0 commander,
+    1 worker."""
     buildings: list[int]
     """`[id, team, building, x, y, hp, work_left]` per building in view; `building` is an
     index into the building ids."""
     piles: list[int]
     """`[x, y, item, count]` per kind of item lying on a tile in view."""
+    crops: list[int]
+    """`[x, y, crop, ripe_at]` per crop in view; `crop` is an index into the crop ids."""
+    soil: list[int]
+    """`[x, y, fertility]` per farmland tile in view, out of 100."""
     signs: list[Sign]
     stores: list[Store]
     """Your team's storage in the four directions next to you."""
@@ -124,6 +146,8 @@ class Observation:
             units=list(d["units"]),
             buildings=list(d["buildings"]),
             piles=list(d["piles"]),
+            crops=list(d["crops"]),
+            soil=list(d["soil"]),
             signs=[Sign._from(v) for v in d["signs"]],
             stores=[Store._from(v) for v in d["stores"]],
             heard=[Message._from(v) for v in d["heard"]],
@@ -142,6 +166,21 @@ class Sign:
         return cls(
             pos=Coord._from(d["pos"]),
             data=d["data"],
+        )
+
+
+@dataclass(frozen=True)
+class Sown:
+    """What `plant` sowed, and the tick it ripens."""
+
+    crop: Crop
+    ripe_at: int
+
+    @classmethod
+    def _from(cls, d: dict[str, Any]) -> Self:
+        return cls(
+            crop=Crop(d["crop"]),
+            ripe_at=d["ripe_at"],
         )
 
 
@@ -209,6 +248,21 @@ class FrontierApi(Handle):
         """Place a building, paying its cost from what you carry, or work on your team's
         unfinished one; returns the work it still needs."""
         reply: int = self._act({"type": "build", "dir": Dir(dir).value, "building": Building(building).value})
+        return reply
+
+    def till(self, dir: Dir) -> None:
+        """Turn grass or dirt in `dir` into farmland."""
+        self._act({"type": "till", "dir": Dir(dir).value})
+
+    def plant(self, dir: Dir, seed: Item) -> Sown:
+        """Plant a seed in empty farmland with water within 4 tiles (or a well's reach)."""
+        return Sown._from(self._act({"type": "plant", "dir": Dir(dir).value, "seed": Item(seed).value}))
+
+    def harvest(self, dir: Dir) -> int:
+        """Harvest a ripe crop, anyone's, if all it gives fits in what you carry; returns how
+        many items. Fertile soil gives more, and each harvest wears it; it recovers while
+        nothing grows on it."""
+        reply: int = self._act({"type": "harvest", "dir": Dir(dir).value})
         return reply
 
     def spawn(self) -> int:

@@ -11,7 +11,7 @@ use crate::config::Config;
 use crate::content::{Building, Item};
 use crate::map::{Coord, Dir, Map};
 use crate::rules::START;
-use crate::view::{Kind, Observation, Snapshot};
+use crate::view::{Kind, Observation, Snapshot, Sown};
 use crate::world::{Turn, Unit, World};
 
 #[derive(Deserialize, JsonSchema)]
@@ -40,6 +40,14 @@ pub enum Action {
     /// Place a building, paying its cost from what you carry, or work on your team's
     /// unfinished one; returns the work it still needs.
     Build(Request<Construct, u32>),
+    /// Turn grass or dirt in `dir` into farmland.
+    Till(Request<Heading, ()>),
+    /// Plant a seed in empty farmland with water within 4 tiles (or a well's reach).
+    Plant(Request<Seed, Sown>),
+    /// Harvest a ripe crop, anyone's, if all it gives fits in what you carry; returns how
+    /// many items. Fertile soil gives more, and each harvest wears it; it recovers while
+    /// nothing grows on it.
+    Harvest(Request<Heading, u32>),
     /// Commander only, next to your base: a worker next to the base, paid from its
     /// storage. Returns its id.
     Spawn(Request<(), u64>),
@@ -60,6 +68,12 @@ pub struct Transfer {
     pub dir: Dir,
     pub item: Item,
     pub count: u32,
+}
+
+#[derive(Clone, Copy, Deserialize, JsonSchema)]
+pub struct Seed {
+    pub dir: Dir,
+    pub seed: Item,
 }
 
 #[derive(Clone, Copy, Deserialize, JsonSchema)]
@@ -114,8 +128,9 @@ impl Game for Frontier {
         for team in [TeamId(0), TeamId(1)] {
             let id = world.place_structure(team, Building::Base, bases[team.0 as usize]);
             world.bases[team.0 as usize] = id;
-            let (item, n) = START;
-            world.structures.get_mut(&id).unwrap().stored.add(item, n);
+            for (item, n) in START {
+                world.structures.get_mut(&id).unwrap().stored.add(item, n);
+            }
         }
         let mut commanders = [BotId(0); 2];
         // In step order, so the set's first team's commander steps first.
@@ -147,15 +162,14 @@ impl Game for Frontier {
         let w = &mut self.world;
         w.changes = Default::default();
         w.heard = std::mem::take(&mut w.said);
+        w.tick = self.ticks;
         self.ticks += 1;
         w.bots.ids()
     }
 
     fn handle_query(&self, bot: BotId, query: Queries) -> Result<Answer, QueryError> {
         match query {
-            Queries::Observe(q) => {
-                Ok(q.reply(self.world.observe(bot, self.ticks - 1, self.config.vision)))
-            }
+            Queries::Observe(q) => Ok(q.reply(self.world.observe(bot, self.config.vision))),
         }
     }
 
@@ -167,6 +181,9 @@ impl Game for Frontier {
             Action::Put(a) => Ok(a.reply(w.put(bot, a.dir, a.item, a.count)?)),
             Action::Take(a) => Ok(a.reply(w.take(bot, a.dir, a.item, a.count)?)),
             Action::Build(a) => Ok(a.reply(w.build(bot, a.dir, a.building)?)),
+            Action::Till(a) => Ok(a.reply(w.till(bot, a.dir)?)),
+            Action::Plant(a) => Ok(a.reply(w.plant(bot, a.dir, a.seed)?)),
+            Action::Harvest(a) => Ok(a.reply(w.harvest(bot, a.dir)?)),
             Action::Spawn(a) => Ok(a.reply(w.spawn(bot, self.config.units)?)),
             Action::Say(a) => Ok(a.reply(w.say(bot, decode(&a.data)?)?)),
             Action::Mark(a) => Ok(a.reply(w.mark(bot, decode(&a.data)?)?)),
@@ -189,7 +206,26 @@ impl Game for Frontier {
         }
     }
 
-    fn end_tick(&mut self) {}
+    /// Meals. A team whose commander starved loses; both at once, a draw.
+    fn end_tick(&mut self) {
+        let dead = self.world.feed();
+        let starved: Vec<u32> = dead
+            .iter()
+            .filter(|&&id| self.commanders.contains(&id))
+            .map(|&id| self.world.bots[id].team().0)
+            .collect();
+        for id in dead {
+            self.world.remove_unit(id);
+            self.world.bots.remove(id);
+        }
+        self.outcome = match starved[..] {
+            [] => return,
+            [team] => {
+                Some(Outcome::win(TeamId(1 - team)).with_detail("the other commander starved"))
+            }
+            _ => Some(Outcome::draw("both commanders starved")),
+        };
+    }
 
     fn status(&self) -> GameStatus {
         match &self.outcome {

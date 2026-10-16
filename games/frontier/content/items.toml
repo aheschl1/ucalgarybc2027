@@ -1,7 +1,14 @@
-# Every item. Fields grow with the phases: fuel value, tool tier, weapon stats, food.
+# Every item. `food` is the ticks one feeds a unit.
 
 [wood]
 [stone]
 [coal]
 [copper_ore]
 [iron_ore]
+
+[wheat]
+food = 100
+[wheat_seed]
+[apple]
+food = 150
+[apple_seed]

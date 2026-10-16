@@ -1,7 +1,7 @@
 """Frontier as a bot sees it. A bot's ``step`` receives a :class:`FrontierHandle`.
 
-An observation's units, buildings, and piles are flat integer rows; the functions here
-decode them when a bot wants objects instead."""
+An observation's units, buildings, piles, and crops are flat integer rows; the functions
+here decode them when a bot wants objects instead."""
 
 import base64
 from typing import NamedTuple
@@ -9,6 +9,7 @@ from typing import NamedTuple
 from ucbc.games.frontier._api import (
     Building,
     Coord,
+    Crop,
     Dir,
     FrontierApi,
     Item,
@@ -23,6 +24,8 @@ __all__ = [
     "Building",
     "BuildingRow",
     "Coord",
+    "Crop",
+    "CropRow",
     "Dir",
     "FrontierHandle",
     "Item",
@@ -32,18 +35,20 @@ __all__ = [
     "Tiles",
     "UnitRow",
     "buildings",
+    "crops",
     "piles",
     "units",
 ]
 
-WALKABLE = frozenset((0, 1, 4))
-"""Tile bytes a unit can walk on: grass, forest, dirt."""
+WALKABLE = frozenset((0, 1, 4, 8))
+"""Tile bytes a unit can walk on: grass, forest, dirt, farmland."""
 
 STEPS = {Dir.UP: (0, -1), Dir.DOWN: (0, 1), Dir.LEFT: (-1, 0), Dir.RIGHT: (1, 0)}
 
 KINDS = list(Kind)
 BUILDINGS = list(Building)
 ITEMS = list(Item)
+CROPS = list(Crop)
 
 
 class Tiles:
@@ -69,6 +74,7 @@ class UnitRow(NamedTuple):
     kind: Kind
     x: int
     y: int
+    hp: int
 
 
 class BuildingRow(NamedTuple):
@@ -89,10 +95,17 @@ class PileRow(NamedTuple):
     """The count; `count` is a tuple method."""
 
 
+class CropRow(NamedTuple):
+    x: int
+    y: int
+    crop: Crop
+    ripe_at: int
+
+
 def units(seen: Observation) -> list[UnitRow]:
     r = seen.units
     return [
-        UnitRow(r[i], r[i + 1], KINDS[r[i + 2]], r[i + 3], r[i + 4]) for i in range(0, len(r), 5)
+        UnitRow(r[i], r[i + 1], KINDS[r[i + 2]], *r[i + 3 : i + 6]) for i in range(0, len(r), 6)
     ]
 
 
@@ -107,6 +120,11 @@ def buildings(seen: Observation) -> list[BuildingRow]:
 def piles(seen: Observation) -> list[PileRow]:
     r = seen.piles
     return [PileRow(r[i], r[i + 1], ITEMS[r[i + 2]], r[i + 3]) for i in range(0, len(r), 4)]
+
+
+def crops(seen: Observation) -> list[CropRow]:
+    r = seen.crops
+    return [CropRow(r[i], r[i + 1], CROPS[r[i + 2]], r[i + 3]) for i in range(0, len(r), 4)]
 
 
 class FrontierHandle(FrontierApi):

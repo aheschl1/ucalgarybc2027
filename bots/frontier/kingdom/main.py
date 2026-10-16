@@ -35,11 +35,13 @@ Pos = tuple[int, int]
 Costs = dict[Item, int]
 
 CARRY = 20
-GRASS, FOREST, ROCK, WATER, DIRT, COAL, COPPER, IRON, FARMLAND = range(9)
+CELL = 8
+GRASS, FOREST, ROCK, WATER, DIRT, COAL, COPPER, IRON, FARMLAND, TITANIUM = range(10)
 FREE = bytes(t in WALKABLE for t in range(256))
 DIGGABLE = bytes(t in WALKABLE or t == ROCK for t in range(256))
+TUNNEL = bytes(t in WALKABLE or t in (ROCK, COAL, COPPER, IRON) for t in range(256))
 DIGITS = b"01" + b"1" * 254
-MASK = [bytes(tile) + b"\x01" + bytes(255 - tile) for tile in range(9)]
+MASK = [bytes(tile) + b"\x01" + bytes(255 - tile) for tile in range(10)]
 WET = b"0" * WATER + b"1" + b"0" * (255 - WATER)
 BUILDINGS = list(Building)
 ITEMS = list(Item)
@@ -58,10 +60,11 @@ DIRS = list(STEPS.items())
 COMPASS = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
 FOOD = (Item.WHEAT, Item.APPLE)
 
-WOODMAN, MASON, FARMER, BUILDER, SMITH, GUARD, COALER, COPPERER, IRONER, HOARDER = range(1, 11)
-MINES = {COALER: COAL, COPPERER: COPPER, IRONER: IRON}
-TOOLS = {COPPERER: Item.STONE_PICK, IRONER: Item.COPPER_PICK}
-ORE = {COAL: Item.COAL, COPPER: Item.COPPER_ORE, IRON: Item.IRON_ORE}
+WOODMAN, MASON, FARMER, BUILDER, SMITH, GUARD = range(1, 7)
+COALER, COPPERER, IRONER, HOARDER, TITANER = range(7, 12)
+MINES = {COALER: COAL, COPPERER: COPPER, IRONER: IRON, TITANER: TITANIUM}
+TOOLS = {COPPERER: Item.STONE_PICK, IRONER: Item.COPPER_PICK, TITANER: Item.IRON_PICK}
+ORE = {COAL: Item.COAL, COPPER: Item.COPPER_ORE, IRON: Item.IRON_ORE, TITANIUM: Item.TITANIUM}
 EARLY = [WOODMAN, BUILDER, WOODMAN, BUILDER, MASON, WOODMAN, FARMER, GUARD, FARMER, SMITH, GUARD]
 STUDY = [
     Item.STONE,
@@ -74,6 +77,7 @@ STUDY = [
     Item.IRON_INGOT,
     Item.GEAR,
     Item.APPLE,
+    Item.TITANIUM,
 ]
 GOODS = {
     Item.COPPER_INGOT,
@@ -81,13 +85,14 @@ GOODS = {
     Item.GEAR,
     Item.STONE_PICK,
     Item.COPPER_PICK,
+    Item.IRON_PICK,
     Item.COPPER_SWORD,
     Item.COPPER_ARMOUR,
 }
 BROADCAST = [Item.WHEAT, Item.APPLE, Item.WOOD, Item.STONE]
 
 WOOD_STOCK, STONE_STOCK = 140, 90
-ORE_STOCK = {COAL: 80, COPPER: 60, IRON: 60}
+ORE_STOCK = {COAL: 80, COPPER: 60, IRON: 60, TITANIUM: 30}
 CAPS = {Item.WOOD: 180, Item.STONE: 120, Item.COAL: 120, Item.COPPER_ORE: 80, Item.IRON_ORE: 80}
 HOARD_FROM = 18
 POP_CAP = 80
@@ -208,6 +213,11 @@ class Mind:
         self.explore: Pos | None = None
         self.explore_until = 0
         self.explored = 0
+        self.cells = bytearray()
+        """A byte per CELL x CELL square of the map, 1 where it was seen mostly blocked."""
+        self.route: list[int] = []
+        self.route_to: tuple[Pos, int] = ((0, 0), 0)
+        self.leg: tuple[Pos, int] | None = None
         self.drills = 0
         self.tries = 0
         self.field: list[Pos] = []
@@ -604,7 +614,8 @@ def hear(v: View, commander: bool) -> None:
 
 
 def scan_veins(v: View) -> None:
-    """Remembers a vein tile of each kind in view that a unit can stand beside."""
+    """Remembers a vein tile of each kind in view that a unit can stand beside, and any
+    titanium, which is dug out."""
     w, data = v.w, v.data
     for tile in (COAL, COPPER, IRON):
         i = data.find(tile)
@@ -617,6 +628,9 @@ def scan_veins(v: View) -> None:
                 learn_vein(tile, (x + v.ox, i // w + v.oy))
                 break
             i = data.find(tile, i + 1)
+    i = data.find(TITANIUM)
+    if i >= 0:
+        learn_vein(TITANIUM, (i % w + v.ox, i // w + v.oy))
     i = data.find(FOREST)
     for _ in range(60):
         if i < 0:
@@ -685,6 +699,8 @@ def visit_base(handle: FrontierHandle, v: View, keep: Costs, want: Costs) -> boo
 
 
 def capped(v: View, item: Item) -> bool:
+    if item == Item.TITANIUM:
+        return False
     return mind.stock.get(item, 0) >= CAPS.get(item, 1000) or mind.base_full_until > v.tick
 
 
@@ -841,10 +857,12 @@ def fill_granary(handle: FrontierHandle, v: View, items: Costs) -> bool:
 def needs_food(v: View) -> bool:
     left = v.seen.me.hungry_at - v.tick
     left += 100 * v.carried.get(Item.WHEAT, 0) + 150 * v.carried.get(Item.APPLE, 0)
-    return left < 2 * dist(v.me, mind.base) + 80
+    return left < (1.5 if mind.role == TITANER else 2) * dist(v.me, mind.base) + 80
 
 
 def food_want(role: int) -> int:
+    if role == TITANER:
+        return 14
     if role == HOARDER:
         return 9
     return 3 if role in (FARMER, BUILDER, SMITH, GUARD) else 6
@@ -982,7 +1000,7 @@ def step(handle: FrontierHandle) -> None:
             return
     food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
     famine = v.tick > 400 and food < 15 and v.tick - mind.heard_at < 100
-    if famine and mind.role in (HOARDER, MASON, COALER, COPPERER, IRONER):
+    if famine and mind.role in (HOARDER, MASON, COALER, COPPERER, IRONER, TITANER):
         farmer(handle, v)
     else:
         ROLES.get(mind.role, woodman)(handle, v)
@@ -1113,6 +1131,7 @@ def pick_role(pop: int) -> int:
         COALER: mining + (pop >= 25),
         COPPERER: mining,
         IRONER: mining,
+        TITANER: 2 * (pop >= 25),
     }
     short = max(target, key=lambda r: target[r] - counts.get(r, 0))
     return short if target[short] > counts.get(short, 0) else HOARDER
@@ -1623,6 +1642,8 @@ def wanted(kind: Building) -> list[Recipe]:
         out.append(Recipe.STONE_PICK)
     if not s(Item.COPPER_PICK) and mind.made.get(Recipe.COPPER_PICK, 0) < 3:
         out.append(Recipe.COPPER_PICK)
+    if not s(Item.IRON_PICK) and mind.made.get(Recipe.IRON_PICK, 0) < 3:
+        out.append(Recipe.IRON_PICK)
     if s(Item.GEAR, 0) < 20:
         out.append(Recipe.GEAR)
     if copper >= 45 and mind.made.get(Recipe.COPPER_SWORD, 0) < 6:
@@ -1766,7 +1787,7 @@ def infer_studied() -> None:
     if Building.STEAM_DRILL in k:
         mind.studied.add(Item.GEAR)
     if Building.MONUMENT in k:
-        mind.studied.add(Item.APPLE)
+        mind.studied |= {Item.APPLE, Item.TITANIUM}
 
 
 def study(handle: FrontierHandle, v: View, desk: Pos, item: Item) -> bool:
@@ -1795,11 +1816,11 @@ def miner(handle: FrontierHandle, v: View) -> None:
             return
         tile = COAL
     item = ORE[tile]
-    if v.carried.get(item) and (capped(v, item) or base_full(v)):
+    if v.carried.get(item) and (capped(v, item) or base_full(v) and tile != TITANIUM):
         if not stash(handle, v) and not drop(handle, v, item, v.carried[item]):
             wiggle(handle)
         return
-    if tile != IRON and drill(handle, v, tile):
+    if tile in (COAL, COPPER) and drill(handle, v, tile):
         return
     if mind.stock.get(item, 0) >= ORE_STOCK[tile] and not v.carried.get(item):
         gather(handle, v, FOREST, Item.WOOD, True)
@@ -1817,6 +1838,13 @@ def miner(handle: FrontierHandle, v: View) -> None:
     if dist(v.me, mind.base) > 20 and dig(handle, v, tile):
         return
     vein = mind.veins.get(tile)
+    if vein is not None and tile == TITANIUM:
+        if v.inside(vein) and v.tiles[vein] != TITANIUM:
+            mind.bad.add(vein)
+            mind.veins.pop(tile, None)
+        else:
+            far_walk(handle, v, vein, "vein")
+            return
     if vein is not None:
         if dist(v.me, vein) <= 6:
             mind.tries += 1
@@ -1828,17 +1856,118 @@ def miner(handle: FrontierHandle, v: View) -> None:
             return
         else:
             mind.veins.pop(tile, None)
-    explore(handle, v)
+    if tile == TITANIUM:
+        prospect(handle, v)
+    else:
+        explore(handle, v)
 
 
-def dig(handle: FrontierHandle, v: View, tile: int) -> bool:
-    """Tunnels through rock toward a vein in view that no walk reaches; the stone dug is
-    left on the ground."""
-    goal = resource_goal(v, tile, 0)
+def prospect(handle: FrontierHandle, v: View) -> None:
+    """Up and down the centre line, where titanium lies, half the miners north first, by
+    the open cell nearest this team's side of it, or tunnelling where the line is all
+    rock. Each half's seam mirrors the other's, so either side of the line will do."""
+    n, mid = mind.size // CELL, mind.size // 2
+    aim = mind.explore
+    if aim is None or v.tick > mind.explore_until:
+        k = mind.explored
+        mind.explored += 1
+        side = 1 if mind.id % 2 else -1
+        legs = [side * 24 * j for j in range(mind.size // 48 + 1)]
+        legs += [-y for y in legs[1:]]
+        y = min(max(mind.base[1] + legs[k % len(legs)], 1), mind.size - 2)
+        aim = mind.explore = (mid - 8 * mind.m, y)
+        mind.explore_until = v.tick + 2 * dist(v.me, aim) + 50
+    row = aim[1] // CELL
+    open_ = [
+        (cx * CELL + CELL // 2, cy * CELL + CELL // 2)
+        for cy in range(max(row - 1, 0), min(row + 2, n))
+        for cx in range((mid - 20) // CELL, (mid + 20) // CELL)
+        if not mind.cells or not mind.cells[cy * n + cx]
+    ]
+    if not open_ and dist(v.me, aim) <= 40:
+        x = min(max(aim[0], v.ox), v.ox + v.w - 1)
+        if dig(handle, v, TITANIUM, marks(v, [(x, min(max(aim[1], v.oy), v.oy + v.h - 1))])):
+            mind.explore_until = max(mind.explore_until, v.tick + 600)
+            return
+    spot = min(open_, key=lambda p: dist(p, aim)) if open_ else aim
+    if dist(v.me, spot) < 4:
+        mind.explore_until = 0
+    far_walk(handle, v, spot, "explore")
+
+
+def survey(v: View) -> None:
+    """Marks the cells wholly in view that are mostly water or rock, or clears them."""
+    n = mind.size // CELL
+    if not mind.cells:
+        mind.cells = bytearray(n * n)
+    free = v.data.translate(FREE)
+    for cy in range(-(-v.oy // CELL), (v.oy + v.h) // CELL):
+        for cx in range(-(-v.ox // CELL), (v.ox + v.w) // CELL):
+            at0 = (cy * CELL - v.oy) * v.w + cx * CELL - v.ox
+            walk = sum(sum(free[at0 + dy * v.w : at0 + dy * v.w + CELL]) for dy in range(CELL))
+            mind.cells[cy * n + cx] = walk < CELL * CELL // 4
+
+
+def route(start: Pos, goal: Pos) -> list[int]:
+    """The cells from `goal`, or the reachable cell nearest it, back to `start` through
+    cells not known to be blocked."""
+    n = mind.size // CELL
+    s, g = start[1] // CELL * n + start[0] // CELL, goal[1] // CELL * n + goal[0] // CELL
+    prev = {s: s}
+    ring = [s]
+    while ring and g not in prev:
+        nxt = []
+        for c in ring:
+            x = c % n
+            for d in (c - n, c + n, c - 1 if x else -1, c + 1 if x + 1 < n else -1):
+                if 0 <= d < n * n and d not in prev and (not mind.cells[d] or d == g):
+                    prev[d] = c
+                    nxt.append(d)
+        ring = nxt
+    if g not in prev:
+        g = min(prev, key=lambda c: max(abs(c % n - g % n), abs(c // n - g // n)))
+    path = [g]
+    while path[-1] != s:
+        path.append(prev[path[-1]])
+    return path
+
+
+def far_walk(handle: FrontierHandle, v: View, target: Pos, key: object) -> None:
+    """Toward a far tile a cell or two at a time, around the cells seen blocked; a cell
+    the walk can't get into is marked blocked too."""
+    survey(v)
+    n = mind.size // CELL
+    here = v.me[1] // CELL * n + v.me[0] // CELL
+    path = mind.route
+    reached = mind.leg is None or dist(v.me, mind.leg[0]) <= 2
+    stale = mind.route_to[0] != target or reached and here not in path
+    if stale or any(mind.cells[c] for c in path[1:-1]) or v.tick > mind.route_to[1] + 300:
+        path = mind.route = route(v.me, target)
+        mind.route_to, mind.leg = (target, v.tick), None
+    if mind.leg is None or reached:
+        del path[path.index(here) + 1 :]
+        k = max(len(path) - 3, 0)
+        c = path[k]
+        if c == target[1] // CELL * n + target[0] // CELL:
+            mind.leg = (target, -1)
+        else:
+            mind.leg = ((c % n * CELL + CELL // 2, c // n * CELL + CELL // 2), c)
+    spot, c = mind.leg
+    if not go_to(handle, v, spot, (key, spot), 2):
+        mind.bad.discard(spot)
+        if c >= 0:
+            mind.cells[c] = 1
+        mind.route, mind.leg = [], None
+
+
+def dig(handle: FrontierHandle, v: View, tile: int, goal: bytearray | None = None) -> bool:
+    """Tunnels through rock toward a vein in view, or `goal`, that no walk reaches; the
+    stone dug is left on the ground."""
+    goal = resource_goal(v, tile, 0) if goal is None else goal
     if not any(goal):
         return False
-    path = bfs(v, goal, True, table=DIGGABLE)
-    rocks = [k for k, p in enumerate(path or []) if v.tiles[p] == ROCK]
+    path = bfs(v, goal, True, table=TUNNEL if tile == TITANIUM else DIGGABLE)
+    rocks = [k for k, p in enumerate(path or []) if v.tiles[p] not in WALKABLE]
     if not path or not rocks:
         return False
     k = rocks[-1]
@@ -1848,7 +1977,12 @@ def dig(handle: FrontierHandle, v: View, tile: int) -> bool:
         mind.path, mind.path_key = path[k + 1 :], ("dig", rock)
         return step_path(handle, v)
     if CARRY - v.load <= 0:
-        return drop(handle, v, Item.STONE, v.carried.get(Item.STONE, 0), tuple(WALKABLE))
+        keep = keeps(v)
+        junk = [i for i in v.carried if i not in keep and i != ORE[tile]]
+        if not junk:
+            return False
+        item = max(junk, key=lambda i: v.carried[i])
+        return drop(handle, v, item, v.carried[item], tuple(WALKABLE))
     with suppress(ActionError):
         handle.gather(d)
         return True
@@ -1902,4 +2036,5 @@ ROLES: dict[int, Callable[[FrontierHandle, View], None]] = {
     COPPERER: miner,
     IRONER: miner,
     HOARDER: hoarder,
+    TITANER: miner,
 }

@@ -102,15 +102,15 @@ STUDY = [
     Item.GEAR,
     Item.APPLE,
 ]
-WOOD_STOCK, STONE_STOCK = 200, 120
-ORE_STOCK = {COAL: 100, COPPER: 70, IRON: 80}
-CAPS = {Item.WOOD: 260, Item.STONE: 160, Item.COAL: 160, Item.COPPER_ORE: 110, Item.IRON_ORE: 110}
+WOOD_STOCK, STONE_STOCK = 140, 90
+ORE_STOCK = {COAL: 80, COPPER: 60, IRON: 60}
+CAPS = {Item.WOOD: 180, Item.STONE: 120, Item.COAL: 120, Item.COPPER_ORE: 80, Item.IRON_ORE: 80}
 HOARD_FROM = 18
 POP_CAP = 80
 CHEST_ROOM = 40
 RESERVE = 8
 APPLES = 31
-BASE_FULL = 900
+BASE_FULL = 920
 DEBUG = False
 
 
@@ -1295,6 +1295,10 @@ def builder(handle: FrontierHandle, v: View) -> None:
     working: list[tuple[Building, Pos]] = []
     fresh: list[tuple[Building, Pos]] = []
     repair: list[tuple[Building, Pos]] = []
+    started = any(BUILDINGS[k] == Building.MONUMENT for _, k, _, _ in blds.values())
+    saving: dict[Item, int] = {}
+    if Building.MONUMENT in mind.known and not started:
+        saving = {Item.WOOD: 60, Item.STONE: 60}
     for kind, p in mind.plan:
         b = blds.get(p)
         if b is not None:
@@ -1322,7 +1326,10 @@ def builder(handle: FrontierHandle, v: View) -> None:
             if all(mind.stock.get(i, 0) >= n for i, n in COST[kind].items()):
                 fresh.insert(0, (kind, p))
             continue
-        if all(mind.stock.get(i, 0) + v.carried.get(i, 0) >= n for i, n in COST[kind].items()):
+        spare = {
+            i: mind.stock.get(i, 0) + v.carried.get(i, 0) - saving.get(i, 0) for i in COST[kind]
+        }
+        if all(spare[i] >= n for i, n in COST[kind].items()):
             fresh.append((kind, p))
     if DEBUG and v.tick % 25 == 0:
         print("build", v.me, working[:2], fresh[:3], repair[:1], v.carried, mind.stock_at)

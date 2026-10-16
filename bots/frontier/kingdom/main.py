@@ -720,10 +720,10 @@ def eat(handle: FrontierHandle, v: View) -> bool:
 
 
 def drop(handle: FrontierHandle, v: View, item: Item, n: int) -> bool:
-    """Leaves surplus on farmland beside, where it is in nobody's way."""
+    """Leaves surplus on farmland or bare dirt beside, where it is in nobody's way."""
     for d, (dx, dy) in DIRS:
         q = (v.me[0] + dx, v.me[1] + dy)
-        if v.tile(q) == FARMLAND and q not in v.occupied:
+        if v.tile(q) in (FARMLAND, DIRT) and q not in v.occupied and q not in v.buildings():
             with suppress(ActionError):
                 handle.put(d, item, n)
                 return True
@@ -1167,7 +1167,7 @@ def compute_field(v: View) -> None:
         for r in rows[max(y - 4, 0) : y + 5]:
             m |= r
         wet.append(m)
-    tilled = (GRASS, DIRT, FARMLAND, FOREST)
+    tilled = (GRASS, DIRT, FARMLAND, FOREST, ROCK)
     skip = TRAP_SET | set(GRANARIES) | set(WELLS)
     field = []
     for dy in range(-16, 14):
@@ -1205,9 +1205,9 @@ def farmer(handle: FrontierHandle, v: View) -> None:
         if apple_seeds:
             plant = [p for p in field if p in soil and p not in crops]
     till = [p for p in field if v.tile(p) in (GRASS, DIRT) and p not in v.buildings()]
-    clear = [p for p in field if v.tile(p) == FOREST and p not in v.buildings()]
+    clear = [p for p in field if v.tile(p) in (FOREST, ROCK) and p not in v.buildings()]
     apples = v.carried.get(Item.APPLE, 0)
-    wood = v.carried.get(Item.WOOD, 0)
+    wood = v.carried.get(Item.WOOD, 0) + v.carried.get(Item.STONE, 0)
     produce = max(0, wheat - 3) + apples + max(0, seeds - 6)
     stocked = mind.stock_at < 0 or mind.stock.get(Item.WHEAT_SEED, 0) > 0
     want_apple = 2 if mind.stock_at < 0 or mind.stock.get(Item.APPLE_SEED) else 0
@@ -1254,12 +1254,15 @@ def farmer(handle: FrontierHandle, v: View) -> None:
         return
     if produce >= 4 and granary and fill_granary(handle, v, surplus):
         return
-    cut = adjacent_tile(v, FOREST)
-    if clear and cut is not None:
-        dx, dy = STEPS[cut]
-        if (v.me[0] + dx, v.me[1] + dy) in set(clear):
+    if wood >= 10:
+        for item in (Item.WOOD, Item.STONE):
+            if v.carried.get(item) and drop(handle, v, item, v.carried[item]):
+                return
+    spots = set(clear)
+    for d, (dx, dy) in DIRS:
+        if (v.me[0] + dx, v.me[1] + dy) in spots:
             with suppress(ActionError):
-                handle.gather(cut)
+                handle.gather(d)
                 return
     if clear and go_beside(handle, v, clear, "clear"):
         return

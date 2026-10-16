@@ -102,7 +102,7 @@ STUDY = [
     Item.GEAR,
     Item.APPLE,
 ]
-WOOD_STOCK, STONE_STOCK = 220, 150
+WOOD_STOCK, STONE_STOCK = 200, 120
 ORE_STOCK = {COAL: 100, COPPER: 70, IRON: 80}
 HOARD_FROM = 18
 POP_CAP = 90
@@ -1125,6 +1125,7 @@ def hoarder(handle: FrontierHandle, v: View) -> None:
 
 def woodman(handle: FrontierHandle, v: View) -> None:
     hoard = mind.stock_at >= 0 and mind.stock.get(Item.WOOD, 0) >= WOOD_STOCK
+    hoard |= mind.base_total >= 800 and v.tick - mind.heard_at < 300
     if v.load and not hoard and v.carried.get(Item.WOOD, 0) == 0 and CARRY - v.load < 3:
         resupply(handle, v)
         return
@@ -1142,7 +1143,8 @@ def woodman(handle: FrontierHandle, v: View) -> None:
 
 
 def mason(handle: FrontierHandle, v: View) -> None:
-    if mind.stock_at >= 0 and mind.stock.get(Item.STONE, 0) >= STONE_STOCK:
+    crowded = mind.base_total >= 800 and v.tick - mind.heard_at < 300
+    if crowded or (mind.stock_at >= 0 and mind.stock.get(Item.STONE, 0) >= STONE_STOCK):
         gather(handle, v, ROCK, Item.STONE, True)
         return
     if v.carried.get(Item.WOOD, 0) and CARRY - v.load < 2:
@@ -1300,7 +1302,7 @@ def builder(handle: FrontierHandle, v: View) -> None:
             if team != v.team:
                 continue
             if built == kind or (kind == Building.STONE_WALL and built == Building.WOOD_WALL):
-                if left > 0:
+                if left > 0 and mind.skip.get(p, 0) <= v.tick:
                     working.append((built, p))
                 elif hp < HP.get(built, 0) * 0.6:
                     repair.append((built, p))
@@ -1394,6 +1396,8 @@ def finish(handle: FrontierHandle, v: View, kind: Building, p: Pos) -> None:
                 handle.put(d, item, n)
                 return
     if owed:
+        if any(not mind.stock.get(i) and not v.carried.get(i) for i in owed):
+            mind.skip[p] = v.tick + 150
         resupply(handle, v, {i: min(n, CARRY) for i, n in owed.items()})
         return
     with suppress(ActionError):

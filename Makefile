@@ -1,7 +1,12 @@
 .PHONY: help setup build gen sdk viewer-types editor-types api-types viewer editor web replays test test-api lint clean up down db
 .DEFAULT_GOAL := help
 
-# Builds include ucbc-games' default games. The tests build every game
+# Builds include ucbc-games' default games, or exactly the ones in GAMES, which picks the
+# viewer's renderers too: `make build GAMES="ucbc2027 pacman"`. The tests build every game.
+ifneq ($(strip $(GAMES)),)
+FEATURES ?= --no-default-features $(foreach game,$(GAMES),-F ucbc-games/$(game))
+export UCBC_GAMES := $(GAMES)
+endif
 test test-api: FEATURES = -F ucbc-games/all
 
 # `ENV=prod make up` substitutes .env.prod into compose instead of .env.local.

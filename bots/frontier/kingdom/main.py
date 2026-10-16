@@ -757,7 +757,7 @@ def fill_granary(handle: FrontierHandle, v: View, items: dict[Item, int]) -> boo
 def needs_food(v: View) -> bool:
     left = v.seen.me.hungry_at - v.tick
     left += 100 * v.carried.get(Item.WHEAT, 0) + 150 * v.carried.get(Item.APPLE, 0)
-    return left < 1.3 * dist(v.me, mind.base) + 60
+    return left < 2 * dist(v.me, mind.base) + 80
 
 
 def food_want(role: int) -> int:
@@ -809,7 +809,8 @@ def step(handle: FrontierHandle) -> None:
     if needs_food(v) and not (hauling and v.seen.me.hungry_at - v.tick > 20):
         load = v.load - v.food()
         far = dist(v.me, mind.base) > HOARD_FROM
-        if mind.role == HOARDER and load >= 10 and far and stash(handle, v):
+        spare = v.seen.me.hungry_at - v.tick + 100 * v.food() > 1.5 * dist(v.me, mind.base) + 60
+        if mind.role == HOARDER and load >= 10 and far and spare and stash(handle, v):
             return
         if eat(handle, v):
             return
@@ -932,9 +933,9 @@ def pick_role(pop: int) -> int:
         BUILDER: 2 if pop < 20 else 3,
         WOODMAN: 3 if pop < 20 else 2 + pop // 8,
         MASON: 2 if pop < 30 else 3,
-        SMITH: 1 if pop < 25 else 2,
+        SMITH: 1,
         GUARD: 1 if pop < 12 else 3 if pop < 25 else 5,
-        COALER: mining,
+        COALER: mining + (pop >= 25),
         COPPERER: mining,
         IRONER: mining,
     }

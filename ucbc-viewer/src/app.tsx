@@ -6,6 +6,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { renderers } from "./games.ts";
+import { parseReplay } from "./load.ts";
 import type { Replay } from "./replay.gen.ts";
 import { Viewer } from "./viewer.tsx";
 
@@ -40,34 +41,39 @@ async function samples(): Promise<string[]> {
   return r?.ok ? r.json().catch(() => []) : [];
 }
 
-function open(text: string, source: string) {
+async function open(stream: ReadableStream<Uint8Array>, source: string) {
+  // A replay dropped while another loads replaces it.
+  const id = ++opened;
+  show(`Loading ${source}…`);
   let replay: Replay;
   try {
-    replay = JSON.parse(text);
-  } catch {
-    return show(`${source} is not JSON.`);
+    replay = (await parseReplay(stream)) as Replay;
+  } catch (e) {
+    if (id === opened) show(e instanceof SyntaxError ? `${source} is not JSON.` : `${source} could not be read.`);
+    return;
   }
+  if (id !== opened) return;
   if (!Array.isArray(replay?.sets) || !replay.sets.length || typeof replay.config?.game !== "string") {
     return show(`${source} is not a replay.`);
   }
-  render(<Viewer key={++opened} replay={replay} renderers={renderers} />);
+  render(<Viewer key={id} replay={replay} renderers={renderers} />);
 }
 
 const url = new URLSearchParams(location.search).get("replay") ?? "replay.json";
 fetch(url)
-  .then((r) => (r.ok ? r.text() : Promise.reject()))
-  .then((text) => open(text, url))
+  .then((r) => (r.ok && r.body ? r.body : Promise.reject()))
+  .then((body) => open(body, url))
   .catch(async () => {
     const list = await samples();
     show(list.length ? "Drop a replay file here, or open a sample:" : "Drop a replay file here.", list);
   });
 
 addEventListener("dragover", (e) => e.preventDefault());
-/** A replay file's text, decompressed if it is gzipped (`ucbc run --replay r.json.gz`). */
-async function readFile(file: File): Promise<string> {
+/** A replay file's bytes, decompressed if it is gzipped (`ucbc run --replay r.json.gz`). */
+async function readFile(file: File): Promise<ReadableStream<Uint8Array>> {
   const [a, b] = new Uint8Array(await file.slice(0, 2).arrayBuffer());
-  if (a !== 0x1f || b !== 0x8b) return file.text();
-  return new Response(file.stream().pipeThrough(new DecompressionStream("gzip"))).text();
+  if (a !== 0x1f || b !== 0x8b) return file.stream();
+  return file.stream().pipeThrough(new DecompressionStream("gzip"));
 }
 
 addEventListener("drop", async (e) => {

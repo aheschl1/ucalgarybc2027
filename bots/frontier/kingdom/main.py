@@ -1,11 +1,12 @@
 """Kingdom: a walled town that farms, mines, smelts, and raises the Monument.
 
-The commander never leaves its post beside the base: it spawns workers, gives each a role,
-and relays what the team has found. The base sits in a ring of walls, gates, and towers;
-spike traps cover the approaches and the farm. Workers farm wheat and apples by the pond,
-cut wood and stone for the base, build the town from a fixed plan, study and craft at the
-desk, workbench, and smelter, mine the veins the team finds, man the towers, and once the
-base is stocked, hoard what they gather in chests in the wild, which counts for points.
+The commander never leaves its sheltered post beside the base: it spawns workers, gives
+each a role, and relays the base's stock and the veins the team has found. The base sits in
+a ring of walls and gates with towers inside; hidden spikes cover the approaches. Workers
+farm wheat and apples around the pond and wells, fill granaries, cut wood and stone for
+the base, build the town from a fixed plan, study and craft at the desk, workbench, and
+smelters, mine and dig out veins, man the towers, raise the Monument, and once the base is
+stocked, hoard what they gather in chests and walls in the wild, which counts for points.
 Each unit runs its own copy of this file: module globals belong to one unit."""
 
 import base64
@@ -111,7 +112,6 @@ CHEST_ROOM = 40
 RESERVE = 8
 APPLES = 31
 BASE_FULL = 920
-DEBUG = False
 
 
 def ring() -> list[tuple[Building, int, int]]:
@@ -874,9 +874,6 @@ def commander(handle: FrontierHandle, v: View) -> None:
     mind.alive = {
         k: a for k, a in mind.alive.items() if v.tick - a[1] < (300 if a[0] in near else 1500)
     }
-    if DEBUG and v.tick % 100 == 0:
-        roles = sorted(r for r, _ in mind.alive.values())
-        print(v.tick, "stock", {i.value: n for i, n in mind.stock.items()}, "roles", roles)
     msg = b"C"
     for uid, role, t in mind.assigned:
         if v.tick - t < 6:
@@ -1235,8 +1232,6 @@ def farmer(handle: FrontierHandle, v: View) -> None:
         return
     if (unload or restock) and visit_base(handle, v, keep, supplies):
         return
-    if DEBUG and v.tick % 10 == 0:
-        print("farm", v.me, len(field), len(ripe), len(plant), len(till), unload, v.carried)
     for targets, act in (
         (ripe, lambda d: handle.harvest(d)),
         (plant, lambda d: handle.plant(d, Item.APPLE_SEED if apple_seeds else Item.WHEAT_SEED)),
@@ -1328,8 +1323,6 @@ def builder(handle: FrontierHandle, v: View) -> None:
         }
         if all(spare[i] >= n for i, n in COST[kind].items()):
             fresh.append((kind, p))
-    if DEBUG and v.tick % 25 == 0:
-        print("build", v.me, working[:2], fresh[:3], repair[:1], v.carried, mind.stock_at)
     if working:
         kind, p = min(working, key=lambda w: dist(w[1], v.me))
         finish(handle, v, kind, p)
@@ -1401,8 +1394,6 @@ def finish(handle: FrontierHandle, v: View, kind: Building, p: Pos) -> None:
     site = next((s for s in v.seen.stores if (s.pos.x, s.pos.y) == p), None)
     owed = {s.item: s.count for s in site.owed} if site else {}
     mind.owed[p] = owed
-    if DEBUG and kind == Building.MONUMENT:
-        print("monument", v.me, owed, v.carried, mind.skip.get(p))
     for item, n in owed.items():
         if v.carried.get(item):
             with suppress(ActionError):
@@ -1510,8 +1501,6 @@ def smith(handle: FrontierHandle, v: View) -> None:
     plan = next_shop(v, shops)
     inputs = RECIPES[plan[1]][1] if plan else {}
     goods = sum(v.carried.get(i, 0) for i in GOODS if i not in inputs)
-    if DEBUG and v.tick % 20 == 0:
-        print("smith", v.me, plan, shops, mind.shop, v.carried, mind.studied, mind.recipes)
     if goods and (plan is None or CARRY - v.load < 6):
         resupply(handle, v, {i: v.carried.get(i, 0) for i in inputs})
         return

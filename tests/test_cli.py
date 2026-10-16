@@ -88,6 +88,52 @@ def test_run_plays_a_map_per_set(tmp_path: Path) -> None:
     assert "once per set (3)" in result.output
 
 
+def test_run_stops_at_max_ticks(tmp_path: Path) -> None:
+    noop = str(UCBC2027.parents[1] / "bots" / "ucbc2027" / "noop")
+    replay = tmp_path / "replay.json"
+    args = ["run", noop, noop, "--game", "ucbc2027", "--sets", "1", "--replay", str(replay)]
+    result = CliRunner().invoke(main, [*args, "--max-ticks", "5"])
+    assert result.exit_code == 0, result.output
+    assert "after 5 ticks" in result.output
+    assert json.loads(replay.read_text())["sets"][0]["result"]["ticks"] == 5
+
+    result = CliRunner().invoke(main, [*args, "--max-ticks", "0"])
+    assert result.exit_code == 2
+
+
+def test_run_passes_game_config(tmp_path: Path) -> None:
+    noop = str(UCBC2027.parents[1] / "bots" / "ucbc2027" / "noop")
+    standard = UCBC2027 / "maps" / "standard.map"
+    replay = tmp_path / "replay.json"
+    args = ["run", noop, noop, "--game", "ucbc2027", "--sets", "1", "--max-ticks", "1"]
+    args += ["--replay", str(replay)]
+
+    # Inline or from a file, and --map adds its maps key.
+    config_file = tmp_path / "config.json"
+    config_file.write_text('{"size": 3}')
+    for config in ['{"size": 3}', f"@{config_file}"]:
+        result = CliRunner().invoke(main, [*args, "--game-config", config, "--map", str(standard)])
+        assert result.exit_code == 0, result.output
+        recorded = json.loads(replay.read_text())["config"]["game_config"]
+        assert recorded["size"] == 3
+        assert [base64.b64decode(m) for m in recorded["maps"]] == [standard.read_bytes()]
+
+    # It reaches the game.
+    result = CliRunner().invoke(main, [*args, "--game-config", '{"maps": ["AAAA"]}'])
+    assert result.exit_code != 0
+    assert "game_config.maps[0]: not a map file" in result.output
+
+    for config, error in [
+        ("{", "not JSON"),
+        ("[1]", "must be a JSON object"),
+        (f"@{tmp_path / 'missing.json'}", "No such file"),
+        ('{"maps": []}', "both set maps"),
+    ]:
+        result = CliRunner().invoke(main, [*args, "--game-config", config, "--map", str(standard)])
+        assert result.exit_code == 2
+        assert error in result.output
+
+
 def test_run_prints_progress_unless_no_verbose(
     bot: BotPath, capfd: pytest.CaptureFixture[str]
 ) -> None:

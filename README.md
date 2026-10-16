@@ -37,6 +37,8 @@ uv run ucbc run bots/ucbc2027/noop bots/ucbc2027/noop --view
 | `--no-verbose` | hide tick progress and time estimates |
 | `--replay FILE`, `--summary FILE` | write JSON; a replay named `*.gz` is gzipped |
 | `--map FILE` | play on a map file, e.g. `games/ucbc2027/maps/standard.map`; once for every set, or repeated once per set |
+| `--game-config JSON` | a JSON object (or `@FILE`) passed to the game; `--map` adds its `maps` key |
+| `--max-ticks N` | end each set after N ticks; default 1000 |
 | `--view` | open replay in browser |
 
 

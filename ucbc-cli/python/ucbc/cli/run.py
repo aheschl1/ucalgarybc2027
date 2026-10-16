@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -28,6 +29,18 @@ from ucbc.runner import DEFAULT_MEMORY_BYTES, DEFAULT_STEP_MS
     help="Play on this map file instead of the game's standard one. Once for every set, "
     "or once per set, in order.",
 )
+@click.option(
+    "--game-config",
+    "game_config_json",
+    metavar="JSON",
+    help="A JSON object for the game, or @FILE to read one. --map sets its maps key.",
+)
+@click.option(
+    "--max-ticks",
+    type=click.IntRange(min=1),
+    help="End each set after this many ticks; the game decides the result. "
+    "Defaults to the engine's limit.",
+)
 @click.option("--view", is_flag=True, help="Open the replay in the viewer after the match.")
 @click.option("--show-bot-output", is_flag=True, help="Echo bot output as the match runs.")
 @click.option("--no-verbose", is_flag=True, help="Hide tick progress and time estimates.")
@@ -50,6 +63,8 @@ def run(
     replay: Path | None,
     summary: Path | None,
     map_files: tuple[Path, ...],
+    game_config_json: str | None,
+    max_ticks: int | None,
     view: bool,
     show_bot_output: bool,
     no_verbose: bool,
@@ -58,6 +73,7 @@ def run(
 ) -> None:
     """Play BOT_A against BOT_B. Each is a directory containing main.py."""
     import base64
+    import json
     import signal
     import tempfile
 
@@ -78,10 +94,26 @@ def run(
             f"--map was given {len(map_files)} times; give it once, or once per set ({sets})"
         )
 
-    names = [bot_a.name, bot_b.name]
-    game_config = None
+    game_config: dict[str, Any] | None = None
+    if game_config_json is not None:
+        if game_config_json.startswith("@"):
+            try:
+                game_config_json = Path(game_config_json[1:]).read_text()
+            except OSError as e:
+                raise click.BadParameter(str(e), param_hint="--game-config") from e
+        try:
+            game_config = json.loads(game_config_json)
+        except json.JSONDecodeError as e:
+            raise click.BadParameter(f"not JSON: {e}", param_hint="--game-config") from e
+        if not isinstance(game_config, dict):
+            raise click.BadParameter("must be a JSON object", param_hint="--game-config")
     if map_files:
-        game_config = {"maps": [base64.b64encode(m.read_bytes()).decode() for m in map_files]}
+        if game_config is not None and "maps" in game_config:
+            raise click.UsageError("--map and --game-config both set maps; give one")
+        game_config = game_config or {}
+        game_config["maps"] = [base64.b64encode(m.read_bytes()).decode() for m in map_files]
+
+    names = [bot_a.name, bot_b.name]
     try:
         result = run_match(
             bot_a,
@@ -97,6 +129,7 @@ def run(
             verbose=not no_verbose,
             step_ms=step_ms,
             memory_bytes=memory_mb * 2**20,
+            max_ticks=max_ticks,
             game_config=game_config,
         )
     except (RuntimeError, ValueError) as e:

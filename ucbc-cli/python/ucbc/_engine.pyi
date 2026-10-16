@@ -18,6 +18,7 @@ def run_match(
     summary_path: str | None = None,
     echo_bot_output: bool = False,
     verbose: bool = False,
+    max_ticks: int | None = None,
     game_config: str | None = None,
     on_set: Callable[[str], object] | None = None,
 ) -> str: ...

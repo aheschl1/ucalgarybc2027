@@ -105,7 +105,7 @@ STUDY = [
 WOOD_STOCK, STONE_STOCK = 200, 120
 ORE_STOCK = {COAL: 100, COPPER: 70, IRON: 80}
 HOARD_FROM = 18
-POP_CAP = 90
+POP_CAP = 80
 CHEST_ROOM = 40
 RESERVE = 8
 APPLES = 31
@@ -905,7 +905,7 @@ def spawn(handle: FrontierHandle, v: View, stored: dict[Item, int]) -> None:
     farmland = len(v.seen.soil) // 3
     c = v.seen.crops
     trees = sum(1 for i in range(2, len(c), 4) if c[i] == 0)
-    fed = 8 + farmland // 2 + 4 * trees
+    fed = 8 + farmland * 2 // 5 + 3 * trees
     gap = 2 if mind.spawned < len(EARLY) else 12
     if mind.assigned and v.tick - mind.assigned[-1][2] < gap:
         return
@@ -1206,8 +1206,7 @@ def farmer(handle: FrontierHandle, v: View) -> None:
     ripe = [p for p in field if p in crops and crops[p][1] <= v.tick] if room >= 6 else []
     plant = []
     if seeds or apple_seeds:
-        rich = 100 if seeds <= 8 else 50
-        plant = [p for p in field if p in soil and p not in crops and soil[p] >= rich]
+        plant = [p for p in field if p in soil and p not in crops and soil[p] >= 100]
         if apple_seeds:
             plant = [p for p in field if p in soil and p not in crops]
     till = [p for p in field if v.tile(p) in (GRASS, DIRT) and p not in v.buildings()]
@@ -1227,7 +1226,8 @@ def farmer(handle: FrontierHandle, v: View) -> None:
         keep[Item.WHEAT] = 99
     supplies = {Item.WHEAT_SEED: 6, Item.WHEAT: 3, Item.APPLE_SEED: want_apple}
     base_food = mind.stock.get(Item.WHEAT, 0) + mind.stock.get(Item.APPLE, 0)
-    porter = mind.id % 3 == 0 and base_food < 30 and v.tick - mind.heard_at < 300
+    porter = (mind.id % 3 == 0 or base_food < 10) and base_food < 30
+    porter &= v.tick - mind.heard_at < 300
     apples_home = apples >= 4 and mind.stock.get(Item.APPLE, 0) < 40
     granary = not porter and not apples_home and wood == 0
     surplus = {Item.WHEAT: wheat - 3, Item.APPLE: apples, Item.WHEAT_SEED: seeds - 6}
@@ -1494,12 +1494,13 @@ def smith(handle: FrontierHandle, v: View) -> None:
             mind.shop[p] = (stored, s.job.done_at if s.job else -1)
             if work_shop(handle, v, p, shops[p], stored, s.job is not None):
                 return
-    goods = sum(v.carried.get(i, 0) for i in GOODS)
     plan = next_shop(v, shops)
+    inputs = RECIPES[plan[1]][1] if plan else {}
+    goods = sum(v.carried.get(i, 0) for i in GOODS if i not in inputs)
     if DEBUG and v.tick % 20 == 0:
         print("smith", v.me, plan, shops, mind.shop, v.carried, mind.studied, mind.recipes)
     if goods and (plan is None or CARRY - v.load < 6):
-        resupply(handle, v)
+        resupply(handle, v, {i: v.carried.get(i, 0) for i in inputs})
         return
     if plan is None:
         if v.tick - mind.stock_at > 60 or v.load > 4:
@@ -1507,11 +1508,9 @@ def smith(handle: FrontierHandle, v: View) -> None:
         elif not help_monument(handle, v):
             idle(handle, v)
         return
-    p, recipe, ready = plan
+    p, _, ready = plan
     if not ready:
-        inputs = RECIPES[recipe][1]
-        other = goods - sum(v.carried.get(i, 0) for i in inputs if i in GOODS)
-        room = CARRY - food_want(SMITH) - other - 2
+        room = CARRY - food_want(SMITH) - goods - 2
         have = plus(mind.stock, v.carried)
         runs = min(
             [6, room // sum(inputs.values())] + [have.get(i, 0) // n for i, n in inputs.items()]

@@ -54,3 +54,11 @@ async def get_elo(db: DBConnection, team_id: int) -> TeamElo:
     if team is None:
         raise NotFound(f"no team {team_id}")
     return team
+
+
+async def rename_team(db: DBConnection, user: User, name: str) -> MyTeam:
+    try:
+        await db.team_repo.set_name(user.team_id, name)
+    except UniqueViolation as e:
+        raise Conflict(f"a team is already called {name}") from e
+    return await my_team(db, user.team_id)

@@ -69,3 +69,6 @@ class TeamRepo:
             "select display_name from users where team_id = %s order by id", (id,)
         )
         return [row["display_name"] for row in await cur.fetchall()]
+
+    async def set_name(self, id: int, name: str) -> None:
+        await self._conn.execute("Update teams set name = %s Where id = %s", (name, id))

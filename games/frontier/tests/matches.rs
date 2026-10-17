@@ -7,7 +7,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::{Value, json};
 use ucbc_engine::{
     Bot, BotFailure, BotResourceLimit, EngineError, GameRegistry, MatchConfig, MatchRunner,
-    MatchSpec, Reason, Replay, SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec,
+    MatchSpec, Reason, Replay, SpawnCtx, StepCtx, StepResult, TeamId, TeamSpec, TickMoment,
 };
 use ucbc_frontier::{Building, Frontier, Item, Kind, Observation, Snapshot};
 
@@ -385,4 +385,41 @@ fn at_the_tick_limit_points_decide() {
         (result.winner_team, result.detail.as_str()),
         (Some(TeamId(1)), "most points")
     );
+}
+
+#[test]
+fn the_tick_hook_charges_a_spawn_to_the_commander_s_step() {
+    let mut reg = GameRegistry::new();
+    reg.register::<Frontier>();
+    let config = MatchConfig::new("frontier", 1, 3, 2, LIMITS)
+        .max_ticks(3)
+        .game_config(json!({"size": 64}));
+    let (tx, rx) = std::sync::mpsc::channel();
+    let spec = MatchSpec::new("t", config, vec![team("a", grow), team("b", idle)]).on_tick(
+        Box::new(move |tick, moment, scores| tx.send((tick, moment, scores.to_vec())).unwrap()),
+    );
+    let replay = MatchRunner::new(&reg, spec).unwrap().run().unwrap().replay;
+    let events: Vec<_> = rx.iter().collect();
+
+    let (_, _, start) = &events[0];
+    let (_, moment, after) = &events[1];
+    assert!(matches!(
+        moment,
+        TickMoment::Step {
+            team: TeamId(0),
+            ..
+        }
+    ));
+    assert_eq!((after[0] - start[0], after[1] - start[1]), (-5, 0));
+
+    // At each tick's end the hook agrees with the snapshot's points.
+    let ends = events.iter().filter(|(_, m, _)| *m == TickMoment::TickEnd);
+    for ((_, _, scores), snapshot) in ends.zip(snapshots(&replay, 0).iter().skip(1)) {
+        let points: Vec<i64> = snapshot
+            .points
+            .iter()
+            .map(|p| i64::from(p.buildings + p.stored + p.units))
+            .collect();
+        assert_eq!(scores, &points);
+    }
 }

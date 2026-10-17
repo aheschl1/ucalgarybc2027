@@ -335,6 +335,10 @@ impl Game for Frontier {
         self.world
             .snapshot(self.ticks, self.ticks.is_multiple_of(self.config.keyframe))
     }
+
+    fn score(&self, team: TeamId) -> Option<i64> {
+        Some(i64::from(self.world.score(team)))
+    }
 }
 
 #[cfg(test)]

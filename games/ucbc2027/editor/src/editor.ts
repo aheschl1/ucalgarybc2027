@@ -25,6 +25,9 @@ const MIRRORS: [Mirror, string][] = [
   ["none", "No mirror"],
   ["left-right", "Mirror left-right"],
   ["top-bottom", "Mirror top-bottom"],
+  ["diag-pos", "Mirror across pos. diagonal"],
+  ["diag-neg", "Mirror across neg. diagonal"],
+  ["rotate-180", "Rotate 180 degrees"]
 ];
 const ENVIRONMENT = {
   [Environment.EMPTY]: "empty",

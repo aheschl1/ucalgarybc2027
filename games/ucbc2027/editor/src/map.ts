@@ -8,7 +8,7 @@ import { Environment, Item, type Map, MapSchema, TileSchema } from "./map_pb.ts"
 export type Brush = "empty" | "wall" | "lab" | "fossil";
 
 /** Paint the mirrored tile too: across the vertical centre line, or the horizontal one. */
-export type Mirror = "none" | "left-right" | "top-bottom";
+export type Mirror = "none" | "left-right" | "top-bottom" | "diag-pos" | "diag-neg" | "rotate-180";
 
 const PAINT: Record<Brush, [Environment, Item]> = {
   empty: [Environment.EMPTY, Item.NONE],
@@ -40,8 +40,21 @@ export function paint(map: Map, x: number, y: number, brush: Brush, mirror: Mirr
   for (let dy = 0; dy < size; dy++) {
     for (let dx = 0; dx < size; dx++) at.push([x + dx, y + dy]);
   }
-  const flip = ([tx, ty]: [number, number]): [number, number] =>
-    mirror === "left-right" ? [map.width - 1 - tx, ty] : [tx, map.height - 1 - ty];
+  const flip = ([tx, ty]: [number, number]): [number, number] => {
+    switch (mirror) {
+      case "left-right":
+        return [map.width - 1 - tx, ty];
+      case "top-bottom":
+        return [tx, map.height - 1 - ty];
+      case "diag-pos":
+        return [map.height - 1 - ty, map.width - 1 - tx];
+      case "diag-neg":
+        return [ty, tx];
+      case "rotate-180":
+        return [map.width - 1 - tx, map.height - 1 - ty];
+    }
+    return [0, 0];
+  }
   if (mirror !== "none") at.push(...at.map(flip));
 
   const [environment, item] = PAINT[brush];

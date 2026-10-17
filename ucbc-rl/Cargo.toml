@@ -1,0 +1,17 @@
+[package]
+name = "ucbc-rl"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "Training environments for RL"
+
+[dependencies]
+ucbc-engine = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+ucbc-frontier = { path = "../games/frontier" }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

@@ -2086,6 +2086,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ucbc-rl"
+version = "0.1.11"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "ucbc-engine",
+ "ucbc-frontier",
+]
+
+[[package]]
 name = "ucbc-tictactoe"
 version = "0.1.11"
 dependencies = [

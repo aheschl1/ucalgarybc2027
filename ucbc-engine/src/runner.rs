@@ -17,6 +17,20 @@ use crate::summary::{Summary, summarize, write_summary};
 /// Called with each set as it ends; an `Err` aborts the match.
 pub type SetHook = Box<dyn FnMut(&SetReplay) -> Result<(), EngineError> + Send>;
 
+/// Where in a tick a [`TickHook`] is called.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TickMoment {
+    /// After `schedule`.
+    TickStart,
+    /// After the bot's step and its `end_step` or `bot_failed`.
+    Step { bot: BotId, team: TeamId },
+    /// After the game's `end_tick`, or the step that completed the set.
+    TickEnd,
+}
+
+/// Called with the tick, the moment, and every team's [`score`](crate::Game::score).
+pub type TickHook = Box<dyn FnMut(u32, TickMoment, &[i64]) + Send>;
+
 pub struct MatchSpec {
     match_id: String,
     config: MatchConfig,
@@ -25,7 +39,9 @@ pub struct MatchSpec {
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
     verbose: bool,
+    record: bool,
     on_set: Option<SetHook>,
+    on_tick: Option<TickHook>,
 }
 
 impl MatchSpec {
@@ -38,7 +54,9 @@ impl MatchSpec {
             summary_path: None,
             echo_bot_output: false,
             verbose: false,
+            record: true,
             on_set: None,
+            on_tick: None,
         }
     }
 
@@ -66,9 +84,21 @@ impl MatchSpec {
         self
     }
 
+    pub fn record(mut self, record: bool) -> Self {
+        self.record = record;
+        self
+    }
+
     /// Run `hook` after each set, before the next one starts.
     pub fn on_set(mut self, hook: SetHook) -> Self {
         self.on_set = Some(hook);
+        self
+    }
+
+    /// Run `hook` at the start of each tick, after each step, and at its end. Panics if the
+    /// game has no [`score`](crate::Game::score).
+    pub fn on_tick(mut self, hook: TickHook) -> Self {
+        self.on_tick = Some(hook);
         self
     }
 }
@@ -93,7 +123,9 @@ pub struct MatchRunner<'r> {
     summary_path: Option<PathBuf>,
     echo_bot_output: bool,
     verbose: bool,
+    record: bool,
     on_set: Option<SetHook>,
+    on_tick: Option<TickHook>,
 }
 
 impl<'r> MatchRunner<'r> {
@@ -130,21 +162,16 @@ impl<'r> MatchRunner<'r> {
             summary_path: spec.summary_path,
             echo_bot_output: spec.echo_bot_output,
             verbose: spec.verbose,
+            record: spec.record,
             on_set: spec.on_set,
+            on_tick: spec.on_tick,
         })
     }
 
     pub fn run(mut self) -> Result<MatchReport, EngineError> {
         let mut sets = Vec::with_capacity(self.config.sets as usize);
         for set_index in 0..self.config.sets {
-            let set = run_set(
-                self.factory,
-                &self.config,
-                &mut self.bots,
-                self.echo_bot_output,
-                self.verbose,
-                set_index,
-            )?;
+            let set = self.run_set(set_index)?;
             if let Some(hook) = &mut self.on_set {
                 hook(&set)?;
             }
@@ -162,136 +189,161 @@ impl<'r> MatchRunner<'r> {
     }
 }
 
-fn run_set(
-    factory: &GameFactory,
-    config: &MatchConfig,
-    bots: &mut BotRegistry,
-    echo: bool,
-    verbose: bool,
-    set_index: u32,
-) -> Result<SetReplay, EngineError> {
-    let started = Instant::now();
-    let teams = config.teams;
-    let first_team = TeamId(set_index % teams);
-    let seed = set_seed(config.seed, set_index);
-    bots.begin_set(seed);
-    let order = (0..teams)
-        .map(|i| TeamId((first_team.0 + i) % teams))
-        .collect();
-    let setup = SetSetup::new(set_index, order, seed, config.game_config.clone());
-    let mut game = factory(&setup)?;
-    let initial_state = game.snapshot();
-    let mut ticks: Vec<Tick> = Vec::new();
-
-    let outcome = loop {
-        if let GameStatus::Complete(outcome) = game.status() {
-            break outcome;
-        }
-        let tick = ticks.len() as u32;
-        if tick >= config.max_ticks {
-            break game.tick_limit(config.max_ticks);
-        }
-
-        let schedule = game.schedule();
-        check_schedule(&schedule, game.as_ref())?;
-        let mut steps = Vec::new();
-        for bot_id in schedule {
-            if matches!(game.status(), GameStatus::Complete(_)) {
-                break;
+impl MatchRunner<'_> {
+    fn run_set(&mut self, set_index: u32) -> Result<SetReplay, EngineError> {
+        let started = Instant::now();
+        let config = &self.config;
+        let teams = config.teams;
+        let first_team = TeamId(set_index % teams);
+        let seed = set_seed(config.seed, set_index);
+        self.bots.begin_set(seed);
+        let order = (0..teams)
+            .map(|i| TeamId((first_team.0 + i) % teams))
+            .collect();
+        let setup = SetSetup::new(set_index, order, seed, config.game_config.clone());
+        let mut game = (self.factory)(&setup)?;
+        let initial_state = if self.record {
+            game.snapshot()
+        } else {
+            serde_json::Value::Null
+        };
+        let mut ticks: Vec<Tick> = Vec::new();
+        let mut tick = 0;
+        let mut on_tick = |game: &dyn DynGame, tick: u32, moment: TickMoment| {
+            if let Some(hook) = &mut self.on_tick {
+                let scores: Vec<i64> = (0..teams)
+                    .map(|t| {
+                        game.score(TeamId(t))
+                            .expect("on_tick needs a game with a score")
+                    })
+                    .collect();
+                hook(tick, moment, &scores);
             }
-            // Removed earlier this tick.
-            let Some(team_id) = game.team_of(bot_id) else {
-                continue;
-            };
-            let mut actions = Vec::new();
-            let (result, team) = match bots.bot_mut(bot_id, team_id) {
-                Ok(BotHandle { bot, team, seed }) => {
-                    let mut ctx = StepCtx::new(
+        };
+
+        let outcome = loop {
+            if let GameStatus::Complete(outcome) = game.status() {
+                break outcome;
+            }
+            if tick >= config.max_ticks {
+                break game.tick_limit(config.max_ticks);
+            }
+
+            let schedule = game.schedule();
+            check_schedule(&schedule, game.as_ref())?;
+            on_tick(game.as_ref(), tick, TickMoment::TickStart);
+            let mut steps = Vec::new();
+            for bot_id in schedule {
+                if matches!(game.status(), GameStatus::Complete(_)) {
+                    break;
+                }
+                // Removed earlier this tick.
+                let Some(team_id) = game.team_of(bot_id) else {
+                    continue;
+                };
+                let mut actions = Vec::new();
+                let (result, team) = match self.bots.bot_mut(bot_id, team_id) {
+                    Ok(BotHandle { bot, team, seed }) => {
+                        let mut ctx = StepCtx::new(
+                            bot_id,
+                            team,
+                            set_index,
+                            tick,
+                            *seed,
+                            game.as_mut(),
+                            &mut actions,
+                        );
+                        (bot.step(&mut ctx), team.clone())
+                    }
+                    Err(BotLookupError::Game(error)) => return Err(error),
+                    Err(BotLookupError::Bot(failure)) => {
+                        (StepResult::failed(failure), self.bots.team_info(team_id))
+                    }
+                };
+                let usage = Usage::new(result.time, result.memory);
+
+                if self.echo_bot_output && !result.stdout.is_empty() {
+                    for line in result.stdout.lines() {
+                        eprintln!(
+                            "[set {set_index} tick {tick} team {} bot {}] {line}",
+                            team.name, bot_id
+                        );
+                    }
+                }
+
+                let before = game.status();
+                let failure = match result.outcome {
+                    Ok(()) => {
+                        game.end_step(bot_id);
+                        None
+                    }
+                    Err(failure) => {
+                        game.bot_failed(bot_id, &failure);
+                        Some(failure)
+                    }
+                };
+                if let GameStatus::Complete(outcome) = &before
+                    && game.status() != before
+                {
+                    return Err(EngineError::Game(format!(
+                        "game changed a completed outcome ({outcome:?}) after the step"
+                    )));
+                }
+
+                self.bots.retain(|id| game.team_of(id).is_some());
+                on_tick(
+                    game.as_ref(),
+                    tick,
+                    TickMoment::Step {
+                        bot: bot_id,
+                        team: team_id,
+                    },
+                );
+                if self.record {
+                    let failure = failure.as_ref().map(BotFailure::record);
+                    steps.push(Step::new(
                         bot_id,
-                        team,
-                        set_index,
-                        tick,
-                        *seed,
-                        game.as_mut(),
-                        &mut actions,
-                    );
-                    (bot.step(&mut ctx), team.clone())
-                }
-                Err(BotLookupError::Game(error)) => return Err(error),
-                Err(BotLookupError::Bot(failure)) => {
-                    (StepResult::failed(failure), bots.team_info(team_id))
-                }
-            };
-            let usage = Usage::new(result.time, result.memory);
-
-            if echo && !result.stdout.is_empty() {
-                for line in result.stdout.lines() {
-                    eprintln!(
-                        "[set {set_index} tick {tick} team {} bot {}] {line}",
-                        team.name, bot_id
-                    );
+                        team_id,
+                        actions,
+                        result.stdout,
+                        failure,
+                        usage,
+                    ));
                 }
             }
 
-            let before = game.status();
-            let failure = match result.outcome {
-                Ok(()) => {
-                    game.end_step(bot_id);
-                    None
-                }
-                Err(failure) => {
-                    game.bot_failed(bot_id, &failure);
-                    Some(failure)
-                }
-            };
-            if let GameStatus::Complete(outcome) = &before
-                && game.status() != before
+            if !matches!(game.status(), GameStatus::Complete(_)) {
+                game.end_tick();
+            }
+            on_tick(game.as_ref(), tick, TickMoment::TickEnd);
+            if self.record {
+                ticks.push(Tick::new(tick, steps, game.snapshot()));
+            }
+            tick += 1;
+            if self.verbose
+                && let Some(line) = progress_line(
+                    set_index,
+                    config.sets,
+                    tick,
+                    config.max_ticks,
+                    started.elapsed(),
+                )
             {
-                return Err(EngineError::Game(format!(
-                    "game changed a completed outcome ({outcome:?}) after the step"
-                )));
+                eprintln!("{line}");
             }
-
-            bots.retain(|id| game.team_of(id).is_some());
-            let failure = failure.as_ref().map(BotFailure::record);
-            steps.push(Step::new(
-                bot_id,
-                team_id,
-                actions,
-                result.stdout,
-                failure,
-                usage,
-            ));
-        }
-
-        if !matches!(game.status(), GameStatus::Complete(_)) {
-            game.end_tick();
-        }
-        ticks.push(Tick::new(tick, steps, game.snapshot()));
-        if verbose
-            && let Some(line) = progress_line(
-                set_index,
+        };
+        if self.verbose {
+            eprintln!(
+                "set {}/{}: done after {tick} ticks in {}",
+                set_index + 1,
                 config.sets,
-                tick + 1,
-                config.max_ticks,
-                started.elapsed(),
-            )
-        {
-            eprintln!("{line}");
+                format_duration(started.elapsed())
+            );
         }
-    };
-    if verbose {
-        eprintln!(
-            "set {}/{}: done after {} ticks in {}",
-            set_index + 1,
-            config.sets,
-            ticks.len(),
-            format_duration(started.elapsed())
-        );
-    }
 
-    let result = SetResult::new(set_index, first_team, outcome, ticks.len() as u32);
-    Ok(SetReplay::new(initial_state, ticks, result))
+        let result = SetResult::new(set_index, first_team, outcome, tick);
+        Ok(SetReplay::new(initial_state, ticks, result))
+    }
 }
 
 /// A schedule naming a bot the game does not have, or the same bot twice, is a game bug.

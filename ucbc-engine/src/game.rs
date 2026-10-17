@@ -142,6 +142,10 @@ pub trait Game: Send + 'static {
 
     /// Full state, recorded once per tick.
     fn snapshot(&self) -> Self::Snapshot;
+
+    fn score(&self, _team: TeamId) -> Option<i64> {
+        None
+    }
 }
 
 /// [`Game`] over JSON payloads: the calling convention between engine and bots.
@@ -159,6 +163,7 @@ pub trait DynGame: Send {
     fn status(&self) -> GameStatus;
     fn tick_limit(&self, max_ticks: u32) -> Outcome;
     fn snapshot(&self) -> Value;
+    fn score(&self, team: TeamId) -> Option<i64>;
 }
 
 impl<G: Game> DynGame for G {
@@ -201,6 +206,10 @@ impl<G: Game> DynGame for G {
 
     fn snapshot(&self) -> Value {
         encode(Game::snapshot(self))
+    }
+
+    fn score(&self, team: TeamId) -> Option<i64> {
+        Game::score(self, team)
     }
 }
 

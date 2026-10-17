@@ -193,4 +193,8 @@ impl Game for CountingGame {
             bots: self.bots.ids(),
         }
     }
+
+    fn score(&self, team: TeamId) -> Option<i64> {
+        Some(i64::from(self.counts[team.0 as usize]))
+    }
 }

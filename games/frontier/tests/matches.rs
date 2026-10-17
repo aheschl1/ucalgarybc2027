@@ -423,3 +423,31 @@ fn the_tick_hook_charges_a_spawn_to_the_commander_s_step() {
         assert_eq!(scores, &points);
     }
 }
+
+#[test]
+fn the_teams_spawn_mirrored() {
+    fn spawn(ctx: &mut StepCtx<'_>, seen: &Observation) -> StepResult {
+        if seen.me.kind == Kind::Commander && ctx.tick == 0 {
+            ctx.act(&json!({"type": "spawn"})).unwrap();
+        }
+        StepResult::ok()
+    }
+    let replay = run(
+        json!({"size": 64}),
+        1,
+        1,
+        team("a", spawn),
+        team("b", spawn),
+    )
+    .unwrap();
+    let workers: Vec<(u64, u64, u64)> = snapshots(&replay, 0)[1]
+        .units
+        .chunks(7)
+        .filter(|u| u[2] == Kind::Worker as u64)
+        .map(|u| (u[1], u[3], u[4]))
+        .collect();
+    let [(0, ax, ay), (1, bx, by)] = workers[..] else {
+        panic!("one worker each: {workers:?}");
+    };
+    assert_eq!((ax + bx, ay), (63, by));
+}

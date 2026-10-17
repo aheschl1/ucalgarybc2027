@@ -4,6 +4,7 @@
 //! has exactly one unit waiting.
 
 mod channel;
+pub mod frontier;
 mod vec_env;
 mod worker;
 

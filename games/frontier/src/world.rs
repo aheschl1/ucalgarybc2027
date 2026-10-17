@@ -649,9 +649,14 @@ impl World {
             return Err(invalid("the team is at its unit cap"));
         }
         let last = self.map.size() - 1;
-        let at = (pos.y.saturating_sub(1)..=(pos.y + 1).min(last))
-            .flat_map(|y| {
-                (pos.x.saturating_sub(1)..=(pos.x + 1).min(last)).map(move |x| Coord::new(x, y))
+        // Team 1 looks right to left, so the teams' spawns mirror each other as the map does.
+        let dxs = if team.0 == 0 { [-1, 0, 1] } else { [1, 0, -1] };
+        let at = (-1..=1)
+            .flat_map(|dy| dxs.map(|dx| (dx, dy)))
+            .filter_map(|(dx, dy)| {
+                let x = pos.x.checked_add_signed(dx).filter(|&x| x <= last)?;
+                let y = pos.y.checked_add_signed(dy).filter(|&y| y <= last)?;
+                Some(Coord::new(x, y))
             })
             .find(|&at| self.free(at, team))
             .ok_or_else(|| invalid("no free tile next to the base"))?;

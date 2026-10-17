@@ -2089,6 +2089,8 @@ dependencies = [
 name = "ucbc-rl"
 version = "0.1.11"
 dependencies = [
+ "base64",
+ "serde",
  "serde_json",
  "tempfile",
  "ucbc-engine",

@@ -31,6 +31,12 @@ fn enum_of(out: &mut String, name: &str, ids: &[String]) {
         writeln!(out, "    {},", pascal(id)).unwrap();
     }
     writeln!(out, "}}\n").unwrap();
+    writeln!(out, "impl {name} {{").unwrap();
+    writeln!(out, "    pub const ALL: [{name}; {}] = [", ids.len()).unwrap();
+    for id in ids {
+        writeln!(out, "        {name}::{},", pascal(id)).unwrap();
+    }
+    writeln!(out, "    ];\n}}\n").unwrap();
 }
 
 fn main() {

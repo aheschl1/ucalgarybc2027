@@ -541,3 +541,36 @@ fn without_recording_the_replay_keeps_only_results() {
         assert!(bare.initial_state.is_null());
     }
 }
+
+#[test]
+fn a_removed_bot_is_dropped_after_its_step_s_tick_hook() {
+    struct Failing(std::sync::mpsc::Sender<String>);
+    impl ucbc_engine::Bot for Failing {
+        fn step(&mut self, _: &mut ucbc_engine::StepCtx<'_>) -> StepResult {
+            StepResult::failed(BotFailure::exception("Boom", ""))
+        }
+    }
+    impl Drop for Failing {
+        fn drop(&mut self) {
+            self.0.send("dropped".into()).unwrap();
+        }
+    }
+    let reg = registry();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let bot_tx = tx.clone();
+    let failing = TeamSpec::rust("a", move |_| Failing(bot_tx.clone()));
+    let s = spec(vec![failing, plus_one("b")], 1, 1).on_tick(Box::new(move |_, moment, _| {
+        tx.send(format!("{moment:?}")).unwrap();
+    }));
+    MatchRunner::new(&reg, s).unwrap().run().unwrap();
+    let events: Vec<String> = rx.iter().collect();
+    assert_eq!(
+        events[..4],
+        [
+            "TickStart",
+            "Step { bot: BotId(0), team: TeamId(0) }",
+            "dropped",
+            "TickEnd"
+        ]
+    );
+}

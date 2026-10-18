@@ -22,9 +22,10 @@ pub type SetHook = Box<dyn FnMut(&SetReplay) -> Result<(), EngineError> + Send>;
 pub enum TickMoment {
     /// After `schedule`.
     TickStart,
-    /// After the bot's step and its `end_step` or `bot_failed`.
-    Step { bot: BotId, team: TeamId },
-    /// After the game's `end_tick`, or the step that completed the set.
+    Step {
+        bot: BotId,
+        team: TeamId,
+    },
     TickEnd,
 }
 
@@ -290,7 +291,6 @@ impl MatchRunner<'_> {
                     )));
                 }
 
-                self.bots.retain(|id| game.team_of(id).is_some());
                 on_tick(
                     game.as_ref(),
                     tick,
@@ -299,6 +299,7 @@ impl MatchRunner<'_> {
                         team: team_id,
                     },
                 );
+                self.bots.retain(|id| game.team_of(id).is_some());
                 if self.record {
                     let failure = failure.as_ref().map(BotFailure::record);
                     steps.push(Step::new(
@@ -316,6 +317,7 @@ impl MatchRunner<'_> {
                 game.end_tick();
             }
             on_tick(game.as_ref(), tick, TickMoment::TickEnd);
+            self.bots.retain(|id| game.team_of(id).is_some());
             if self.record {
                 ticks.push(Tick::new(tick, steps, game.snapshot()));
             }

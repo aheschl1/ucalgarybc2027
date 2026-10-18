@@ -9,7 +9,7 @@ use ucbc_engine::replay::read_replay;
 use ucbc_engine::rng::ChaCha8Rng;
 use ucbc_engine::{
     ActionError, BotFailure, BotId, BotResourceLimit, EngineError, GameRegistry, MatchConfig,
-    MatchRunner, MatchSpec, Reason, StepResult, TeamId, TeamSpec,
+    MatchRunner, MatchSpec, Reason, StepResult, TeamId, TeamSpec, TickMoment,
 };
 
 fn registry() -> GameRegistry {
@@ -478,4 +478,99 @@ fn set_hook_sees_each_set_and_its_error_aborts_the_match() {
     };
     assert!(matches!(err, EngineError::Callback(_)));
     assert_eq!(err.to_string(), "callback failed: no more");
+}
+
+#[test]
+fn tick_hook_sees_scores_around_every_step() {
+    let reg = registry();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let config = config(1, 1).game_config(json!({"bots_per_team": 2}));
+    let s = MatchSpec::new("test", config, vec![plus_one("a"), plus_one("b")]).on_tick(Box::new(
+        move |tick, moment, scores| tx.send((tick, moment, scores.to_vec())).unwrap(),
+    ));
+    MatchRunner::new(&reg, s).unwrap().run().unwrap();
+    let events: Vec<_> = rx.iter().collect();
+
+    let step = |bot, team| TickMoment::Step {
+        bot: BotId(bot),
+        team: TeamId(team),
+    };
+    // Bots 0 and 2 are team a's, 1 and 3 team b's. Team a reaches 5 at tick 2's first step.
+    assert_eq!(
+        events,
+        vec![
+            (0, TickMoment::TickStart, vec![0, 0]),
+            (0, step(0, 0), vec![1, 0]),
+            (0, step(1, 1), vec![1, 1]),
+            (0, step(2, 0), vec![2, 1]),
+            (0, step(3, 1), vec![2, 2]),
+            (0, TickMoment::TickEnd, vec![2, 2]),
+            (1, TickMoment::TickStart, vec![2, 2]),
+            (1, step(0, 0), vec![3, 2]),
+            (1, step(1, 1), vec![3, 3]),
+            (1, step(2, 0), vec![4, 3]),
+            (1, step(3, 1), vec![4, 4]),
+            (1, TickMoment::TickEnd, vec![4, 4]),
+            (2, TickMoment::TickStart, vec![4, 4]),
+            (2, step(0, 0), vec![5, 4]),
+            (2, TickMoment::TickEnd, vec![5, 4]),
+        ]
+    );
+}
+
+#[test]
+fn without_recording_the_replay_keeps_only_results() {
+    let reg = registry();
+    let recorded = MatchRunner::new(&reg, spec(vec![plus_one("a"), plus_one("b")], 2, 1))
+        .unwrap()
+        .run()
+        .unwrap()
+        .replay;
+    let bare = MatchRunner::new(
+        &reg,
+        spec(vec![plus_one("a"), plus_one("b")], 2, 1).record(false),
+    )
+    .unwrap()
+    .run()
+    .unwrap()
+    .replay;
+    assert_eq!(bare.result, recorded.result);
+    for (bare, recorded) in bare.sets.iter().zip(&recorded.sets) {
+        assert_eq!(bare.result, recorded.result);
+        assert!(bare.ticks.is_empty());
+        assert!(bare.initial_state.is_null());
+    }
+}
+
+#[test]
+fn a_removed_bot_is_dropped_after_its_step_s_tick_hook() {
+    struct Failing(std::sync::mpsc::Sender<String>);
+    impl ucbc_engine::Bot for Failing {
+        fn step(&mut self, _: &mut ucbc_engine::StepCtx<'_>) -> StepResult {
+            StepResult::failed(BotFailure::exception("Boom", ""))
+        }
+    }
+    impl Drop for Failing {
+        fn drop(&mut self) {
+            self.0.send("dropped".into()).unwrap();
+        }
+    }
+    let reg = registry();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let bot_tx = tx.clone();
+    let failing = TeamSpec::rust("a", move |_| Failing(bot_tx.clone()));
+    let s = spec(vec![failing, plus_one("b")], 1, 1).on_tick(Box::new(move |_, moment, _| {
+        tx.send(format!("{moment:?}")).unwrap();
+    }));
+    MatchRunner::new(&reg, s).unwrap().run().unwrap();
+    let events: Vec<String> = rx.iter().collect();
+    assert_eq!(
+        events[..4],
+        [
+            "TickStart",
+            "Step { bot: BotId(0), team: TeamId(0) }",
+            "dropped",
+            "TickEnd"
+        ]
+    );
 }

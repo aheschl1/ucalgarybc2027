@@ -24,7 +24,7 @@ pub use replay::{
     MatchConfig, MatchResult, Reason, Replay, SetReplay, SetResult, Step, Tick, Usage,
 };
 pub use request::{Answer, Request};
-pub use runner::{MatchReport, MatchRunner, MatchSpec, SetHook};
+pub use runner::{MatchReport, MatchRunner, MatchSpec, SetHook, TickHook, TickMoment};
 pub use step::{StepCtx, StepResult};
 pub use summary::Summary;
 

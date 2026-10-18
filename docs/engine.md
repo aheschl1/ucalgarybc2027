@@ -75,8 +75,15 @@ pub trait Game: Send + 'static {
     fn status(&self) -> GameStatus;
     fn tick_limit(&self, max_ticks: u32) -> Outcome { Outcome::draw(..) }
     fn snapshot(&self) -> Self::Snapshot;
+    fn score(&self, team: TeamId) -> Option<i64> { None }
 }
 ```
+
+`MatchSpec::on_tick(hook)` calls `hook(tick, moment, scores)` after `schedule`, after each
+step, and after `end_tick`, with every team's `score`. The change across a `Step` is that bot's
+doing; changes between steps (jobs finishing in `schedule`, meals in `end_tick`) are no one
+bot's. A set's end reaches only `on_set`. `MatchSpec::record(false)` leaves the steps and
+snapshots out of the replay.
 
 Games never see JSON. `DynGame` (blanket impl) decodes and encodes at the boundary.
 

@@ -1971,10 +1971,7 @@ name = "ucbc-cli"
 version = "0.1.11"
 dependencies = [
  "pyo3",
- "serde",
- "serde-pickle",
  "serde_json",
- "tempfile",
  "ucbc-engine",
  "ucbc-games",
  "ucbc-wasm",
@@ -2033,9 +2030,11 @@ dependencies = [
  "pollster",
  "rand",
  "rand_chacha",
+ "serde",
  "serde-pickle",
  "serde_json",
  "tempfile",
+ "ucbc-engine",
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wizer",

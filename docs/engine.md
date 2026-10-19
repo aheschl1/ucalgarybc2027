@@ -171,7 +171,7 @@ BotFailure::Exception / Crash                    -> engine drops the bot, game.b
 
 ## Python bots
 
-One wasm instance per bot (`ucbc-cli/src/bot.rs` over `ucbc-wasm`): CPython for WASI,
+One wasm instance per bot (`PyTeam` in `ucbc-wasm/src/bot.rs`): CPython for WASI,
 started from a snapshot, run on fuel, pickled messages through one host call. See
 [wasm.md](wasm.md) and [resourcelimits.md](resourcelimits.md).
 

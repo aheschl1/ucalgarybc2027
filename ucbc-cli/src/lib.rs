@@ -1,17 +1,14 @@
 //! `ucbc._engine`: the match engine as a Python extension module, running Python teams
 //! as wasm bots.
 
-mod bot;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 
-use bot::PyTeam;
 use ucbc_engine::{BotResourceLimit, MatchConfig, MatchRunner, MatchSpec, TeamSpec};
-use ucbc_wasm::Runtime;
+use ucbc_wasm::{PyTeam, Runtime};
 
 fn to_pyerr(e: impl std::fmt::Display) -> PyErr {
     PyRuntimeError::new_err(format!("{e:#}"))

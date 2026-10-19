@@ -1,4 +1,4 @@
-//! Python teams as wasm bots, one `Guest` per bot (`ucbc-wasm`). A guest runs on fuel:
+//! Python teams as wasm bots, one `Guest` per bot. A guest runs on fuel:
 //! `step_ms` is bot time at `FUEL_PER_MS` fuel a millisecond, so a step that runs out is
 //! suspended where it is and resumes on the bot's next turn. Its messages, pickled either
 //! way, are answered here; the meter is off meanwhile, so engine time costs it nothing.
@@ -7,12 +7,12 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::{FUEL_PER_MS, Guest, Outcome, Runtime, bot_time};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use serde_pickle::{DeOptions, SerOptions};
 use tempfile::TempDir;
 use ucbc_engine::{ActionError, Bot, BotFailure, BotResourceLimit, SpawnCtx, StepCtx, StepResult};
-use ucbc_wasm::{FUEL_PER_MS, Guest, Outcome, Runtime, bot_time};
 
 #[derive(Deserialize)]
 struct Failure {

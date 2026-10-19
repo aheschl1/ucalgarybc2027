@@ -16,11 +16,11 @@ wasmtime-wizer = { workspace = true, optional = true }
 pollster = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
+ucbc-engine = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 serde-pickle = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

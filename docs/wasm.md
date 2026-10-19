@@ -1,7 +1,7 @@
 # Bot runtime: Python in WebAssembly
 
 Each bot is one wasmtime instance of CPython built for WASI, inside the engine process:
-crate `ucbc-wasm`, driven by `ucbc-cli/src/bot.rs`. The limits it enforces are in
+crate `ucbc-wasm`, driven by its `PyTeam` (`src/bot.rs`). The limits it enforces are in
 `resourcelimits.md`.
 
 ## Build

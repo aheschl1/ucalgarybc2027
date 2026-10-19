@@ -70,6 +70,9 @@ impl VecEnv {
         {
             return Err(EngineError::Config(format!("env {env} has no policy seat")));
         }
+        for record in specs.iter().filter_map(|s| s.record.as_ref()) {
+            std::fs::create_dir_all(&record.dir)?;
+        }
         let (events_tx, events) = mpsc::channel();
         let mut actions = Vec::with_capacity(specs.len());
         let mut workers = Vec::with_capacity(specs.len());

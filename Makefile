@@ -13,7 +13,7 @@ test test-api: FEATURES = -F ucbc-games/all
 ENV ?= local
 COMPOSE := docker compose --env-file .env --env-file .env.$(ENV)
 
-PY := ucbc-cli/python ucbc-api ucbc-worker alembic tests bots
+PY := ucbc-cli/python ucbc-rl/python ucbc-rl/tests ucbc-api ucbc-worker alembic tests bots
 
 help:
 	@grep -hE '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##\s*/\t/' | column -ts '	' | sed 's/^/  /'
@@ -22,6 +22,7 @@ setup: .env .env.local build  ## once: env files, then everything `make build` d
 
 # uv builds the engine, here and only here: a `uv run` afterwards leaves the build alone.
 build: gen viewer editor runtime  ## after any change causing behavior changes in games: generated code, the viewer and editor pages, the bot runtime, dependencies and the engine in .venv
+	uv sync --all-packages --no-install-package ucbc --reinstall-package ucbc-rl
 	MATURIN_PEP517_ARGS="$(FEATURES)" uv sync --all-packages --reinstall-package ucbc
 
 test: .env .env.local build  ## rust, python, api (needs Docker), viewer
@@ -34,7 +35,7 @@ test-api: .env .env.local build
 
 lint: gen  ## cargo fmt/clippy, ruff, mypy, tsc; regenerates first, so a stale checkout shows in git status
 	cargo fmt --all --check
-	cargo clippy --workspace --all-targets -- -D warnings
+	cargo clippy --workspace --all-targets -F ucbc-rl/python -- -D warnings
 	uv run ruff check $(PY)
 	uv run ruff format --check $(PY)
 	uv run mypy

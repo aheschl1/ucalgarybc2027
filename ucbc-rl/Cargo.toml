@@ -5,7 +5,15 @@ edition.workspace = true
 repository.workspace = true
 description = "Training environments for RL"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+python = ["dep:pyo3", "dep:ucbc-wasm"]
+
 [dependencies]
+pyo3 = { workspace = true, features = ["extension-module", "abi3-py312"], optional = true }
+ucbc-wasm = { workspace = true, optional = true }
 ucbc-engine = { workspace = true }
 ucbc-frontier = { path = "../games/frontier" }
 serde = { workspace = true }

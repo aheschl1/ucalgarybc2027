@@ -6,6 +6,8 @@
 mod channel;
 pub mod frontier;
 mod ledger;
+#[cfg(feature = "python")]
+mod python;
 mod vec_env;
 mod worker;
 

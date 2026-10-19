@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "ucbc",
     "ucbc-api",
+    "ucbc-rl",
     "ucbc-worker",
 ]
 
@@ -1626,6 +1627,17 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
+
+[[package]]
+name = "ucbc-rl"
+version = "0.1.11"
+source = { editable = "ucbc-rl" }
+dependencies = [
+    { name = "ucbc" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "ucbc", editable = "ucbc-cli" }]
 
 [[package]]
 name = "ucbc-worker"

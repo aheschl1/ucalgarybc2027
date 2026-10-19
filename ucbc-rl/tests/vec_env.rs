@@ -215,12 +215,19 @@ fn a_failing_observe_or_a_panicking_team_is_an_error() {
 
 #[test]
 fn an_env_failing_mid_run_ends_the_vec_env() {
-    let mut broken = env(vec![Seat::Policy, idle()]);
-    broken.record = Some(Recording {
-        dir: "/nonexistent/ucbc-rl".into(),
-        every: 1,
-    });
-    let specs = vec![env(vec![Seat::Policy, idle()]), broken];
+    // Its opponent can only be made once: the second set fails.
+    let made = std::sync::atomic::AtomicBool::new(false);
+    let once = Seat::Team(Arc::new(move || {
+        assert!(
+            !made.swap(true, std::sync::atomic::Ordering::Relaxed),
+            "made twice"
+        );
+        TeamSpec::rust("idle", |_: &_| Idle)
+    }));
+    let specs = vec![
+        env(vec![Seat::Policy, idle()]),
+        env(vec![Seat::Policy, once]),
+    ];
     let mut venv = VecEnv::new(registry(), specs).unwrap();
     let mut batch = venv.reset().unwrap();
     let error = loop {
@@ -231,7 +238,7 @@ fn an_env_failing_mid_run_ends_the_vec_env() {
             Err(e) => panic!("{e}"),
         }
     };
-    assert!(error.starts_with("env 1: "), "{error}");
+    assert_eq!(error, "env 1: panicked: made twice");
 }
 
 #[test]

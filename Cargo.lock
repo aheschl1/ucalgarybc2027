@@ -2090,11 +2090,13 @@ name = "ucbc-rl"
 version = "0.1.11"
 dependencies = [
  "base64",
+ "pyo3",
  "serde",
  "serde_json",
  "tempfile",
  "ucbc-engine",
  "ucbc-frontier",
+ "ucbc-wasm",
 ]
 
 [[package]]

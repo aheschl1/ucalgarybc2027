@@ -5,8 +5,10 @@
 
 mod channel;
 pub mod frontier;
+mod ledger;
 mod vec_env;
 mod worker;
 
+pub use ledger::Reward;
 pub use vec_env::{AgentId, Batch, Event, Turn, VecEnv};
 pub use worker::{EnvSpec, Recording, Seat};

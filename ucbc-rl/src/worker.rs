@@ -6,10 +6,11 @@ use std::sync::Arc;
 use serde_json::Value;
 use ucbc_engine::rng::set_seed;
 use ucbc_engine::{
-    BotResourceLimit, GameRegistry, MatchConfig, MatchRunner, MatchSpec, SpawnCtx, TeamSpec,
+    BotResourceLimit, EngineError, GameRegistry, MatchConfig, MatchRunner, MatchSpec, SpawnCtx,
+    TeamSpec,
 };
 
-use crate::channel::{ChannelBot, Link};
+use crate::channel::{ChannelBot, Link, Message};
 use crate::vec_env::{AgentId, Event};
 
 /// Who plays a team: the policy, or a team built fresh for each set.
@@ -26,7 +27,8 @@ pub struct Recording {
     pub every: u32,
 }
 
-/// One env: the set it plays, again and again with fresh seeds.
+/// One env: the set it plays, again and again with fresh seeds. Its game must keep a
+/// [`score`](ucbc_engine::Game::score), which the rewards come from.
 #[derive(Clone)]
 pub struct EnvSpec {
     pub game: String,
@@ -49,7 +51,7 @@ pub(crate) fn run(env: usize, spec: EnvSpec, registry: Arc<GameRegistry>, link: 
         Ok(Some(error)) => error,
         Err(panic) => format!("panicked: {}", message(&*panic)),
     };
-    let _ = events.send(Event::Failed { env, error });
+    let _ = events.send(Message::Failed { env, error });
 }
 
 fn message(panic: &(dyn Any + Send)) -> &str {
@@ -88,26 +90,37 @@ fn play(env: usize, spec: &EnvSpec, registry: &GameRegistry, link: &Arc<Link>) -
         if let Some(game_config) = &spec.game_config {
             config = config.game_config(game_config.clone());
         }
-        let mut match_spec =
-            MatchSpec::new(format!("env{env}-{episode}"), config, teams).record(false);
+        let (ticks, ends) = (link.events.clone(), link.events.clone());
+        let mut match_spec = MatchSpec::new(format!("env{env}-{episode}"), config, teams)
+            .record(false)
+            .on_tick(Box::new(move |_, moment, scores| {
+                let scores = scores.to_vec();
+                let _ = ticks.send(Message::Score {
+                    env,
+                    moment,
+                    scores,
+                });
+            }))
+            // Before the runner drops the units still in the set.
+            .on_set(Box::new(move |set| {
+                let result = set.result.clone();
+                ends.send(Message::Event(Event::SetEnd {
+                    env,
+                    episode,
+                    result,
+                }))
+                .map_err(|e| EngineError::Callback(Box::new(e)))
+            }));
         if let Some(r) = &spec.record
             && episode.is_multiple_of(r.every)
         {
             let path = r.dir.join(format!("env{env}-{episode}.json.gz"));
             match_spec = match_spec.record(true).replay_path(path);
         }
-        // The runner drops every bot before it returns, so their `Gone` comes first.
-        let mut report = match MatchRunner::new(registry, match_spec).and_then(MatchRunner::run) {
-            Ok(report) => report,
+        match MatchRunner::new(registry, match_spec).and_then(MatchRunner::run) {
+            Ok(_) => episode += 1,
+            Err(EngineError::Callback(_)) => return None,
             Err(e) => return Some(e.to_string()),
-        };
-        let result = report.replay.sets.remove(0).result;
-        let end = Event::SetEnd {
-            env,
-            episode,
-            result,
-        };
-        link.events.send(end).ok()?;
-        episode += 1;
+        }
     }
 }

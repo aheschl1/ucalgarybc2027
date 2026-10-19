@@ -5,7 +5,8 @@ use std::thread::{self, JoinHandle};
 use serde_json::Value;
 use ucbc_engine::{ActionError, BotId, EngineError, GameRegistry, SetResult, TeamId};
 
-use crate::channel::Link;
+use crate::channel::{Link, Message};
+use crate::ledger::{Ledger, Reward};
 use crate::worker::{self, EnvSpec, Seat};
 
 /// One unit's whole life: its bot in one set of one env.
@@ -23,28 +24,24 @@ pub struct Turn {
     pub team: TeamId,
     pub tick: u32,
     pub obs: Value,
+    /// For its previous turn; nothing on its first
+    pub reward: Reward,
 }
 
 #[derive(Debug)]
 pub enum Event {
-    Turn(Turn),
     /// The game's reply to each action of the agent's last turn.
     Acted {
         agent: AgentId,
         replies: Vec<Result<Value, ActionError>>,
     },
-    /// The game removed the agent, or its set ended.
-    Gone(AgentId),
-    /// After the `Gone` of every unit of the set.
+    /// The game removed the agent, or its set ended; the reward is for its last turn.
+    Gone { agent: AgentId, reward: Reward },
+    /// Before the `Gone` of the units still in the set.
     SetEnd {
         env: usize,
         episode: u32,
         result: SetResult,
-    },
-    /// The env stopped; [`VecEnv`] returns it as an error.
-    Failed {
-        env: usize,
-        error: String,
     },
 }
 
@@ -59,8 +56,9 @@ pub struct Batch {
 /// Many envs, each with exactly one unit waiting. After an error it can only be dropped.
 pub struct VecEnv {
     actions: Vec<Sender<Vec<Value>>>,
-    events: Receiver<Event>,
+    events: Receiver<Message>,
     workers: Vec<JoinHandle<()>>,
+    ledgers: Vec<Ledger>,
     started: bool,
 }
 
@@ -85,10 +83,12 @@ impl VecEnv {
             actions.push(tx);
             workers.push(worker);
         }
+        let ledgers = (0..actions.len()).map(|_| Default::default()).collect();
         Ok(Self {
             actions,
             events,
             workers,
+            ledgers,
             started: false,
         })
     }
@@ -130,20 +130,45 @@ impl VecEnv {
         let mut waiting = turns.len();
         let mut events = Vec::new();
         while waiting > 0 {
-            let event = self
+            let message = self
                 .events
                 .recv()
                 .map_err(|_| EngineError::Game("every env stopped".into()))?;
-            match event {
-                Event::Turn(turn) => {
-                    let env = turn.agent.env;
-                    turns[env] = Some(turn);
+            match message {
+                Message::Score {
+                    env,
+                    moment,
+                    scores,
+                } => self.ledgers[env].tick(moment, &scores),
+                Message::Turn {
+                    agent,
+                    team,
+                    tick,
+                    obs,
+                } => {
+                    let reward = self.ledgers[agent.env].turn(agent.bot, team);
+                    turns[agent.env] = Some(Turn {
+                        agent,
+                        team,
+                        tick,
+                        obs,
+                        reward,
+                    });
                     waiting -= 1;
                 }
-                Event::Failed { env, error } => {
+                Message::Gone(agent) => {
+                    let reward = self.ledgers[agent.env].gone(agent.bot);
+                    events.push(Event::Gone { agent, reward });
+                }
+                Message::Event(event) => {
+                    if let Event::SetEnd { env, result, .. } = &event {
+                        self.ledgers[*env].end(result.winner_team);
+                    }
+                    events.push(event);
+                }
+                Message::Failed { env, error } => {
                     return Err(EngineError::Game(format!("env {env}: {error}")));
                 }
-                event => events.push(event),
             }
         }
         Ok(Batch {

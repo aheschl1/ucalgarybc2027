@@ -8,7 +8,14 @@ version = "0.1.11"
 description = "UCalgary Battlecode: training environments for RL"
 requires-python = ">=3.12"
 # Its bot runtime runs Python opponents.
-dependencies = ["ucbc"]
+dependencies = ["ucbc", "click>=8.1"]
+
+[project.optional-dependencies]
+# The reference trainer: `uv run --package ucbc-rl --extra train ucbc-rl-train`.
+train = ["numpy>=2", "torch>=2.4"]
+
+[project.scripts]
+ucbc-rl-train = "ucbc_rl.train:main"
 
 [tool.uv.sources]
 ucbc = { workspace = true }

@@ -41,3 +41,8 @@ files = ["ucbc-cli/python", "ucbc-rl/python", "ucbc-rl/tests", "ucbc-api", "ucbc
 exclude = ["bots/tictactoe/testing/syntax_error", "ucbc-cli/python/ucbc/runtime"]
 mypy_path = "ucbc-cli/python:ucbc-rl/python:ucbc-api:ucbc-worker"
 explicit_package_bases = true
+
+# The trainer's extra (`ucbc-rl[train]`) may not be installed.
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*", "numpy", "numpy.*"]
+ignore_missing_imports = true

@@ -1,4 +1,5 @@
 import os
+from collections.abc import Sequence
 from typing import Any
 
 class FrontierEnv:
@@ -12,7 +13,7 @@ class FrontierEnv:
 
     def __init__(
         self,
-        opponents: list[str | os.PathLike[str] | None],
+        opponents: Sequence[str | os.PathLike[str] | None],
         *,
         game_config: str | None = None,
         max_ticks: int = 2000,

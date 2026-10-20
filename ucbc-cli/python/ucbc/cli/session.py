@@ -4,6 +4,9 @@ import json
 import os
 from pathlib import Path
 
+import click
+import httpx
+
 from ucbc.settings import server_url
 
 COOKIE = "__Host-ucbc_session"
@@ -39,3 +42,15 @@ def auth_headers() -> dict[str, str]:
     if token is None:
         return {}
     return {"Cookie": f"{COOKIE}={token}"}
+
+def check_status(response: httpx.Response) -> None:
+    """Checks the status code of the httpx response for logged in requests. Raises appropriate errors"""
+    if response.is_success: 
+        return
+    if response.status_code == 401:
+        clear()
+        raise click.ClickException("session expired: run ucbc login")
+    raise click.ClickException(response.json().get("detail", response.text))       
+        
+
+        

@@ -3,6 +3,7 @@ Process variables win over both files."""
 
 import os
 from pathlib import Path
+
 import dotenv
 
 ROOT = Path(__file__).resolve().parents[4]

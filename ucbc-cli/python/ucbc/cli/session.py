@@ -45,7 +45,7 @@ def auth_headers() -> dict[str, str]:
 
 
 def check_status(response: httpx.Response) -> None:
-    """Checks the status code of the httpx response for logged in requests. Raises appropriate errors"""
+    """Checks the status code of the httpx response for logged in requests. Raises ClickException for errors"""
     if response.is_success:
         return
     if response.status_code == 401:

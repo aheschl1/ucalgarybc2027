@@ -13,6 +13,7 @@ from ucbc.cli.whoami import whoami
 
 load_env()
 
+
 @click.group()
 def main() -> None:
     """UCalgary Battlecode command line."""
@@ -27,4 +28,3 @@ main.add_command(logout)
 main.add_command(whoami)
 main.add_command(queue)
 main.add_command(submissions)
-

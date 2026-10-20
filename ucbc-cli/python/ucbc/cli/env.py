@@ -13,6 +13,7 @@ def env_files() -> tuple[Path, Path]:
     realm = "prod" if os.environ.get("ENV") == "prod" else "local"
     return ROOT / ".env", ROOT / f".env.{realm}"
 
+
 def load_env() -> None:
     """Load the environment variables from the files, if they exist."""
     for path in env_files():

@@ -43,14 +43,12 @@ def auth_headers() -> dict[str, str]:
         return {}
     return {"Cookie": f"{COOKIE}={token}"}
 
+
 def check_status(response: httpx.Response) -> None:
     """Checks the status code of the httpx response for logged in requests. Raises appropriate errors"""
-    if response.is_success: 
+    if response.is_success:
         return
     if response.status_code == 401:
         clear()
         raise click.ClickException("session expired: run ucbc login")
-    raise click.ClickException(response.json().get("detail", response.text))       
-        
-
-        
+    raise click.ClickException(response.json().get("detail", response.text))

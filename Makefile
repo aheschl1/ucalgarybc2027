@@ -59,7 +59,7 @@ clean:  ## build outputs, .venv, node_modules, and the downloads and builds in .
 	cp $@.example $@
 
 node_modules: package-lock.json
-	npm ci
+	npm i
 	touch $@
 
 # Generated code:

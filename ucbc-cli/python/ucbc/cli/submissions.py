@@ -46,21 +46,22 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
     # check if team exists first
     if team:
         try:
-            response = httpx.get(f"{server_url()}teams/elo", headers=headers)
+            response = httpx.get(f"{server_url()}/teams/elo", headers=headers)
             check_status(response)
         except httpx.HTTPError as e:
             raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e   
-        
-        if team.casefold != response.json()["display_name"].casefold():
-            raise click.ClickException(f"User {team} does not exist")
+
+        leaderboard: list[dict[str, Any]] = response.json()
+        for member in leaderboard:
+            if member["name"].casefold() == team.casefold():
+                continue
+    
         
     params = {"mine": "true"}
     if team or all_teams:
         params = {}
     try:
         response = httpx.get(f"{server_url()}/submissions", headers=headers, params=params) 
-        if response.status_code == 404:
-            raise click.ClickException(f"User {team} does not exist")
         check_status(response)
 
     except httpx.HTTPError as e:

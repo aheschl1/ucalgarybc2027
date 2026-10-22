@@ -1,0 +1,34 @@
+# Fails when the generated files (`make gen`: the SDK stubs, viewer, editor and API types)
+# are out of date with their sources.
+name: Gen
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: make gen
+      - run: |
+          git add -N .
+          if ! git diff --exit-code --stat; then
+            git diff
+            echo "::error::make gen changed files; run it and commit the result."
+            exit 1
+          fi

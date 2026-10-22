@@ -7,9 +7,27 @@ import httpx
 from ucbc.cli.session import auth_headers, check_status
 from ucbc.settings import server_url
 
-def _line(row: dict[str, Any]) -> str:
+def _widths(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """The widest value in each padded column, over every row."""
+    return {key: max(len(row[key]) for row in rows) for key in ("display_name", "name", "game")}
+
+def _line(row: dict[str, Any], widths: dict[str, int]) -> str:
     """One submission: team, bot, game, upload time, id."""
-    pass
+    team = row["display_name"]
+    bot = row["name"]
+    game = row["game"]
+    sub_id = row["id"]
+
+    # formats the upload date
+    created_at = datetime.fromisoformat(row["created_at"]).astimezone().strftime("%Y-%m-%d %H:%M")
+
+    return (
+        f"{team:<{widths['display_name']}}  "
+        f"{bot:<{widths['name']}}  "
+        f"{game:<{widths['game']}}  "
+        f"{created_at}  "
+        f"{sub_id}  "
+    )
 
 @click.command()
 @click.option("--team", help="Only this team's bots")
@@ -37,7 +55,7 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
     rows: list[dict[str, Any]] = response.json()
     # filter by team name
     if team:
-        rows = [row for row in rows if row["team_name"].casefold() == team.casefold()]
+        rows = [row for row in rows if row["display_name"].casefold() == team.casefold()]
 
     if not rows:
         if all_teams:
@@ -49,8 +67,9 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
 
     if limit is not None:
         rows = rows[:limit]
-        
-    text = "\n".join(_line(row) for row in rows)
+
+    widths = _widths(rows)
+    text = "\n".join(_line(row, widths) for row in rows)
     if limit is None:
         click.echo_via_pager(text)
     else:

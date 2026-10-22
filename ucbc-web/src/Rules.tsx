@@ -156,8 +156,7 @@ export default function Rules() {
 
         <Section id="dinos" title="dinos">
           <p>
-            The lab spawns a level 1 dino with 10 health on any free tile touching it. A dino
-            moves 1 tile per turn, and acts on things 1 tile away.
+            The lab can spawn a level 1 dino with 10 health on any free tile around it.
           </p>
           <Tiles
             rows={[".+ .+ .+ .+", ".+ A  _  .+", ".+ _  _  .+", ".+ .+ .+ .+"]}

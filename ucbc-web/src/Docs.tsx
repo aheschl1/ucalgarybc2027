@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
+import { Rule, Section } from "./prose";
 
 const STEPS = [
   ["install", "install"],
@@ -15,37 +16,6 @@ const REFERENCE = [
   ["maps", "maps"],
   ["teams", "teams"],
 ] as const;
-
-function Section({
-  id,
-  n,
-  title,
-  children,
-}: {
-  id: string;
-  n?: number;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <section id={id}>
-      <h2>
-        {n !== undefined && <span className="n">{n}</span>}
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Rule({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="rule">
-      <strong>{title}</strong>
-      {children && <div>{children}</div>}
-    </div>
-  );
-}
 
 function Code({ children, label }: { children: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -168,6 +138,9 @@ export default function Docs() {
             </li>
           ))}
         </ul>
+        <Link to="/rules" className="mt-6 block rounded-md px-2 py-1 text-muted hover:bg-hover hover:text-fg">
+          Game rules →
+        </Link>
       </nav>
 
       <article>

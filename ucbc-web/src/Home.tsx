@@ -1,12 +1,11 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { Link } from "react-router";
 import { get, type TeamElo, type User } from "./api";
+import { assets } from "@ucbc/viewer-ucbc2027/assets";
 import { buttonClass, cx } from "./ui";
-import dinoA1 from "./assets/a01.png";
-import dinoA2 from "./assets/a02.png";
-import dinoB1 from "./assets/b01.png";
-import dinoB2 from "./assets/b02.png";
-import fossil from "./assets/fossil.png";
+
+const { fossil } = assets;
+const [[[dinoA1, dinoA2]], [[dinoB1, dinoB2]]] = assets.dino as [[[string, string]], [[string, string]]];
 
 const STEPS = [
   ["Develop", "Write a python program that defines step(handle)."],

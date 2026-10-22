@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ucbc/viewer": "*",
+    "@ucbc/viewer-ucbc2027": "*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router": "^7.18.4"

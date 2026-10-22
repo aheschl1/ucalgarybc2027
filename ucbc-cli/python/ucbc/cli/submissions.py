@@ -43,14 +43,28 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
     if not headers:
         raise click.ClickException("no user logged in: run ucbc login")
 
+    # check if team exists first
+    if team:
+        try:
+            response = httpx.get(f"{server_url()}teams/elo", headers=headers)
+            check_status(response)
+        except httpx.HTTPError as e:
+            raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e   
+        
+        if team.casefold != response.json()["display_name"].casefold():
+            raise click.ClickException(f"User {team} does not exist")
+        
     params = {"mine": "true"}
     if team or all_teams:
         params = {}
     try:
         response = httpx.get(f"{server_url()}/submissions", headers=headers, params=params) 
+        if response.status_code == 404:
+            raise click.ClickException(f"User {team} does not exist")
         check_status(response)
+
     except httpx.HTTPError as e:
-        raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e   
+        raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e    
 
     rows: list[dict[str, Any]] = response.json()
     # filter by team name
@@ -61,7 +75,7 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
         if all_teams:
             raise click.ClickException("No bots have been submitted yet")        
         elif team:
-            raise click.ClickException(f"Team {team} has no bots submitted yet")        
+            raise click.ClickException(f"{team} has no bots submitted yet")        
         else:
             raise click.ClickException("Your team has no bots submitted yet, upload your bot using 'ucbc submit'")
 
@@ -71,6 +85,6 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
     widths = _widths(rows)
     text = "\n".join(_line(row, widths) for row in rows)
     if limit is None:
-        click.echo_via_pager(text)
+        click.echo(text)
     else:
         click.echo(text)

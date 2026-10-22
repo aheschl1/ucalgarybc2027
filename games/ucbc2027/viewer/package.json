@@ -2,7 +2,10 @@
   "name": "@ucbc/viewer-ucbc2027",
   "private": true,
   "type": "module",
-  "exports": "./src/index.tsx",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./assets": "./src/skin/assets.ts"
+  },
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"

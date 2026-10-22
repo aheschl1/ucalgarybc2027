@@ -9,6 +9,7 @@ import Maps from "./Maps";
 import NavBar from "./NavBar";
 import Profile from "./Profile";
 import Register from "./Register";
+import Rules from "./Rules";
 import Tree from "./Tree";
 import Viewer from "./Viewer";
 
@@ -52,6 +53,7 @@ export default function App() {
       >
         <Route index element={<Home user={user ?? undefined} />} />
         <Route path="docs" element={<Docs />} />
+        <Route path="rules" element={<Rules />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route

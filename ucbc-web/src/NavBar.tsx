@@ -9,6 +9,7 @@ const TITLES: Record<string, string> = {
   "/platform/profile": "Profile",
   "/leaderboard": "Leaderboard",
   "/docs": "Docs",
+  "/rules": "Rules",
   "/platform/admin/maps": "Maps",
   "/register": "Sign up",
   "/login": "Log in",
@@ -60,6 +61,9 @@ export default function NavBar({
       </NavLink>
       <NavLink to="/docs" className={link}>
         Docs
+      </NavLink>
+      <NavLink to="/rules" className={link}>
+        Rules
       </NavLink>
       {user?.is_admin && (
         <NavLink to="/platform/admin/maps" className={link}>

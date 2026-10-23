@@ -23,3 +23,6 @@ def server_url() -> str:
     url = os.environ.get("UCBC_SERVER", "https://ucbc.andrewheschl.ca/api")
     https_check(url)
     return url
+
+      
+

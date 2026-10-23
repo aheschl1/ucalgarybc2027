@@ -28,7 +28,7 @@ def queue(mine: UUID, opponent: UUID, maps: tuple[UUID, ...], sets: int, seed: i
 
     headers = auth_headers()
     if not headers:
-        raise click.ClickException("no user logged in: run ucbc login")
+        raise click.ClickException("not logged in: run ucbc login")
     try:
         response = httpx.get(f"{server_url()}/submissions/{mine}", headers=headers)
         check_status(response)

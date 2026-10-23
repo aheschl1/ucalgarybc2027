@@ -44,7 +44,7 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
         )
     headers = auth_headers()
     if not headers:
-        raise click.ClickException("no user logged in: run ucbc login")
+        raise click.ClickException("not logged in: run ucbc login")
 
     params = {"mine": "true"}
     if team or all_teams:

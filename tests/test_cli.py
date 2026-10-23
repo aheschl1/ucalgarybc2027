@@ -159,5 +159,12 @@ def test_no_main_in_bot(tmp_path: Path) -> None:
     empty.mkdir()
     args = ["submit", str(empty), "--game", "tictactoe"]
     result = CliRunner().invoke(main, [*args, "--test-run"])
-    assert result.exit_code != 0
+    assert result.exit_code != 0, result.output
     assert "no main.py" in result.output
+
+
+def test_submissions_team_and_all_options() -> None:
+    args = ["submissions", "--team"]
+    result = CliRunner().invoke(main, [*args, "--all"])
+    assert result.exit_code != 0, result.output
+    assert "--all were both used" in result.output

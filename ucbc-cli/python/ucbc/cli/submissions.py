@@ -7,13 +7,15 @@ import httpx
 from ucbc.cli.session import auth_headers, check_status
 from ucbc.settings import server_url
 
+
 def _widths(rows: list[dict[str, Any]]) -> dict[str, int]:
     """The widest value in each padded column, over every row."""
-    return {key: max(len(row[key]) for row in rows) for key in ("display_name", "name", "game")}
+    return {key: max(len(row[key]) for row in rows) for key in ("team_name", "name", "game")}
+
 
 def _line(row: dict[str, Any], widths: dict[str, int]) -> str:
     """One submission: team, bot, game, upload time, id."""
-    team = row["display_name"]
+    team = row["team_name"]
     bot = row["name"]
     game = row["game"]
     sub_id = row["id"]
@@ -22,12 +24,13 @@ def _line(row: dict[str, Any], widths: dict[str, int]) -> str:
     created_at = datetime.fromisoformat(row["created_at"]).astimezone().strftime("%Y-%m-%d %H:%M")
 
     return (
-        f"{team:<{widths['display_name']}}  "
+        f"{team:<{widths['team_name']}}  "
         f"{bot:<{widths['name']}}  "
         f"{game:<{widths['game']}}  "
         f"{created_at}  "
-        f"{sub_id}  "
+        f"{sub_id}"
     )
+
 
 @click.command()
 @click.option("--team", help="Only this team's bots")
@@ -43,49 +46,45 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
     if not headers:
         raise click.ClickException("no user logged in: run ucbc login")
 
-    # check if team exists first
-    if team:
-        try:
-            response = httpx.get(f"{server_url()}/teams/elo", headers=headers)
-            check_status(response)
-        except httpx.HTTPError as e:
-            raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e   
-
-        leaderboard: list[dict[str, Any]] = response.json()
-        for member in leaderboard:
-            if member["name"].casefold() == team.casefold():
-                continue
-    
-        
     params = {"mine": "true"}
     if team or all_teams:
         params = {}
     try:
-        response = httpx.get(f"{server_url()}/submissions", headers=headers, params=params) 
+        response = httpx.get(f"{server_url()}/submissions", headers=headers, params=params)
         check_status(response)
 
     except httpx.HTTPError as e:
-        raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e    
+        raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e
 
     rows: list[dict[str, Any]] = response.json()
     # filter by team name
     if team:
-        rows = [row for row in rows if row["display_name"].casefold() == team.casefold()]
+        rows = [row for row in rows if row["team_name"].casefold() == team.casefold()]
 
     if not rows:
         if all_teams:
-            raise click.ClickException("No bots have been submitted yet")        
+            raise click.ClickException("No bots have been submitted yet")
         elif team:
-            raise click.ClickException(f"{team} has no bots submitted yet")        
+            # check if team exists
+            try:
+                response = httpx.get(f"{server_url()}/teams/elo", headers=headers)
+                check_status(response)
+            except httpx.HTTPError as e:
+                raise click.ClickException(f"could not reach {server_url()}: {e}. Try again") from e
+
+            leaderboard: list[dict[str, Any]] = response.json()
+            if not any(team.casefold() == member["name"].casefold() for member in leaderboard):
+                raise click.ClickException(f"User {team} does not exist")
+            raise click.ClickException(f"{team} has no bots submitted yet")
         else:
-            raise click.ClickException("Your team has no bots submitted yet, upload your bot using 'ucbc submit'")
+            raise click.ClickException(
+                "Your team has no bots submitted yet, upload your bot using 'ucbc submit'"
+            )
 
     if limit is not None:
         rows = rows[:limit]
 
     widths = _widths(rows)
     text = "\n".join(_line(row, widths) for row in rows)
-    if limit is None:
-        click.echo(text)
-    else:
-        click.echo(text)
+
+    click.echo(text)

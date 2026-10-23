@@ -1,0 +1,27 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "ucbc-rl"
+version = "0.1.11"
+description = "UCalgary Battlecode: training environments for RL"
+requires-python = ">=3.12"
+# Its bot runtime runs Python opponents.
+dependencies = ["ucbc", "click>=8.1"]
+
+[project.optional-dependencies]
+# The reference trainer: `uv run --package ucbc-rl --extra train ucbc-rl-train`.
+train = ["numpy>=2", "torch>=2.4"]
+
+[project.scripts]
+ucbc-rl-train = "ucbc_rl.train:main"
+
+[tool.uv.sources]
+ucbc = { workspace = true }
+
+[tool.maturin]
+python-source = "python"
+module-name = "ucbc_rl._native"
+features = ["python"]
+exclude = ["**/__pycache__/**"]

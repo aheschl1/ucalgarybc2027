@@ -1,0 +1,327 @@
+.fr-built {
+  --fr-found: #e879f9;
+}
+
+.fr-board {
+  display: block;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+
+.fr-hint {
+  font-size: 0.8rem;
+}
+
+.fr-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.fr-detail th {
+  position: static;
+  width: 5.5rem;
+}
+
+.fr-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--ucbc-muted);
+}
+
+.fr-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fr-progress {
+  --fr-team-0: var(--ucbc-team-0);
+  --fr-team-1: var(--ucbc-team-1);
+}
+
+.fr-heading {
+  margin: 0.5rem 0 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fr-subheading {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.fr-team-parts {
+  margin-top: 0.25rem;
+}
+
+.fr-readout {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--ucbc-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-area {
+  stroke: var(--ucbc-panel);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-mark {
+  stroke: var(--ucbc-fg);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-chart {
+  position: relative;
+}
+
+.fr-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.fr-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-grid {
+  stroke: var(--ucbc-line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-axis {
+  fill: var(--ucbc-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-now {
+  stroke: var(--ucbc-fg);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-hair {
+  stroke: var(--ucbc-muted);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.fr-dot {
+  stroke: var(--ucbc-panel);
+  stroke-width: 2;
+}
+
+.fr-tip {
+  position: absolute;
+  top: 0;
+  transform: translateX(8px);
+  pointer-events: none;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 6px;
+  background: var(--ucbc-panel);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.fr-tip-left {
+  transform: translateX(calc(-100% - 8px));
+}
+
+.fr-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fr-key {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.fr-key-area {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.fr-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.fr-chart-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fr-search-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+}
+
+.fr-search {
+  flex: 1;
+  box-sizing: border-box;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 6px;
+  background: var(--ucbc-panel);
+  color: var(--ucbc-fg);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.fr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.fr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--ucbc-line);
+  border-radius: 6px;
+  background: var(--ucbc-panel);
+  color: var(--ucbc-fg);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.fr-chip-face {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fr-chip:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.fr-chip:hover {
+  border-color: var(--ucbc-muted);
+}
+
+.fr-chip.fr-on {
+  border-color: var(--fr-found);
+  box-shadow: inset 0 0 0 1px var(--fr-found);
+}
+
+/* A building's look on the board, in a neutral colour, with its letter. */
+.fr-icon {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  border: 1px solid #111111;
+  border-radius: 2px;
+  background: #8b929c;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.fr-wall {
+  background: #4c5056;
+}
+
+.fr-store {
+  border: 2px solid #8b929c;
+  background: #111111;
+}
+
+.fr-trap {
+  width: 12px;
+  height: 12px;
+  margin: 0 1.5px;
+  border: 2px solid #8b929c;
+  background: #111111;
+  transform: rotate(45deg);
+  font-size: 0;
+}
+
+.fr-heart {
+  box-shadow: inset 0 0 0 3px #8b929c;
+  background: #ffffff;
+  color: #111111;
+}
+
+.fr-tower {
+  color: #111111;
+}
+
+.fr-count {
+  padding-left: 0.2rem;
+  border-left: 3px solid;
+  font-variant-numeric: tabular-nums;
+}
+
+.fr-zero {
+  color: var(--ucbc-muted);
+}
+
+.fr-unit {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1px solid #111111;
+  border-radius: 50%;
+  background: var(--ucbc-team-0);
+}
+
+/* Square, as on the board, and outlined so pale ones show on a light panel. */
+.fr-swatch,
+.fr-crop {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+
+.fr-crop {
+  background: #a8d65c;
+}
+
+.fr-commander {
+  margin: 0 4px;
+  outline: 2px solid #ffffff;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px #111111;
+}

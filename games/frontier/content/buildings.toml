@@ -1,0 +1,109 @@
+# Every building: what it costs, how much work finishes it, and its behaviours.
+# `upgrades` names the building it improves on; a building's tier is its place on that line.
+# Only `known` buildings are known at the start; a team learns another once it has
+# studied every item in `cost`.
+
+# A team starts with one; only its commander rebuilds it, and only once it's destroyed.
+[base]
+hp = 500
+cost = { wood = 12, stone = 8 }
+work = 30
+storage = 1000
+radio = 24
+known = true
+
+[chest]
+hp = 50
+cost = { wood = 10 }
+work = 4
+storage = 40
+known = true
+
+[wood_wall]
+hp = 100
+cost = { wood = 4 }
+work = 2
+known = true
+
+[stone_wall]
+upgrades = "wood_wall"
+hp = 300
+cost = { stone = 6 }
+work = 5
+known = true
+
+[radio_tower]
+hp = 80
+cost = { wood = 20, stone = 10 }
+work = 10
+radio = 40
+known = true
+
+[well]
+hp = 100
+cost = { stone = 10 }
+work = 5
+water = 4
+known = true
+
+[research_desk]
+hp = 80
+cost = { wood = 15, stone = 5 }
+work = 6
+research = true
+known = true
+
+[workbench]
+hp = 80
+cost = { wood = 10 }
+work = 4
+storage = 30
+known = true
+
+[smelter]
+hp = 150
+cost = { stone = 20 }
+work = 8
+storage = 30
+
+[mech_drill]
+hp = 120
+cost = { wood = 10, copper_ingot = 4 }
+work = 8
+drill = { rate = 3, tier = 2 }
+
+[steam_drill]
+upgrades = "mech_drill"
+hp = 200
+cost = { iron_ingot = 6, gear = 4 }
+work = 12
+storage = 10
+drill = { rate = 6, tier = 4, burns = "coal" }
+
+# Its team walks through; nobody else does.
+[gate]
+hp = 120
+cost = { wood = 6 }
+work = 3
+gate = true
+known = true
+
+# A unit next to it attacks anything within `range` of it, and takes half damage.
+[tower]
+hp = 250
+cost = { wood = 5, stone = 15 }
+work = 10
+tower = 6
+
+# Finishing it wins the set: the top of every line, and food for those who raise it.
+[monument]
+hp = 2000
+cost = { wood = 60, stone = 60, copper_ingot = 30, iron_ingot = 30, gear = 20, apple = 30, titanium = 20 }
+work = 400
+monument = true
+
+[spike_trap]
+hp = 20
+cost = { wood = 4, stone = 2 }
+work = 2
+trap = 30

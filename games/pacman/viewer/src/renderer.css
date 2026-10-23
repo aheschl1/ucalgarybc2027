@@ -1,0 +1,66 @@
+.pm-board {
+  display: block;
+}
+
+.pm-floor {
+  fill: #0b0b1a;
+}
+
+.pm-wall {
+  fill: #1e1b4b;
+  stroke: #3b82f6;
+  stroke-width: 1.5;
+}
+
+.pm-pellet,
+.pm-power {
+  fill: #fde68a;
+}
+
+.pm-house {
+  fill: #ec4899;
+  fill-opacity: 0.12;
+}
+
+.pm-pacman {
+  fill: #facc15;
+}
+
+.pm-scared-face {
+  fill: none;
+  stroke-width: 1;
+}
+
+.pm-stack {
+  pointer-events: none;
+}
+
+.pm-stack circle {
+  fill: #f5f5f4;
+}
+
+.pm-stack text {
+  font: 700 5px/1 system-ui, sans-serif;
+  fill: #0b0b1a;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* An agent's whole tile takes clicks, whatever its sprite draws. */
+.pm-hit {
+  fill: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.pm-selected {
+  fill: none;
+  stroke: #f5f5f4;
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.pm-detail th {
+  position: static;
+  width: 6rem;
+}

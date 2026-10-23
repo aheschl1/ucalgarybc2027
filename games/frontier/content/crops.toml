@@ -1,0 +1,17 @@
+# Every crop: planted from `seed` on watered farmland, ripe `grows` ticks later.
+# A harvest gives `yield`, scaled by the soil's fertility, and takes `tires` fertility.
+# With `regrows`, the plant stays and is ripe again that many ticks after a harvest;
+# its soil never rests, so such a crop should have `tires = 0`.
+
+[wheat]
+seed = "wheat_seed"
+grows = 60
+yield = { wheat = 4, wheat_seed = 2 }
+tires = 25
+
+[apple_tree]
+seed = "apple_seed"
+grows = 600
+yield = { apple = 3 }
+tires = 0
+regrows = 80

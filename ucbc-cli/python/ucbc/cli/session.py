@@ -51,4 +51,8 @@ def check_status(response: httpx.Response) -> None:
     if response.status_code == 401:
         clear()
         raise click.ClickException("session expired: run ucbc login")
-    raise click.ClickException(response.json().get("detail", response.text))
+    try:
+        message = response.json().get("detail", response.text)
+    except ValueError:
+        message = response.text
+    raise click.ClickException(message or f"server returned HTTP {response.status_code}")

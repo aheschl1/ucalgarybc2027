@@ -33,7 +33,7 @@ def _line(row: dict[str, Any], widths: dict[str, int]) -> str:
 
 
 @click.command()
-@click.option("--team", help="Only this team's bots")
+@click.option("--team", help="Only this team's bots (case insensitive)")
 @click.option("--all", "all_teams", is_flag=True, help="Every team's bots")
 @click.option("--limit", type=click.IntRange(min=1), help="Show only the N most recent")
 def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
@@ -66,6 +66,7 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
             raise click.ClickException("No bots have been submitted yet")
         elif team:
             # check if team exists
+            # Note: no team lookup endpoint yet, currently using leaderboard which lists every team
             try:
                 response = httpx.get(f"{server_url()}/teams/elo", headers=headers)
                 check_status(response)
@@ -74,7 +75,7 @@ def submissions(team: str | None, all_teams: bool, limit: int | None) -> None:
 
             leaderboard: list[dict[str, Any]] = response.json()
             if not any(team.casefold() == member["name"].casefold() for member in leaderboard):
-                raise click.ClickException(f"User {team} does not exist")
+                raise click.ClickException(f"Team {team} does not exist")
             raise click.ClickException(f"{team} has no bots submitted yet")
         else:
             raise click.ClickException(

@@ -3,6 +3,11 @@ import { unzipSync, zipSync } from "fflate";
 /** Replacement pictures as data URLs, keyed by file under the assets folder. */
 export type Overrides = Record<string, string>;
 
+/** The match ID in a pasted ID or link, if there is one. */
+export function matchIdFrom(text: string): string | null {
+  return text.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)?.[0].toLowerCase() ?? null;
+}
+
 const SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const PREFIX = "data:image/png;base64,";
 

@@ -55,7 +55,6 @@ export default function App() {
         <Route index element={<Home user={user ?? undefined} />} />
         <Route path="docs" element={<Docs />} />
         <Route path="rules" element={<Rules />} />
-        <Route path="skins" element={<Skins />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route
@@ -94,6 +93,7 @@ export default function App() {
               }
             />
             <Route path="matches/:matchId" element={<Viewer api={api} />} />
+            <Route path="skins" element={<Skins api={api} />} />
             {user.is_admin && <Route path="admin/maps" element={<Maps api={api} />} />}
             <Route path="*" element={<Navigate to="/platform" replace />} />
           </Route>

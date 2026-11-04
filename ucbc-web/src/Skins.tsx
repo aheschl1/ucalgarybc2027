@@ -1,10 +1,13 @@
 import { parseReplay, renderers, replayStream, Viewer, type Replay } from "@ucbc/viewer";
 import sample from "@ucbc/viewer-ucbc2027/replays/standard.json.gz?url";
 import { pictures, SkinContext, withFiles, type Picture } from "@ucbc/viewer-ucbc2027/skin";
-import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
-import { fromZip, isPng, loadOverrides, saveOverrides, toDataUrl, toZip, type Overrides } from "./skinFiles";
-import { Button, buttonClass, Card, cx, ErrorText } from "./ui";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent } from "react";
+import { describe, type Api, type MatchRow } from "./api";
+import { fromZip, isPng, loadOverrides, matchIdFrom, saveOverrides, toDataUrl, toZip, type Overrides } from "./skinFiles";
+import { Button, buttonClass, Card, cx, day, ErrorText, Input, Select } from "./ui";
+import { matchReplay } from "./Viewer";
 
+const GAME = "ucbc2027";
 const PICTURES = pictures();
 const FILES = new Set(PICTURES.map((p) => p.file));
 
@@ -22,6 +25,16 @@ const GROUPED = (() => {
   for (const p of PICTURES) titled.get(GROUPS.find(([, re]) => re.test(p.slots[0]!))![0])!.push(p);
   return [...titled].filter(([, members]) => members.length);
 })();
+
+async function sampleReplay(): Promise<Replay> {
+  const response = await fetch(sample);
+  if (!response.ok) throw new Error(response.statusText);
+  return (await parseReplay(await replayStream(await response.blob()))) as Replay;
+}
+
+function matchName(match: MatchRow): string {
+  return `${match.teams.map((t) => t.name).join(" vs ")} · ${day(match.created_at)} · ${match.id.slice(0, 8)}`;
+}
 
 function imageSize(href: string): Promise<[number, number]> {
   return new Promise((resolve, reject) => {
@@ -121,24 +134,24 @@ function PictureRow({
   );
 }
 
-export default function Skins() {
+export default function Skins({ api }: { api: Api }) {
   const [replay, setReplay] = useState<Replay | null>(null);
   const [overrides, setOverrides] = useState<Overrides>({});
-  const [noMatch, setNoMatch] = useState(false);
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [recent, setRecent] = useState<MatchRow[]>([]);
+  const [pasted, setPasted] = useState("");
+  const [matchError, setMatchError] = useState("");
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [unsaved, setUnsaved] = useState(false);
 
   useEffect(() => {
     let live = true;
-    fetch(sample)
-      .then((r) => (r.ok ? r.blob() : Promise.reject()))
-      .then(replayStream)
-      .then(parseReplay)
-      .then(
-        (parsed) => live && setReplay(parsed as Replay),
-        () => live && setNoMatch(true),
-      );
+    api.load<MatchRow[]>("/matches?origin=platform&done=true").then(
+      (rows) => live && setRecent(rows.filter((m) => m.game === GAME)),
+      (err) => live && setError(`Recent matches could not be loaded: ${describe(err)}`),
+    );
     loadOverrides().then(
       (stored) => {
         const known = Object.entries(stored).filter(([file]) => FILES.has(file));
@@ -156,6 +169,24 @@ export default function Skins() {
     };
   }, []);
 
+  useEffect(() => {
+    let live = true;
+    setReplay(null);
+    setMatchError("");
+    (matchId ? matchReplay(api, matchId) : sampleReplay()).then(
+      (result) => {
+        if (!live) return;
+        if (typeof result === "string") setMatchError(`This match has no replay yet (${result}).`);
+        else if (result.config.game !== GAME) setMatchError(`This is a ${result.config.game} match, and these pictures are for ${GAME}.`);
+        else setReplay(result);
+      },
+      (err) => live && setMatchError(matchId ? describe(err) : "The sample match could not be loaded."),
+    );
+    return () => {
+      live = false;
+    };
+  }, [matchId, attempt]);
+
   const skin = useMemo(() => withFiles(overrides), [overrides]);
   const changed = Object.keys(overrides).length;
 
@@ -169,6 +200,15 @@ export default function Skins() {
       return next;
     });
     saveOverrides(changes).catch(() => setUnsaved(true));
+  };
+
+  const loadPasted = (e: FormEvent) => {
+    e.preventDefault();
+    const id = matchIdFrom(pasted);
+    if (!id) return setError("That doesn't contain a match ID.");
+    setError("");
+    setMatchId(id);
+    setAttempt((n) => n + 1);
   };
 
   const replace = async (picture: Picture, file: File) => {
@@ -223,7 +263,7 @@ export default function Skins() {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Skin editor</h1>
           <p className="mt-1 text-sm text-muted">
-            Replace any picture and the match redraws wherever it appears, though this match doesn't show them all. Changes stay in this browser until you export them; send the zip to a developer to add to the game.
+            Replace any picture and the match redraws wherever it appears, though a match may not show them all. Changes stay in this browser until you export them; send the zip to a developer to add to the game.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -252,14 +292,44 @@ export default function Skins() {
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0">
+          <div className="mb-4 flex flex-wrap gap-2">
+            <Select
+              aria-label="Match"
+              className="min-w-56 flex-1"
+              value={matchId ?? ""}
+              onChange={(e) => {
+                setError("");
+                setPasted("");
+                setMatchId(e.target.value || null);
+              }}
+            >
+              <option value="">Sample match</option>
+              {matchId && !recent.some((m) => m.id === matchId) && <option value={matchId}>Match {matchId.slice(0, 8)}</option>}
+              {recent.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {matchName(m)}
+                </option>
+              ))}
+            </Select>
+            <form onSubmit={loadPasted} className="flex min-w-56 flex-1 gap-2">
+              <Input
+                aria-label="Match ID or link"
+                placeholder="Paste a match ID or link"
+                value={pasted}
+                onChange={(e) => setPasted(e.target.value)}
+              />
+              <Button type="submit" variant="secondary" disabled={!pasted.trim()}>
+                Load
+              </Button>
+            </form>
+          </div>
+          {matchError && <div className="mb-4"><ErrorText>{matchError}</ErrorText></div>}
           {replay ? (
             <SkinContext value={skin}>
-              <Viewer replay={replay} renderers={renderers} />
+              <Viewer replay={replay} renderers={renderers} autoFocus={false} />
             </SkinContext>
-          ) : noMatch ? (
-            <ErrorText>The sample match could not be loaded.</ErrorText>
           ) : (
-            <p className="animate-pulse py-24 text-center text-muted">Loading match…</p>
+            !matchError && <p className="animate-pulse py-24 text-center text-muted">Loading match…</p>
           )}
         </div>
         <Card flush title="Pictures" className="xl:sticky xl:top-20">

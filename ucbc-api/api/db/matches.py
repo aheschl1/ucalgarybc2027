@@ -90,11 +90,12 @@ class MatchRepo:
         origin: MatchOrigin | None = None,
         involving: int | None = None,
         active: bool = False,
+        done: bool = False,
     ) -> list[MatchRow]:
         """Newest first; what `team_id` may see, or every match when None. `owned_only`
         narrows to matches with one of that team's submissions, `involving` to matches with
-        one of that other team's, `origin` to user or platform matches, and `active` to
-        matches not yet done."""
+        one of that other team's, `origin` to user or platform matches, `active` to
+        matches not yet done, and `done` to finished ones."""
         wheres = [f"({VISIBLE})"]
         args: list[Any] = [team_id, team_id]
         if owned_only:
@@ -108,6 +109,8 @@ class MatchRepo:
             args.append(origin)
         if active:
             wheres.append("matches.status in ('queued', 'running')")
+        if done:
+            wheres.append("matches.status = 'done'")
         cur = await self._conn.execute(
             f"select {COLUMNS} from matches where {' and '.join(wheres)} "
             "order by created_at desc limit %s",

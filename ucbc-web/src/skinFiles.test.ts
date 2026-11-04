@@ -1,7 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import { expect, it } from "vitest";
 
-import { fromZip, isPng, toDataUrl, toZip } from "./skinFiles";
+import { fromZip, isPng, matchIdFrom, toDataUrl, toZip } from "./skinFiles";
 
 const png = (...rest: number[]) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...rest]);
 
@@ -31,4 +31,11 @@ it("skips what isn't a known PNG in a zip", () => {
 
 it("throws on a file that isn't a zip", () => {
   expect(() => fromZip(strToU8("hello"), new Set())).toThrow();
+});
+
+it("finds the match ID in a pasted ID or link", () => {
+  const id = "0d9e4c2a-7b1f-4e6a-9c3d-5f8a2b1c0e7d";
+  expect(matchIdFrom(`  ${id}\n`)).toBe(id);
+  expect(matchIdFrom(`https://site/platform/matches/${id.toUpperCase()}?x=1`)).toBe(id);
+  expect(matchIdFrom("not a match")).toBeNull();
 });

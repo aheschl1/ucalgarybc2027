@@ -23,6 +23,8 @@ import { createZoom, type Zoom } from "./zoom.ts";
 export interface ViewerProps {
   replay: Replay;
   renderers: GameRenderer[];
+  /** Whether it takes keyboard focus when it opens, for its shortcuts. */
+  autoFocus?: boolean;
 }
 
 /** Playback speeds, in frames per second. */
@@ -505,7 +507,7 @@ function useZoom() {
  * per-tick step table, and the selected bot and its timeline, which replaces the table
  * while a bot is selected. Give it a new `key` to start
  * another replay from the beginning. */
-export function Viewer({ replay, renderers }: ViewerProps) {
+export function Viewer({ replay, renderers, autoFocus = true }: ViewerProps) {
   const [setIndex, setSetIndex] = useState(0);
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -557,7 +559,7 @@ export function Viewer({ replay, renderers }: ViewerProps) {
   }
 
   useEffect(() => {
-    root.current?.focus({ preventScroll: true });
+    if (autoFocus) root.current?.focus({ preventScroll: true });
   }, []);
 
   useEffect(() => {

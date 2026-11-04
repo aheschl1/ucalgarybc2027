@@ -27,7 +27,6 @@ APP_ROUTES = (
     "/docs",
     "/rules",
     "/leaderboard",
-    "/skins",
     "/platform",
     "/platform/{rest:path}",
 )

@@ -88,9 +88,12 @@ type in the Rust fails the type check until it has one.
 
 ## The skin page
 
-`/skins` on the site is for designers without a checkout. It's public and not linked from
-anywhere. It plays a sample replay beside a list of every picture in `assets.ts`; replacing
-a PNG redraws the match wherever that picture appears. A picture whose size differs from the one it replaces gets a warning.
+`/platform/skins` on the site is for designers without a checkout. It needs an account and
+isn't linked from anywhere. It plays a match beside a list of every picture in `assets.ts`;
+replacing a PNG redraws the match wherever that picture appears, and a picture whose size
+differs from the one it replaces gets a warning. The match is a bundled sample until one is
+picked from the recent finished platform matches or loaded by pasting an ID or link: any ucbc2027
+match the API shows the caller.
 
 Changes stay in that browser (IndexedDB) until exported. The export is a zip of only the
 changed files, at their paths under `assets/`, so a developer unzips it over

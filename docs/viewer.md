@@ -74,6 +74,8 @@ is a few hundred KB, rewritten whenever the game changes.
 games/ucbc2027/viewer/assets/        16x16 pixel art (labs 64x64), per team where coloured
 games/ucbc2027/viewer/src/skin/
   assets.ts                          which file each thing uses
+  skin.ts                            SkinContext: the sprites draw from it, `assets` by default;
+                                     slots name each picture by its path, e.g. `dino.1.2.0`
   sprites.tsx                        one component per thing: picture plus extras (level, held item)
   skin.css                           sprite styling
 ```

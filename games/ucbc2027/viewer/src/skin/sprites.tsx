@@ -7,7 +7,8 @@ import "./skin.css";
 import type { ComponentType } from "react";
 
 import type { Environment, ItemView, UnitEntry } from "../api.gen.ts";
-import { assets, dinoTier } from "./assets.ts";
+import { dinoTier } from "./assets.ts";
+import { useSkin, type Skin } from "./skin.ts";
 
 /** A tile's side in SVG units. */
 export const CELL = 16;
@@ -29,33 +30,33 @@ function Picture({ href, side = 1, className }: { href: string; side?: number; c
 }
 
 /** A dino's frames for its team and level. */
-function dinoFrames(team: number, level: number): string[] {
-  return forTeam(assets.dino, team)[dinoTier(level)]!;
+function dinoFrames(skin: Skin, team: number, level: number): string[] {
+  return forTeam(skin.dino, team)[dinoTier(level)]!;
 }
 
 function EmptyTile() {
-  return <Picture href={assets.empty} />;
+  return <Picture href={useSkin().empty} />;
 }
 
 function WallTile() {
-  return <Picture href={assets.wall} />;
+  return <Picture href={useSkin().wall} />;
 }
 
 function LabTile({ tile }: { tile: Of<Environment, "lab"> }) {
-  return <Picture href={forTeam(assets.labTile, tile.team)} />;
+  return <Picture href={forTeam(useSkin().labTile, tile.team)} />;
 }
 
 /** Also drawn on its own for the fossils lying on the board, which have no item view. */
 export function FossilSprite() {
-  return <Picture href={assets.fossil} />;
+  return <Picture href={useSkin().fossil} />;
 }
 
 function HeldDino({ item }: { item: Of<ItemView, "dino"> }) {
-  return <Picture href={dinoFrames(item.team, item.level)[0]!} />;
+  return <Picture href={dinoFrames(useSkin(), item.team, item.level)[0]!} />;
 }
 
 function Lab({ unit }: { unit: Of<UnitEntry, "lab"> }) {
-  return <Picture href={forTeam(assets.lab, unit.team)} side={2} />;
+  return <Picture href={forTeam(useSkin().lab, unit.team)} side={2} />;
 }
 
 /** The dino in its idle loop (skin.css swaps the frames), its level in the top-left
@@ -63,7 +64,7 @@ function Lab({ unit }: { unit: Of<UnitEntry, "lab"> }) {
 function Dino({ unit }: { unit: Of<UnitEntry, "dino"> }) {
   return (
     <>
-      {dinoFrames(unit.team, unit.level).map((href, i) => (
+      {dinoFrames(useSkin(), unit.team, unit.level).map((href, i) => (
         <Picture key={i} href={href} className={`u27-frame u27-frame-${i}`} />
       ))}
       <text className="u27-level" x={1} y={1}>

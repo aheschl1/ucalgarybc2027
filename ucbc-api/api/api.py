@@ -25,6 +25,7 @@ APP_ROUTES = (
     "/login",
     "/register",
     "/docs",
+    "/rules",
     "/leaderboard",
     "/platform",
     "/platform/{rest:path}",

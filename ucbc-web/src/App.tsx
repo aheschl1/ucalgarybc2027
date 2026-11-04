@@ -10,6 +10,7 @@ import NavBar from "./NavBar";
 import Profile from "./Profile";
 import Register from "./Register";
 import Rules from "./Rules";
+import Skins from "./Skins";
 import Tree from "./Tree";
 import Viewer from "./Viewer";
 
@@ -92,6 +93,7 @@ export default function App() {
               }
             />
             <Route path="matches/:matchId" element={<Viewer api={api} />} />
+            <Route path="skins" element={<Skins api={api} />} />
             {user.is_admin && <Route path="admin/maps" element={<Maps api={api} />} />}
             <Route path="*" element={<Navigate to="/platform" replace />} />
           </Route>

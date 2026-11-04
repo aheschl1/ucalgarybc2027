@@ -349,6 +349,14 @@ describe("Viewer", () => {
     expect(position()).toBe("tick 2 / 4");
   });
 
+  it("takes focus when it opens, unless told not to", () => {
+    const first = render(<Viewer renderers={[]} replay={replay} autoFocus={false} />);
+    expect(document.activeElement).toBe(document.body);
+    first.unmount();
+    const { container } = render(<Viewer renderers={[]} replay={replay} />);
+    expect(document.activeElement).toBe(container.querySelector(".ucbc-viewer"));
+  });
+
   it("focuses the search with / and follows playback until scrolled by hand", () => {
     const { root, key, select } = mount([]);
     select(0);

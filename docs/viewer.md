@@ -73,7 +73,9 @@ is a few hundred KB, rewritten whenever the game changes.
 ```text
 games/ucbc2027/viewer/assets/        16x16 pixel art (labs 64x64), per team where coloured
 games/ucbc2027/viewer/src/skin/
-  assets.ts                          which file each thing uses
+  assets.ts                          which PNG each thing uses
+  skin.ts                            SkinContext: the sprites draw from it, `assets` by default;
+                                     slots name each picture by its path, e.g. `dino.1.2.0`
   sprites.tsx                        one component per thing: picture plus extras (level, held item)
   skin.css                           sprite styling
 ```
@@ -83,6 +85,19 @@ a lab is 2x2 tiles. Pictures are drawn into that box keeping their aspect ratio,
 smoothing. The board places sprites, takes clicks over a unit's whole footprint, and
 draws the selection, so a sprite never handles either. Sprites are listed per generated `type`, so a new tile, item, or unit
 type in the Rust fails the type check until it has one.
+
+## The skin page
+
+`/platform/skins` on the site is for designers without a checkout. It needs an account and
+isn't linked from anywhere. It plays a match beside a list of every picture in `assets.ts`;
+replacing a PNG redraws the match wherever that picture appears, and a picture whose size
+differs from the one it replaces gets a warning. The match is a bundled sample until one is
+picked from the recent finished platform matches or loaded by pasting an ID or link: any ucbc2027
+match the API shows the caller.
+
+Changes stay in that browser (IndexedDB) until exported. The export is a zip of only the
+changed files, at their paths under `assets/`, so a developer unzips it over
+`games/ucbc2027/viewer/assets/` and commits. The same zip can be imported on the page.
 
 ## Adding a renderer
 

@@ -10,6 +10,7 @@ import NavBar from "./NavBar";
 import Profile from "./Profile";
 import Register from "./Register";
 import Rules from "./Rules";
+import Skins from "./Skins";
 import Tree from "./Tree";
 import Viewer from "./Viewer";
 
@@ -54,6 +55,7 @@ export default function App() {
         <Route index element={<Home user={user ?? undefined} />} />
         <Route path="docs" element={<Docs />} />
         <Route path="rules" element={<Rules />} />
+        <Route path="skins" element={<Skins />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route

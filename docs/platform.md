@@ -51,7 +51,8 @@ to the database. Nothing about a user can be changed once it exists.
 The web app is a single page with client-side routes. `api/api.py::APP_ROUTES` lists the
 paths it owns, each served the app shell so a reload of one works; anything else under `/`
 is a built file or a 404. Signed out, every path is the login form except `/register`,
-`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`, and `/leaderboard`.
+`/docs`, the participant guide, `ucbc-web/src/Docs.tsx`, `/rules`, `/leaderboard`, and `/skins`, the
+[skin page](viewer.md#the-skin-page).
 
 ## Teams
 

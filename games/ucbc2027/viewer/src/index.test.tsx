@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { Snapshot } from "./api.gen.ts";
 import { renderer } from "./index.tsx";
 import { assets, dinoTier } from "./skin/assets.ts";
-import { SkinContext, slots, withOverrides } from "./skin/skin.ts";
+import { pictures, SkinContext, slots, withFiles, withOverrides } from "./skin/skin.ts";
 
 const { Board, Info } = renderer;
 afterEach(cleanup);
@@ -211,6 +211,29 @@ it("names each picture's slot by its path in the skin", () => {
   ]);
   expect(all.map(([slot]) => slot)).toContain("unused.beacon");
   expect(slots(withOverrides({ "dino.0.3.1": "x" }))).toContainEqual(["dino.0.3.1", "x"]);
+});
+
+it("groups the slots by the file that fills them", () => {
+  const all = pictures();
+  expect(all.find((p) => p.file === "map/environment/dirt.png")).toEqual({
+    file: "map/environment/dirt.png",
+    href: assets.empty,
+    slots: ["empty", "labTile.0", "labTile.1"],
+  });
+  expect(all.find((p) => p.href === assets.dino[1]![2]![0])?.file).toBe("dino/dino_b/b21.png");
+  expect(all.flatMap((p) => p.slots).sort()).toEqual(slots().map(([slot]) => slot).sort());
+});
+
+it("names every picture's file", () => {
+  const all = pictures();
+  expect(all.every((p) => p.href)).toBe(true);
+  expect(new Set(all.map((p) => p.file)).size).toBe(all.length);
+  expect(all.find((p) => p.file === "dino/dino_a/a02.png")?.slots).toEqual(["dino.0.0.1"]);
+});
+
+it("puts a replaced file in every slot it fills", () => {
+  const skin = withFiles({ "map/environment/dirt.png": "x", "map/labs/bLab64.png": "y" });
+  expect([skin.empty, skin.labTile, skin.lab[0], skin.lab[1]]).toEqual(["x", ["x", "x"], assets.lab[0], "y"]);
 });
 
 it("rejects a state it does not recognise", () => {

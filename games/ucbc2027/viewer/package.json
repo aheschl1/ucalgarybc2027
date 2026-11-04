@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.tsx",
     "./assets": "./src/skin/assets.ts",
-    "./skin": "./src/skin/skin.ts"
+    "./skin": "./src/skin/skin.ts",
+    "./replays/*": "./replays/*"
   },
   "scripts": {
     "test": "vitest run",

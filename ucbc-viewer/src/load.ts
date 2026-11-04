@@ -105,6 +105,13 @@ export async function parseReplay(stream: ReadableStream<Uint8Array>): Promise<u
   return replay;
 }
 
+/** A replay file's bytes, decompressed if it is gzipped (`ucbc run --replay r.json.gz`). */
+export async function replayStream(file: Blob): Promise<ReadableStream<Uint8Array>> {
+  const [a, b] = new Uint8Array(await file.slice(0, 2).arrayBuffer());
+  if (a !== 0x1f || b !== 0x8b) return file.stream();
+  return file.stream().pipeThrough(new DecompressionStream("gzip"));
+}
+
 function concat(parts: Uint8Array[]): Uint8Array {
   if (parts.length === 1) return parts[0]!;
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));

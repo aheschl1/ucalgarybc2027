@@ -263,7 +263,7 @@ export default function Skins({ api }: { api: Api }) {
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Skin editor</h1>
           <p className="mt-1 text-sm text-muted">
-            Replace any picture and the match redraws wherever it appears, though a match may not show them all. Changes stay in this browser until you export them; send the zip to a developer to add to the game.
+            Change skin, download zip, and a dev can change it in the deployed game
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

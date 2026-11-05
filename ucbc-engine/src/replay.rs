@@ -145,6 +145,8 @@ pub struct Step {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<FailureRecord>,
     pub usage: Usage,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub redacted: bool,
 }
 
 impl Step {
@@ -163,6 +165,7 @@ impl Step {
             stdout,
             failure,
             usage,
+            redacted: false,
         }
     }
 }

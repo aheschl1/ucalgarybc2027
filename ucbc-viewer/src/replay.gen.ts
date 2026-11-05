@@ -111,6 +111,10 @@ export interface Step {
   actions: unknown[];
   bot: BotId;
   failure?: FailureRecord | null;
+  /**
+   * The platform withheld this step's actions, output and failure from the viewer.
+   */
+  redacted?: boolean;
   stdout?: string;
   team: TeamId;
   usage: Usage;

@@ -160,6 +160,7 @@ async def test_claim_is_exclusive(
     r = await admin_client.get(f"/matches/{match_id}/sets/0")
     assert r.status_code == 200
     assert r.headers["content-encoding"] == "gzip"
+    assert r.headers["cache-control"] == "private"
     assert r.json() == set_replay(0, None)
     assert (await admin_client.get(f"/matches/{match_id}/sets/1")).json() == set_replay(1, 0)
     assert (await admin_client.get(f"/matches/{match_id}/sets/3")).status_code == 404
@@ -455,3 +456,75 @@ async def test_one_team_in_both_slots(
         match = (await teammate_client.get(f"/matches/{r.json()['id']}")).json()
         assert match["bots"] == bots
         assert match["teams"] == [{"id": i, "name": n} for i, n in enumerate(names)]
+
+
+async def test_set_replays_hide_other_teams_steps(
+    app: FastAPI,
+    db: DBConnection,
+    blobs: BlobStore,
+    admin_client: AsyncClient,
+    member_client: AsyncClient,
+    member_b_client: AsyncClient,
+    bot: Callable[[str], Path],
+) -> None:
+    code = zip_dir(bot("random"))
+
+    async def uploaded(client: AsyncClient) -> str:
+        id: str = (await upload(client, code, form={"name": "b"})).json()["id"]
+        return id
+
+    def step(team: int) -> dict[str, Any]:
+        return {
+            "bot": team,
+            "team": team,
+            "actions": [{"cell": team}],
+            "stdout": f"team {team}",
+            "failure": {"kind": "error", "message": "boom", "traceback": "tb"},
+            "usage": {"time_us": 5, "memory": 7},
+        }
+
+    def hidden(team: int) -> dict[str, Any]:
+        return {
+            "bot": team,
+            "team": team,
+            "actions": [],
+            "usage": {"time_us": 5, "memory": 7},
+            "redacted": True,
+        }
+
+    async def steps(client: AsyncClient, match_id: UUID) -> list[dict[str, Any]]:
+        r = await client.get(f"/matches/{match_id}/sets/0")
+        assert r.status_code == 200, r.text
+        result: list[dict[str, Any]] = r.json()["ticks"][0]["steps"]
+        return result
+
+    async def played(bots: list[str]) -> UUID:
+        match_id = await enqueue(admin_client, {"game": "tictactoe", "bots": bots})
+        await db.conn.execute("update matches set origin = 'platform' where id = %s", (match_id,))
+        held = await matches.claim_match(db, "w", LEASE)
+        assert held is not None and held.id == match_id
+        r = replay(match_id)
+        r.sets[0] = SetReplay.model_validate(
+            {
+                **set_replay(0, None),
+                "ticks": [{"number": 0, "steps": [step(0), step(1)], "state_after": {}}],
+            }
+        )
+        await matches.finish_match(db, held, r, blobs)
+        return match_id
+
+    alices = await uploaded(member_client)
+    bobs = await uploaded(member_b_client)
+    match_id = await played([alices, bobs])
+
+    assert await steps(admin_client, match_id) == [step(0), step(1)]
+    assert await steps(member_client, match_id) == [step(0), hidden(1)]
+    assert await steps(member_b_client, match_id) == [hidden(0), step(1)]
+    await create_user(db, "dave@example.com", "Dave", "dave-pw", is_admin=False)
+    async with log_in(app, ("dave@example.com", "dave-pw")) as dave:
+        assert await steps(dave, match_id) == [hidden(0), hidden(1)]
+
+    # A team playing itself sees both of its slots.
+    itself = await played([alices, await uploaded(member_client)])
+    assert await steps(member_client, itself) == [step(0), step(1)]
+    assert await steps(member_b_client, itself) == [hidden(0), hidden(1)]

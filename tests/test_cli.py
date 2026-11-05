@@ -164,7 +164,6 @@ def test_no_main_in_bot(tmp_path: Path) -> None:
 
 
 def test_submissions_team_and_all_options() -> None:
-    args = ["submissions", "--team"]
-    result = CliRunner().invoke(main, [*args, "--all"])
-    assert result.exit_code != 0, result.output
+    result = CliRunner().invoke(main, ["submissions", "--team", "someteam", "--all"])
+    assert result.exit_code == 2, result.output
     assert "--all were both used" in result.output

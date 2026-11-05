@@ -21,6 +21,7 @@ export interface Api {
   TeamElo: TeamElo;
   TeamInfo: TeamInfo;
   TeamJoin: TeamJoin;
+  TeamRename: TeamRename;
   User: User;
   UserCreate: UserCreate;
   ValidationError: ValidationError;
@@ -219,6 +220,9 @@ export interface TeamElo {
 }
 export interface TeamJoin {
   code: string;
+}
+export interface TeamRename {
+  name: string;
 }
 /**
  * The caller's own user. It carries an email, so it is should not be returned for anyone

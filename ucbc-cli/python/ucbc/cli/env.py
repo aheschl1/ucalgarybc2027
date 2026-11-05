@@ -3,6 +3,7 @@ Process variables win over both files."""
 
 import os
 from pathlib import Path
+
 import dotenv
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[4]
 def env_files() -> tuple[Path, Path]:
     realm = "prod" if os.environ.get("ENV") == "prod" else "local"
     return ROOT / ".env", ROOT / f".env.{realm}"
+
 
 def load_env() -> None:
     """Load the environment variables from the files, if they exist."""

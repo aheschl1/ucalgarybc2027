@@ -135,6 +135,26 @@ describe("stepsByBot", () => {
       [5, 5, "idle"],
     ]);
   });
+
+  it("collapses runs of hidden ticks apart from idle ones", () => {
+    const idle = { actions: [], usage: { time_us: 0 } };
+    const hidden = { ...idle, redacted: true };
+    const set = replay.sets[0]!;
+    const ticks = [
+      { number: 0, state_after: 1, steps: [{ ...hidden, bot: 1, team: 1 }] },
+      { number: 1, state_after: 2, steps: [{ ...hidden, bot: 1, team: 1 }] },
+      { number: 2, state_after: 3, steps: [{ ...idle, bot: 1, team: 1 }] },
+      { number: 3, state_after: 4, steps: [{ ...hidden, bot: 1, team: 1 }] },
+    ];
+    const entries = stepsByBot({ ...set, ticks })
+      .get(1)!
+      .map((e) => [e.frame, e.to, e.hidden]);
+    expect(entries).toEqual([
+      [1, 2, true],
+      [3, 3, false],
+      [4, 4, true],
+    ]);
+  });
 });
 
 describe("Viewer", () => {

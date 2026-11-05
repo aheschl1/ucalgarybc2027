@@ -124,6 +124,11 @@ A set's replay is stored as its JSON gzipped (`sets.replay bytea`) and served wi
 `Content-Encoding: gzip`, so the browser decompresses it and the page reads plain JSON.
 Moving replays to the blob store keeps that artifact and changes only where it lives.
 
+A set is served whole only to admins and to a team in every slot. Anyone else gets the steps
+of slots their team does not play redacted: no actions, stdout or failure, and
+`redacted: true`, with `bot`, `team` and `usage` kept
+(`services/matches.py::get_set_replay`). The board state is not redacted.
+
 `/viewer/<match id>` in the web app plays a done match: it reads the match and each of its
 sets through these endpoints and hands the assembled replay to the viewer (`ucbc-viewer`), so
 it shows exactly the matches the API shows the caller. It bundles every game's renderer

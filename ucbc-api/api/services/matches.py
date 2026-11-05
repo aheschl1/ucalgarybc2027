@@ -1,5 +1,8 @@
+import asyncio
 import gzip
+import json
 from datetime import datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from api.blobs import BlobMissing, BlobStore
@@ -64,15 +67,45 @@ async def get_match(db: DBConnection, user: User, match_id: UUID) -> Match:
 async def get_set_replay(
     db: DBConnection, user: User, match_id: UUID, index: int, blobs: BlobStore
 ) -> bytes:
-    """The set's replay as stored: JSON, gzipped."""
-    await _visible(db, user, match_id)
+    """The set's replay as JSON, gzipped. Steps of slots the caller's team does not play
+    come back redacted, without actions, output or failure; an admin sees every slot."""
+    match = await _visible(db, user, match_id)
     key = await db.match_repo.get_set_replay(match_id, index)
     if key is None:
         raise NotFound(f"no set {index} in match {match_id}")
     try:
-        return await blobs.get(key)
+        data = await blobs.get(key)
     except BlobMissing as e:
         raise NotFound(f"replay of set {index} in match {match_id} is gone") from e
+    shown = None if user.is_admin else await _owned_slots(db, user, match)
+    if shown is None or len(shown) == len(match.bots):
+        return data
+    return await asyncio.to_thread(_redacted, data, shown)
+
+
+def _redacted(data: bytes, shown: set[int]) -> bytes:
+    redacted = redact(json.loads(gzip.decompress(data)), shown)
+    return gzip.compress(json.dumps(redacted, separators=(",", ":")).encode(), 1)
+
+
+def redact(set_replay: dict[str, Any], shown: set[int]) -> dict[str, Any]:
+    for tick in set_replay["ticks"]:
+        for step in tick["steps"]:
+            if step["team"] not in shown:
+                step["actions"] = []
+                step.pop("stdout", None)
+                step.pop("failure", None)
+                step["redacted"] = True
+    return set_replay
+
+
+async def _owned_slots(db: DBConnection, user: User, match: MatchRow) -> set[int]:
+    slots = set()
+    for slot, bot in enumerate(match.bots):
+        submission = await db.submission_repo.get(bot)
+        if submission is not None and submission.team_id == user.team_id:
+            slots.add(slot)
+    return slots
 
 
 async def list_matches(
@@ -150,7 +183,7 @@ async def finish_match(
         )
         if not done:
             raise LostLease(match)
-        if match.origin == "platform": # only elo the platform matches, not user ones
+        if match.origin == "platform":  # only elo the platform matches, not user ones
             await _rate(db, match, replay.result)
 
 

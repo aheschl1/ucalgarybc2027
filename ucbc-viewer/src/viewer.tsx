@@ -108,7 +108,9 @@ function StepRows({ step, teams, onSelect }: StepRowsProps) {
         <td className="ucbc-num">{memory == null ? "" : (memory / 2 ** 20).toFixed(1)}</td>
         <td>
           <div className="ucbc-actions">
-            {step.actions.length ? (
+            {step.redacted ? (
+              <span className="ucbc-muted">hidden</span>
+            ) : step.actions.length ? (
               step.actions.map((a, i) => (
                 <span key={i} className="ucbc-action">
                   <Action action={a} tokens={NO_TOKENS} />
@@ -167,17 +169,18 @@ function Steps({ tick, teams, onSelect }: StepsProps) {
 }
 
 /** One tick of a bot's timeline: its step, at the frame it produced; or a run of ticks in
- * which it did nothing, from frame `frame` to frame `to`. */
+ * which it did nothing, or whose steps were hidden, from frame `frame` to frame `to`. */
 interface Entry {
   frame: number;
   to: number;
   team: TeamId;
   step: Step | null;
+  hidden: boolean;
 }
 
 /** Whether a step did anything worth a node of its own. */
 function stepIsIdle(step: Step): boolean {
-  return step.actions.length === 0 && !step.stdout && !step.failure;
+  return !!step.redacted || (step.actions.length === 0 && !step.stdout && !step.failure);
 }
 
 /** Each bot's timeline over a set, in order: an entry per tick it acted or printed in,
@@ -191,10 +194,11 @@ export function stepsByBot(set: SetReplay): Map<BotId, Entry[]> {
       if (!entries) bots.set(step.bot, (entries = []));
       const last = entries.at(-1);
       if (stepIsIdle(step)) {
-        if (last && last.step === null) last.to = frame;
-        else entries.push({ frame, to: frame, team: step.team, step: null });
+        const hidden = !!step.redacted;
+        if (last && last.step === null && last.hidden === hidden) last.to = frame;
+        else entries.push({ frame, to: frame, team: step.team, step: null, hidden });
       } else {
-        entries.push({ frame, to: frame, team: step.team, step });
+        entries.push({ frame, to: frame, team: step.team, step, hidden: false });
       }
     }
   });
@@ -326,7 +330,7 @@ const LogEntry = memo(function LogEntry({ entry, when, at, tokens, onSeek }: Log
           </>
         ) : (
           <li className="ucbc-node ucbc-node-idle">
-            <span className="ucbc-node-type">idle</span>
+            <span className="ucbc-node-type">{entry.hidden ? "hidden" : "idle"}</span>
             {at !== null && run > 1 ? <span className="ucbc-muted">{`tick ${at}`}</span> : null}
           </li>
         )}

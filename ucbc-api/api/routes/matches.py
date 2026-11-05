@@ -43,4 +43,8 @@ async def get_set(match_id: UUID, index: int, db: DB, user: CurrentUser, blobs: 
     """One set of the replay as JSON, sent gzipped: the browser decompresses it, so the
     page reads it like any other JSON."""
     data = await matches.get_set_replay(db, user, match_id, index, blobs)
-    return Response(data, media_type="application/json", headers={"Content-Encoding": "gzip"})
+    return Response(
+        data,
+        media_type="application/json",
+        headers={"Content-Encoding": "gzip", "Cache-Control": "private"},
+    )

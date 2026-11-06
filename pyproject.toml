@@ -2,7 +2,7 @@
 # extension, the bot runtime, and the CLI.
 
 [tool.uv.workspace]
-members = ["ucbc-cli", "ucbc-api", "ucbc-worker"]
+members = ["ucbc-cli", "ucbc-api", "ucbc-worker", "ucbc-rl"]
 
 [dependency-groups]
 dev = [
@@ -17,7 +17,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "ucbc-rl/tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
@@ -37,7 +37,12 @@ exclude = ["**/_api.py"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["ucbc-cli/python", "ucbc-api", "ucbc-worker", "alembic", "tests", "bots"]
+files = ["ucbc-cli/python", "ucbc-rl/python", "ucbc-rl/tests", "ucbc-api", "ucbc-worker", "alembic", "tests", "bots"]
 exclude = ["bots/tictactoe/testing/syntax_error", "ucbc-cli/python/ucbc/runtime"]
-mypy_path = "ucbc-cli/python:ucbc-api:ucbc-worker"
+mypy_path = "ucbc-cli/python:ucbc-rl/python:ucbc-api:ucbc-worker"
 explicit_package_bases = true
+
+# The trainer's extra (`ucbc-rl[train]`) may not be installed.
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*", "numpy", "numpy.*"]
+ignore_missing_imports = true

@@ -6,6 +6,7 @@ members = [
     "ucbc-cli",
     "ucbc-dev",
     "ucbc-wasm",
+    "ucbc-rl",
 ]
 
 [workspace.package]

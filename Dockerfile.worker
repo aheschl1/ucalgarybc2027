@@ -18,6 +18,7 @@ COPY games/ games/
 COPY ucbc-dev/ ucbc-dev/
 COPY ucbc-wasm/ ucbc-wasm/
 COPY ucbc-cli/ ucbc-cli/
+COPY ucbc-rl/ ucbc-rl/
 
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \

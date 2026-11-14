@@ -10,6 +10,7 @@ const TITLES: Record<string, string> = {
   "/leaderboard": "Leaderboard",
   "/docs": "Docs",
   "/rules": "Rules",
+  "/damage-calculator": "Damage calculator",
   "/platform/admin/maps": "Maps",
   "/register": "Sign up",
   "/login": "Log in",
@@ -65,6 +66,9 @@ export default function NavBar({
       <NavLink to="/rules" className={link}>
         Rules
       </NavLink>
+      <NavLink to="/damage-calculator" className={link}>
+        Damage calculator
+      </NavLink>
       {user?.is_admin && (
         <NavLink to="/platform/admin/maps" className={link}>
           Maps
@@ -75,14 +79,14 @@ export default function NavBar({
 
   return (
     <nav className="sticky top-0 z-20 border-b border-line bg-bg/80 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-7xl items-center gap-6 px-4 sm:px-6">
         <Link to="/" className="flex items-center font-semibold tracking-tight whitespace-nowrap">
           <span>
             UCBC<span className="ml-1.5 hidden font-normal text-muted lg:inline">UCalgary Battlecode</span>
           </span>
         </Link>
 
-        <div className="hidden items-center gap-0.5 sm:flex">{links}</div>
+        <div className="hidden items-center gap-0.5 xl:flex">{links}</div>
 
         <div className="ml-auto flex items-center gap-1">
           {user ? (
@@ -124,7 +128,7 @@ export default function NavBar({
             )
           )}
           <button
-            className="cursor-pointer rounded-lg p-2 text-muted hover:bg-hover hover:text-fg sm:hidden"
+            className="cursor-pointer rounded-lg p-2 text-muted hover:bg-hover hover:text-fg xl:hidden"
             aria-label="Menu"
             aria-expanded={open}
             onClick={() => setOpen(!open)}
@@ -137,7 +141,7 @@ export default function NavBar({
       </div>
 
       {open && (
-        <div className="flex flex-col gap-0.5 border-t border-line px-2 py-2 sm:hidden">
+        <div className="flex flex-col gap-0.5 border-t border-line px-2 py-2 xl:hidden">
           {links}
           {user ? (
             <>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
 import { get, logOut, makeApi, type User } from "./api";
 import Docs from "./Docs";
+import DamageCalculator from "./DamageCalculator";
 import Home from "./Home";
 import Leaderboard from "./Leaderboard";
 import Login from "./Login";
@@ -54,6 +55,7 @@ export default function App() {
         <Route index element={<Home user={user ?? undefined} />} />
         <Route path="docs" element={<Docs />} />
         <Route path="rules" element={<Rules />} />
+        <Route path="damage-calculator" element={<DamageCalculator />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route

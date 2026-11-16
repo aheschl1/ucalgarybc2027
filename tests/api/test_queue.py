@@ -389,7 +389,7 @@ async def test_list_filters(
     member_client: AsyncClient,
     bot: Callable[[str], Path],
 ) -> None:
-    """`origin`, `team` and `active` narrow the list, and never past what the caller may see."""
+    """`origin`, `team`, `active` and `done` narrow the list, and never past what the caller may see."""
     code = zip_dir(bot("random"))
 
     async def uploaded(client: AsyncClient, name: str) -> dict[str, Any]:
@@ -426,6 +426,8 @@ async def test_list_filters(
         assert await ids(member_client, team=admins["team_id"]) == [platform, scrim]
         assert await ids(member_client, team=admins["team_id"], origin="user") == [scrim]
         assert await ids(member_client, active="true") == [platform, daves_match]
+        assert await ids(member_client, done="true") == [scrim]
+        assert await ids(member_client, done="true", origin="platform") == []
         # Dave asks after Alice's team, but sees only what he is in or what is public.
         assert await ids(dave, team=alices["team_id"]) == [daves_match]
         assert await ids(dave, team=admins["team_id"]) == [platform]

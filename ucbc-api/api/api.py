@@ -26,6 +26,7 @@ APP_ROUTES = (
     "/register",
     "/docs",
     "/damage-calculator",
+    "/rules",
     "/leaderboard",
     "/platform",
     "/platform/{rest:path}",

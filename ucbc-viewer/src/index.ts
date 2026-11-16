@@ -1,6 +1,7 @@
 export { Viewer } from "./viewer.tsx";
 export type { ViewerProps } from "./viewer.tsx";
 export { renderers } from "./games.ts";
+export { parseReplay, replayStream } from "./load.ts";
 export { useFrame, useSelection, ViewerContext } from "./hooks.ts";
 export type { ViewerState } from "./hooks.ts";
 export type { Frame, GameRenderer } from "./renderer.ts";

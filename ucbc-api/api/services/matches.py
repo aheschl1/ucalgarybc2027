@@ -82,11 +82,12 @@ async def list_matches(
     origin: MatchOrigin | None = None,
     team: int | None = None,
     active: bool = False,
+    done: bool = False,
 ) -> list[MatchRow]:
     """Platform matches and matches with one of the caller's team's submissions, newest
     first; every match for an admin. `mine` narrows to the team's own, admin or not; `team`
     to another team's, of those the caller may see; `origin` to user or platform matches;
-    `active` to matches queued or running."""
+    `active` to matches queued or running; `done` to finished ones."""
     return await db.match_repo.list_recent(
         user.team_id if mine or not user.is_admin else None,
         LIST_LIMIT,
@@ -94,6 +95,7 @@ async def list_matches(
         origin=origin,
         involving=team,
         active=active,
+        done=done,
     )
 
 

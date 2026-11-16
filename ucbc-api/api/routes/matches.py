@@ -25,11 +25,12 @@ async def list_matches(
     origin: MatchOrigin | None = None,
     team: int | None = None,
     active: bool = False,
+    done: bool = False,
 ) -> list[MatchRow]:
     """Platform matches and the caller's team's, newest first; every match for an admin.
     `mine` narrows to matches the caller's team has a bot in, `team` to those another team
-    has a bot in, `origin` to user or platform matches, and `active` to queued or running."""
-    return await matches.list_matches(db, user, mine, origin, team, active)
+    has a bot in, `origin` to user or platform matches, `active` to queued or running, and `done` to finished."""
+    return await matches.list_matches(db, user, mine, origin, team, active, done)
 
 
 @router.get("/{match_id}")

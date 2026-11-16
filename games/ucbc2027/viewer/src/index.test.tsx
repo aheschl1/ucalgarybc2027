@@ -8,6 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { Snapshot } from "./api.gen.ts";
 import { renderer } from "./index.tsx";
 import { assets, dinoTier } from "./skin/assets.ts";
+import { pictures, SkinContext, slots, withFiles, withOverrides } from "./skin/skin.ts";
 
 const { Board, Info } = renderer;
 afterEach(cleanup);
@@ -175,6 +176,64 @@ it("outlines what only the selected unit can see, clipped to the board", () => {
   // Two out from the 2x2 footprint, clipped at the top and left: (0, 0) to (4, 4).
   board.rerender(at(frame, <Board />, 0));
   expect(sight()).toEqual([["translate(0 0)", "80", "80"]]);
+});
+
+it("draws with the skin it is given, and redraws the terrain when the skin changes", () => {
+  const state: Snapshot = {
+    tick: 0,
+    environment: [[{ type: "lab", team: 0 }, { type: "wall" }]],
+    units: [
+      { id: 0, team: 0, type: "lab", origin: { x: 0, y: 0 }, health: 100, vision: 2 },
+      { id: 1, team: 1, type: "dino", pos: { x: 1, y: 0 }, level: 3, health: 10, held: null, vision: 3 },
+    ],
+    fossils: [{ x: 1, y: 0 }],
+    teams: [{ bones: 0, fossils: 0 }],
+  };
+  const frame = { state, tick: null, set, teams };
+  const skinned = (overrides: Record<string, string>) => (
+    <SkinContext value={withOverrides(overrides)}>{at(frame, <Board />)}</SkinContext>
+  );
+  const board = render(skinned({ wall: "w1", "labTile.0": "t", "lab.0": "l", "dino.1.2.1": "d", fossil: "f" }));
+  const hrefs = () => attrs(board.container.querySelectorAll("image"), "href");
+  expect(hrefs()).toEqual(["t", "w1", "f", "l", assets.dino[1]![2]![0], "d"]);
+  board.rerender(skinned({ wall: "w2" }));
+  expect(hrefs()).toEqual([assets.labTile[0], "w2", assets.fossil, assets.lab[0], ...assets.dino[1]![2]!]);
+});
+
+it("names each picture's slot by its path in the skin", () => {
+  const all = slots();
+  expect(all.slice(0, 5)).toEqual([
+    ["empty", assets.empty],
+    ["wall", assets.wall],
+    ["labTile.0", assets.labTile[0]],
+    ["labTile.1", assets.labTile[1]],
+    ["fossil", assets.fossil],
+  ]);
+  expect(all.map(([slot]) => slot)).toContain("unused.beacon");
+  expect(slots(withOverrides({ "dino.0.3.1": "x" }))).toContainEqual(["dino.0.3.1", "x"]);
+});
+
+it("groups the slots by the file that fills them", () => {
+  const all = pictures();
+  expect(all.find((p) => p.file === "map/environment/dirt.png")).toEqual({
+    file: "map/environment/dirt.png",
+    href: assets.empty,
+    slots: ["empty", "labTile.0", "labTile.1"],
+  });
+  expect(all.find((p) => p.href === assets.dino[1]![2]![0])?.file).toBe("dino/dino_b/b21.png");
+  expect(all.flatMap((p) => p.slots).sort()).toEqual(slots().map(([slot]) => slot).sort());
+});
+
+it("names every picture's file", () => {
+  const all = pictures();
+  expect(all.every((p) => p.href)).toBe(true);
+  expect(new Set(all.map((p) => p.file)).size).toBe(all.length);
+  expect(all.find((p) => p.file === "dino/dino_a/a02.png")?.slots).toEqual(["dino.0.0.1"]);
+});
+
+it("puts a replaced file in every slot it fills", () => {
+  const skin = withFiles({ "map/environment/dirt.png": "x", "map/labs/bLab64.png": "y" });
+  expect([skin.empty, skin.labTile, skin.lab[0], skin.lab[1]]).toEqual(["x", ["x", "x"], assets.lab[0], "y"]);
 });
 
 it("rejects a state it does not recognise", () => {

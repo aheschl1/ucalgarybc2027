@@ -32,6 +32,19 @@ function assemble(match: Match, sets: SetReplay[]): Replay {
   };
 }
 
+/** The match's replay, or the status of a match that has none yet. */
+export async function matchReplay(api: Api, matchId: string): Promise<Replay | string> {
+  const id = encodeURIComponent(matchId);
+  const match = await api.load<Match>(`/matches/${id}`);
+  if (match.status !== "done") {
+    return match.error ? `${match.status}: ${match.error}` : match.status;
+  }
+  const sets = await Promise.all(
+    match.sets.map((s) => api.load<SetReplay>(`/matches/${id}/sets/${s.index}`)),
+  );
+  return assemble(match, sets);
+}
+
 /** Plays one match. A match that is not done yet shows its status instead. */
 export default function Viewer({ api }: { api: Api }) {
   const { matchId = "" } = useParams();
@@ -45,25 +58,15 @@ export default function Viewer({ api }: { api: Api }) {
     setReplay(null);
     setStatus("loading");
     setError("");
-    const id = encodeURIComponent(matchId);
-    api
-      .load<Match>(`/matches/${id}`)
-      .then(async (match) => {
-        if (match.status !== "done") {
-          return match.error ? `${match.status}: ${match.error}` : match.status;
-        }
-        const sets = await Promise.all(
-          match.sets.map((s) =>
-            api.load<SetReplay>(`/matches/${id}/sets/${s.index}`),
-          ),
-        );
-        if (live) setReplay(assemble(match, sets));
-        return "";
-      })
-      .then(
-        (text) => live && setStatus(text),
-        (err) => live && setError(describe(err)),
-      );
+    matchReplay(api, matchId).then(
+      (result) => {
+        if (!live) return;
+        if (typeof result === "string") return setStatus(result);
+        setReplay(result);
+        setStatus("");
+      },
+      (err) => live && setError(describe(err)),
+    );
     return () => {
       live = false;
     };

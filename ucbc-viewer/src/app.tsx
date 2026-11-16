@@ -6,7 +6,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { renderers } from "./games.ts";
-import { parseReplay } from "./load.ts";
+import { parseReplay, replayStream } from "./load.ts";
 import type { Replay } from "./replay.gen.ts";
 import { Viewer } from "./viewer.tsx";
 
@@ -69,15 +69,9 @@ fetch(url)
   });
 
 addEventListener("dragover", (e) => e.preventDefault());
-/** A replay file's bytes, decompressed if it is gzipped (`ucbc run --replay r.json.gz`). */
-async function readFile(file: File): Promise<ReadableStream<Uint8Array>> {
-  const [a, b] = new Uint8Array(await file.slice(0, 2).arrayBuffer());
-  if (a !== 0x1f || b !== 0x8b) return file.stream();
-  return file.stream().pipeThrough(new DecompressionStream("gzip"));
-}
 
 addEventListener("drop", async (e) => {
   e.preventDefault();
   const file = e.dataTransfer?.files[0];
-  if (file) open(await readFile(file), file.name);
+  if (file) open(await replayStream(file), file.name);
 });

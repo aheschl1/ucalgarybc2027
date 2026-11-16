@@ -1,3 +1,5 @@
+import { evaluateExpression } from "./expression";
+
 /** Calculator-only proposals. The engine's combat rules are not changed here. */
 export const ALGORITHMS = [
   { id: "old", name: "Old (2026-11-14)", formula: "Equal levels: 2; higher attacker: gap²; lower attacker: floor(gap² / 2). Minimum 1." },
@@ -8,9 +10,17 @@ export const ALGORITHMS = [
 ] as const;
 
 export type Algorithm = (typeof ALGORITHMS)[number]["id"];
+// variables for user input
+export const CUSTOM_VARIABLES = [
+  ["A", "Attacker attack stat"], ["B", "Attack artifact buff"],
+  ["L", "Attacker level"], ["X", "Receiver level"],
+  ["F", "Defense artifact buff"], ["D", "abs(L - X - F)"],
+  ["AH", "Attacker health"], ["RH", "Receiver health"],
+] as const;
 
 export interface DamageInput {
   attackerLevel: number;
+  attackerHealth: number;
   attack: number;
   attackBuff: number;
   receiverLevel: number;
@@ -24,7 +34,7 @@ export function mergedHealth(level: number): number {
 }
 
 export function calculateDamage(algorithm: Algorithm, input: DamageInput) {
-  const { attackerLevel, attack, attackBuff, receiverLevel, receiverHealth, defenseBuff } = input;
+  const { attackerLevel, attack, attackBuff, receiverLevel, defenseBuff } = input;
   const defense = Math.abs(attackerLevel - receiverLevel - defenseBuff);
   let rawDamage: number;
   switch (algorithm) {
@@ -48,6 +58,23 @@ export function calculateDamage(algorithm: Algorithm, input: DamageInput) {
       rawDamage = Math.floor(attack * receiverLevel / (receiverLevel + defense) + attackBuff - defenseBuff);
       break;
   }
+  return damageResult(rawDamage, input);
+}
+
+// custom algorithm
+export function calculateCustomDamage(formula: string, input: DamageInput) {
+  const rawDamage = evaluateExpression(formula, {
+    A: input.attack, B: input.attackBuff, L: input.attackerLevel,
+    X: input.receiverLevel, F: input.defenseBuff,
+    D: Math.abs(input.attackerLevel - input.receiverLevel - input.defenseBuff),
+    AH: input.attackerHealth, RH: input.receiverHealth,
+  });
+  return damageResult(Math.floor(rawDamage), input);
+}
+// the resulting damage
+function damageResult(rawDamage: number, input: DamageInput) {
+  const { attackerLevel, receiverLevel, receiverHealth, defenseBuff } = input;
+  const defense = Math.abs(attackerLevel - receiverLevel - defenseBuff);
   // Every formula floors final damage. A negative proposal is a blocked hit,
   // not healing I forgot negative damage does that.
   const damage = Math.max(0, rawDamage);

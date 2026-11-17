@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ALGORITHMS, calculateDamage, mergedHealth, type DamageInput } from "./damage";
+import { ALGORITHMS, calculateCustomDamage, calculateDamage, mergedHealth, type DamageInput } from "./damage";
 
 const input: DamageInput = {
-  attackerLevel: 5, attack: 7, attackBuff: 3,
+  attackerLevel: 5, attackerHealth: 40, attack: 7, attackBuff: 3,
   receiverLevel: 3, receiverHealth: 20, defenseBuff: 4,
 };
 
@@ -17,6 +17,23 @@ describe("Old (2026-11-14)", () => {
   it("ignores experimental attack stats and artifacts", () => {
     expect(calculateDamage("old", input).damage).toBe(4);
     expect(calculateDamage("old", { ...input, attack: 0, attackBuff: 999, defenseBuff: 999 }).damage).toBe(4);
+  });
+});
+
+describe("custom formulas", () => {
+  it("exposes all combat stats including both health values", () => {
+    expect(calculateCustomDamage("A + B + L + X + F + D + AH + RH", input).damage).toBe(84);
+  });
+
+  it("floors the final value, not intermediate arithmetic", () => {
+    expect(calculateCustomDamage("A * X / (X + D) + B - F", input).damage).toBe(3);
+    expect(calculateCustomDamage("0.6 + 0.6", input).damage).toBe(1);
+  });
+
+  it("clamps negative damage and lethal hits", () => {
+    expect(calculateCustomDamage("-1.5", input).damage).toBe(0);
+    expect(calculateCustomDamage("1000", input).remainingHealth).toBe(0);
+    expect(calculateCustomDamage("1000", input).healthLost).toBe(20);
   });
 });
 

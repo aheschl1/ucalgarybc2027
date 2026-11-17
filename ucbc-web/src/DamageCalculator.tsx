@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from "react";
-import { ALGORITHMS, calculateDamage, mergedHealth, type Algorithm, type DamageInput } from "./damage";
+import { ALGORITHMS, calculateCustomDamage, calculateDamage, mergedHealth, type Algorithm, type DamageInput } from "./damage";
+import CustomFormula from "./CustomFormula";
 import { dino, Sprite } from "./Tiles";
 import { Button, Card, Field, Input, Page, Select, Table } from "./ui";
 
@@ -47,7 +48,7 @@ function Combatant({ receiver, value, onChange }: {
       </div>
       <p className="mt-4 text-xs leading-relaxed text-muted">
         Changing level presets health to min(level × 10, 50){!receiver && " and attack stat to level"}.
-        Override health for prior damage or splits.{!receiver && " Attacker health does not affect these formulas."}
+        Override health for prior damage or splits.{!receiver && " Attacker health only affects custom formulas that use AH."}
       </p>
     </Card>
   );
@@ -56,18 +57,39 @@ function Combatant({ receiver, value, onChange }: {
 export default function DamageCalculator() {
   const [attacker, setAttacker] = useState(fresh);
   const [receiver, setReceiver] = useState(fresh);
-  const [algorithm, setAlgorithm] = useState<Algorithm>("old");
-  const [result, setResult] = useState<{ input: DamageInput; algorithm: Algorithm } | null>(null);
-  const selected = ALGORITHMS.find((item) => item.id === algorithm)!;
-  const calculated = result && calculateDamage(result.algorithm, result.input);
+  const [algorithm, setAlgorithm] = useState<Algorithm | "custom">("old");
+  const [formula, setFormula] = useState("A * 1.5 + B - abs(L - X - F)"); // default
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    input: DamageInput;
+    algorithm: Algorithm | "custom";
+    calculated: ReturnType<typeof calculateDamage>;
+    formula?: string;
+  } | null>(null);
+  const selected = ALGORITHMS.find((item) => item.id === algorithm);
+  const calculated = result?.calculated;
+
+  function clearResult() {
+    setResult(null);
+    setError(null);
+  }
 
   function calculate(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!event.currentTarget.reportValidity()) return;
-    setResult({ algorithm, input: {
-      attackerLevel: Number(attacker.level), attack: Number(attacker.attack), attackBuff: Number(attacker.buff),
+    clearResult();
+    const input: DamageInput = {
+      attackerLevel: Number(attacker.level), attackerHealth: Number(attacker.health),
+      attack: Number(attacker.attack), attackBuff: Number(attacker.buff),
       receiverLevel: Number(receiver.level), receiverHealth: Number(receiver.health), defenseBuff: Number(receiver.buff),
-    } });
+    };
+    try {
+      // try doing the calculations
+      const calculated = algorithm === "custom" ? calculateCustomDamage(formula, input) : calculateDamage(algorithm, input);
+      setResult({ algorithm, input, calculated, formula: algorithm === "custom" ? formula : undefined });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Unable to calculate this formula.");
+    }
   }
 
   return (
@@ -76,7 +98,7 @@ export default function DamageCalculator() {
         This is a sandbox, not reflective of changes to live rules. The engine currently has no separate attack stat or
         artifact damage/defense buffs, so those are your inputs. Health depends on a dino’s level and merging.
       </p>
-      <form onSubmit={calculate} onChange={() => setResult(null)} className="space-y-6">
+      <form onSubmit={calculate} onChange={clearResult} className="space-y-6">
         <div className="grid gap-6 md:grid-cols-2">
           <Combatant value={attacker} onChange={setAttacker} />
           <Combatant receiver value={receiver} onChange={setReceiver} />
@@ -84,15 +106,24 @@ export default function DamageCalculator() {
         <Card title="Damage algorithm">
           <div className="max-w-md">
             <Field label="Algorithm">
-              <Select value={algorithm} onChange={(event) => setAlgorithm(event.target.value as Algorithm)}>
+              <Select value={algorithm} onChange={(event) => setAlgorithm(event.target.value as Algorithm | "custom")}>
                 {ALGORITHMS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                <option value="custom">Custom</option>
               </Select>
             </Field>
           </div>
-          <p className="mt-4 break-words rounded-lg bg-panel p-3 font-mono text-xs leading-relaxed">{selected.formula}</p>
+          {algorithm === "custom" ? (
+            <CustomFormula value={formula} error={error} onChange={(value) => { setFormula(value); clearResult(); }} />
+          ) : (
+            <p className="mt-4 break-words rounded-lg bg-panel p-3 font-mono text-xs leading-relaxed">{selected?.formula}</p>
+          )}
           <p className="mt-3 text-xs leading-relaxed text-muted">
-            A = attacker attack stat; B = attack artifact buff; X = receiver level; F = defense artifact buff;
-            D = |attacker level − receiver level − F|. Both multiplicative formulas use this same D;
+            A = attacker attack stat;<br />
+            B = attack artifact buff;<br />
+            X = receiver level;<br />
+            F = defense artifact buff;<br />
+            D = |attacker level − receiver level − F|.<br />
+            Both multiplicative formulas use this same D;<br />
             the second also subtracts F at the end.
           </p>
           <p className="mt-2 text-xs leading-relaxed text-muted">
@@ -107,7 +138,8 @@ export default function DamageCalculator() {
       <div aria-live="polite" className="mt-6 space-y-6">
         {result && calculated && (
           <>
-            <Card title={`Result · ${ALGORITHMS.find((item) => item.id === result.algorithm)!.name}`}>
+            <Card title={`Result · ${result.algorithm === "custom" ? "Custom" : ALGORITHMS.find((item) => item.id === result.algorithm)!.name}`}>
+              {result.formula && <p className="mb-4 break-words rounded-lg bg-panel p-3 font-mono text-xs">{result.formula}</p>}
               <div className="grid gap-5 sm:grid-cols-3">
                 <div><p className="text-xs text-muted">Damage per hit</p><p className="mt-1 text-3xl font-semibold tabular-nums">{format(calculated.damage)}</p></div>
                 <div><p className="text-xs text-muted">Actual health lost</p><p className="mt-1 text-3xl font-semibold tabular-nums">{format(calculated.healthLost)}</p></div>
@@ -132,7 +164,24 @@ export default function DamageCalculator() {
                     </tr>
                   );
                 })}
+                {result.algorithm === "custom" && (
+                  <tr className="bg-accent-soft">
+                    <th scope="row" className="px-4 py-3 font-medium">Custom</th>
+                    <td className="px-4 py-3 tabular-nums">{format(calculated.damage)}</td>
+                    <td className="px-4 py-3 tabular-nums">{format(calculated.healthLost)}</td>
+                    <td className="px-4 py-3 tabular-nums">{format(calculated.remainingHealth)}</td>
+                  </tr>
+                )}
               </Table>
+              <div className="border-t border-line p-4 text-xs leading-relaxed text-muted">
+                <dl className="space-y-2">
+                  <div><dt className="inline font-medium text-fg">Algorithm: </dt><dd className="inline">The damage formula tested using the same dino stats and artifact buffs.</dd></div>
+                  <div><dt className="inline font-medium text-fg">Damage per hit: </dt><dd className="inline">The formula’s damage after flooring and clamping to 0, before accounting for the receiver’s available health.</dd></div>
+                  <div><dt className="inline font-medium text-fg">Health lost: </dt><dd className="inline">The health actually removed, capped at the receiver’s current health.</dd></div>
+                  <div><dt className="inline font-medium text-fg">Health remaining: </dt><dd className="inline">The receiver’s health after one hit, never below 0.</dd></div>
+                </dl>
+                <p className="mt-3">Example: a hit dealing 20 damage against a receiver with 5 health removes 5 health and leaves 0 health.</p>
+              </div>
             </Card>
           </>
         )}

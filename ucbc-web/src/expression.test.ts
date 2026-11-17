@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { evaluateExpression } from "./expression";
 
-// AI Alert - these were quickly made using AI - they cover everything I'm concerned about
+// AI Alert - the later of these were made using AI - they cover everything I'm concerned about
 // But let me know of any bugs
 it.each([
   ["2 + 3 * 4", 14], ["(2 + 3) * 4", 20], ["2^3^2", 512],

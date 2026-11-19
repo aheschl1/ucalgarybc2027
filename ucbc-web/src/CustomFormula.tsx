@@ -11,7 +11,7 @@ const EXAMPLES = [
   ["Level gap squared", "max(1, (L - X)^2)"],
 ] as const;
 
-// the editor and cursor and buttons
+// editor has a formula textarea, insertion buttons, variables.
 export default function CustomFormula({ value, onChange, error }: {
   value: string;
   onChange: (value: string) => void;
@@ -26,6 +26,7 @@ export default function CustomFormula({ value, onChange, error }: {
     cursor.current = null;
   }, [value]);
 
+  // Insert at the selected text or cursor
   function insert(token: string) {
     const start = editor.current?.selectionStart ?? value.length;
     const end = editor.current?.selectionEnd ?? value.length;
@@ -50,6 +51,7 @@ export default function CustomFormula({ value, onChange, error }: {
           className="w-full rounded-lg border border-line bg-bg p-3 font-mono text-sm"
           placeholder="A * 1.5 + B - abs(L - X - F)" />
       </Field>
+      {/* Variable buttons map the names to the expression. */}
       <div className="flex flex-wrap gap-2" role="group" aria-label="Formula variables">
         {CUSTOM_VARIABLES.map(([symbol, description]) => (
           <Button key={symbol} type="button" variant="secondary" title={description}
@@ -62,6 +64,7 @@ export default function CustomFormula({ value, onChange, error }: {
         ))}
         <Button type="button" variant="ghost" onClick={() => onChange("")}>Clear formula</Button>
       </div>
+      {/* Keep the variable definitions the same with CUSTOM_VARIABLES. */}
       <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
         {CUSTOM_VARIABLES.map(([symbol, description]) => (
           <div key={symbol} className="flex gap-2"><dt className="font-mono font-semibold">{symbol}</dt><dd className="text-muted">{description}</dd></div>

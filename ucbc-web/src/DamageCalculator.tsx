@@ -55,10 +55,12 @@ function Combatant({ receiver, value, onChange }: {
 }
 
 export default function DamageCalculator() {
+  // Attacker and receiver sepearated
   const [attacker, setAttacker] = useState(fresh);
   const [receiver, setReceiver] = useState(fresh);
   const [algorithm, setAlgorithm] = useState<Algorithm | "custom">("old");
-  const [formula, setFormula] = useState("A * 1.5 + B - abs(L - X - F)"); // default
+  // Start with a  base formula
+  const [formula, setFormula] = useState("A * 1.5 + B - abs(L - X - F)");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     input: DamageInput;
@@ -69,6 +71,7 @@ export default function DamageCalculator() {
   const selected = ALGORITHMS.find((item) => item.id === algorithm);
   const calculated = result?.calculated;
 
+  // clear the result
   function clearResult() {
     setResult(null);
     setError(null);
@@ -84,7 +87,7 @@ export default function DamageCalculator() {
       receiverLevel: Number(receiver.level), receiverHealth: Number(receiver.health), defenseBuff: Number(receiver.buff),
     };
     try {
-      // try doing the calculations
+      // do algorithms through the parser; built-ins use the shared damage one
       const calculated = algorithm === "custom" ? calculateCustomDamage(formula, input) : calculateDamage(algorithm, input);
       setResult({ algorithm, input, calculated, formula: algorithm === "custom" ? formula : undefined });
     } catch (error) {
@@ -112,6 +115,7 @@ export default function DamageCalculator() {
               </Select>
             </Field>
           </div>
+          {/* Custom mode has an editor; built-in modes show the formula itself. */}
           {algorithm === "custom" ? (
             <CustomFormula value={formula} error={error} onChange={(value) => { setFormula(value); clearResult(); }} />
           ) : (
@@ -151,6 +155,7 @@ export default function DamageCalculator() {
                 {calculated.rawDamage < 0 && ` Raw formula result: ${format(calculated.rawDamage)}; clamped to 0 damage.`}
               </p>
             </Card>
+            {/* get every algorithm with the same inputs to make differences easy to compare. */}
             <Card title="Compare all algorithms · same inputs" flush>
               <Table head={["Algorithm", "Damage per hit", "Health lost", "Health remaining"]}>
                 {ALGORITHMS.map((item) => {
@@ -164,6 +169,7 @@ export default function DamageCalculator() {
                     </tr>
                   );
                 })}
+                {/* have the custom formula only when it is the currently selected proposal. */}
                 {result.algorithm === "custom" && (
                   <tr className="bg-accent-soft">
                     <th scope="row" className="px-4 py-3 font-medium">Custom</th>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
 import { get, logOut, makeApi, type User } from "./api";
 import Docs from "./Docs";
+import DamageCalculator from "./DamageCalculator";
 import Home from "./Home";
 import Leaderboard from "./Leaderboard";
 import Login from "./Login";
@@ -95,6 +96,7 @@ export default function App() {
             <Route path="matches/:matchId" element={<Viewer api={api} />} />
             <Route path="skins" element={<Skins api={api} />} />
             {user.is_admin && <Route path="admin/maps" element={<Maps api={api} />} />}
+            {user.is_admin && <Route path="admin/damage-calculator" element={<DamageCalculator />} />}
             <Route path="*" element={<Navigate to="/platform" replace />} />
           </Route>
         ) : (

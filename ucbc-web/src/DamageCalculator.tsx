@@ -96,7 +96,7 @@ export default function DamageCalculator() {
   }
 
   return (
-    <Page wide title="Damage calculator" subtitle="Compare one-hit damage formulas before changing the game’s combat balance.">
+    <Page wide title="Damage calculator" subtitle="Admin only. Compare one-hit damage formulas before changing the game’s combat balance.">
       <p className="mb-6 max-w-3xl leading-relaxed text-muted">
         This is a sandbox, not reflective of changes to live rules. The engine currently has no separate attack stat or
         artifact damage/defense buffs, so those are your inputs. Health depends on a dino’s level and merging.

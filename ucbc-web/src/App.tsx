@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
 import { get, logOut, makeApi, type User } from "./api";
 import Docs from "./Docs";
-// The damage calculator is a standalone client-side rules sandbox.
 import DamageCalculator from "./DamageCalculator";
 import Home from "./Home";
 import Leaderboard from "./Leaderboard";
@@ -57,8 +56,6 @@ export default function App() {
         <Route index element={<Home user={user ?? undefined} />} />
         <Route path="docs" element={<Docs />} />
         <Route path="rules" element={<Rules />} />
-        {/* Route for comparing combat algorithms without changing the actual engine. */}
-        <Route path="damage-calculator" element={<DamageCalculator />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route
@@ -99,6 +96,7 @@ export default function App() {
             <Route path="matches/:matchId" element={<Viewer api={api} />} />
             <Route path="skins" element={<Skins api={api} />} />
             {user.is_admin && <Route path="admin/maps" element={<Maps api={api} />} />}
+            {user.is_admin && <Route path="admin/damage-calculator" element={<DamageCalculator />} />}
             <Route path="*" element={<Navigate to="/platform" replace />} />
           </Route>
         ) : (

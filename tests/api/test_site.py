@@ -43,12 +43,3 @@ async def test_site_without_a_build(database_url: str, blob_url: str, tmp_path: 
         assert (await c.get("/api/health")).status_code == 200
         assert (await c.get("/")).status_code == 404
 
-
-async def test_damage_calculator_shell(tmp_path: Path) -> None:
-    """Direct navigation/reload is public and needs no database or blob service."""
-    (tmp_path / "index.html").write_text("<h1>ucbc</h1>")
-    site = create_site(static=tmp_path)
-    async with client(site) as c:
-        response = await c.get("/damage-calculator")
-        assert response.status_code == 200
-        assert response.text == "<h1>ucbc</h1>"

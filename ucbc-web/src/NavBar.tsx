@@ -10,8 +10,8 @@ const TITLES: Record<string, string> = {
   "/leaderboard": "Leaderboard",
   "/docs": "Docs",
   "/rules": "Rules",
-  "/damage-calculator": "Damage calculator",
   "/platform/admin/maps": "Maps",
+  "/platform/admin/damage-calculator": "Damage calculator",
   "/register": "Sign up",
   "/login": "Log in",
 };
@@ -45,7 +45,7 @@ export default function NavBar({
         Home
       </NavLink>
       {user && (
-        // The dashboard and its matches; Profile and Maps have their own highlights.
+        // The dashboard and its matches; Profile and the admin pages have their own highlights.
         <NavLink
           to="/platform"
           className={() =>
@@ -66,13 +66,15 @@ export default function NavBar({
       <NavLink to="/rules" className={link}>
         Rules
       </NavLink>
-      <NavLink to="/damage-calculator" className={link}>
-        Damage calculator
-      </NavLink>
       {user?.is_admin && (
-        <NavLink to="/platform/admin/maps" className={link}>
-          Maps
-        </NavLink>
+        <>
+          <NavLink to="/platform/admin/maps" className={link}>
+            Maps
+          </NavLink>
+          <NavLink to="/platform/admin/damage-calculator" className={link}>
+            Damage calculator
+          </NavLink>
+        </>
       )}
     </>
   );

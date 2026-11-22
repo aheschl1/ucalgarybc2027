@@ -42,3 +42,4 @@ async def test_site_without_a_build(database_url: str, blob_url: str, tmp_path: 
     async with site.router.lifespan_context(site), client(site) as c:
         assert (await c.get("/api/health")).status_code == 200
         assert (await c.get("/")).status_code == 404
+

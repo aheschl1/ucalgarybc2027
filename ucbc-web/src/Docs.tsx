@@ -1,20 +1,21 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Rule, Section } from "./prose";
+import { Select } from "./ui";
 
 const STEPS = [
-  ["install", "install"],
-  ["write", "write a bot"],
-  ["run", "run the game locally"],
-  ["submit", "submit"],
-  ["watch", "watch"],
+  ["install", "Install"],
+  ["write", "Write a bot"],
+  ["run", "Run the game locally"],
+  ["submit", "Submit"],
+  ["watch", "Watch"],
 ] as const;
 
 const REFERENCE = [
-  ["limits", "limits"],
-  ["print", "debugging with print"],
-  ["maps", "maps"],
-  ["teams", "teams"],
+  ["limits", "Limits"],
+  ["print", "Debugging with print"],
+  ["maps", "Maps"],
+  ["teams", "Teams"],
 ] as const;
 
 function Code({ children, label }: { children: string; label?: string }) {
@@ -109,10 +110,24 @@ def step(handle):
 
 export default function Docs() {
   const [tool, setTool] = useState<"uv" | "pip">("uv");
+  const sectionList = useRef<HTMLElement>(null);
+  const [showJumpBar, setShowJumpBar] = useState(false);
+  const [jumpBarExpanded, setJumpBarExpanded] = useState(true);
+
+  useEffect(() => {
+    const element = sectionList.current;
+    if (!element) return;
+    const observer = new IntersectionObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setShowJumpBar(!entry.isIntersecting);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   return (
-    <main className="docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
-      <nav className="text-sm md:sticky md:top-24 md:self-start">
+    <main className="docs docs-page mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
+      <nav ref={sectionList} aria-label="Documentation sections" className="self-start text-sm">
         <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
           Get started
         </p>
@@ -143,8 +158,54 @@ export default function Docs() {
         </Link>
       </nav>
 
+      {showJumpBar && (
+        <div className={jumpBarExpanded
+          ? "fixed inset-x-0 top-14 z-30 border-b border-line bg-bg/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6"
+          : "fixed right-4 top-16 z-30"}>
+          <div className={jumpBarExpanded ? "mx-auto flex max-w-3xl items-center gap-3" : undefined}>
+            {jumpBarExpanded ? (
+              <>
+                <label htmlFor="docs-section" className="shrink-0 text-xs font-medium tracking-wide text-muted uppercase">
+                  Jump to
+                </label>
+                <Select
+                  id="docs-section"
+                  className="w-full max-w-sm"
+                  value=""
+                  onChange={(event) => {
+                    if (event.target.value) window.location.hash = event.target.value;
+                  }}
+                >
+                  <option value="">Select a section...</option>
+                  {[...STEPS, ...REFERENCE].map(([id, title]) => (
+                    <option key={id} value={id}>{title}</option>
+                  ))}
+                </Select>
+                <button
+                  type="button"
+                  className="ml-auto rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg"
+                  aria-expanded="true"
+                  onClick={() => setJumpBarExpanded(false)}
+                >
+                  Hide
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="rounded-full border border-line bg-bg px-3 py-2 text-xs font-medium shadow-md hover:bg-hover"
+                aria-expanded="false"
+                onClick={() => setJumpBarExpanded(true)}
+              >
+                Jump to
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       <article>
-        <Section id="install" n={1} title="install">
+        <Section id="install" n={1} title="Install">
           <table>
             <tbody>
               <tr>
@@ -179,7 +240,7 @@ export default function Docs() {
           <Code label="terminal">{tool === "uv" ? UV : PIP}</Code>
         </Section>
 
-        <Section id="write" n={2} title="write a bot">
+        <Section id="write" n={2} title="Write a bot">
           <p>
             A bot is a folder with a <code>main.py</code> that defines{" "}
             <code>step(handle)</code>
@@ -198,7 +259,7 @@ export default function Docs() {
           <Code>{STATE}</Code>
         </Section>
 
-        <Section id="run" n={3} title="run the game locally">
+        <Section id="run" n={3} title="Run the game locally">
           <Code label="terminal">ucbc run mybot mybot --view</Code>
           <p>
             Plays one bot folder against another (here, against itself),
@@ -251,7 +312,7 @@ export default function Docs() {
           </table>
         </Section>
 
-        <Section id="submit" n={4} title="submit">
+        <Section id="submit" n={4} title="Submit">
           <ol className="numbered">
             <li>
               <Link to="/register">Create an account</Link>, or{" "}
@@ -290,7 +351,7 @@ export default function Docs() {
           </p>
         </Section>
 
-        <Section id="watch" n={5} title="watch">
+        <Section id="watch" n={5} title="Watch">
           <p>
             A queued match appears under <strong>In progress</strong> on the platform, then under{" "}
             <strong>Matches</strong>:
@@ -305,7 +366,7 @@ export default function Docs() {
           </p>
         </Section>
 
-        <Section id="limits" title="limits">
+        <Section id="limits" title="Limits">
           <p>The same for every bot, locally and on the platform.</p>
           <div className="stats">
             <div>
@@ -341,7 +402,7 @@ export default function Docs() {
           </ul>
         </Section>
 
-        <Section id="print" title="debugging with print">
+        <Section id="print" title="Debugging with print">
           <Rule title="print is the only way to see inside a bot on the site." />
           <p>
             Output is saved in the replay. In the viewer, click a unit to see
@@ -351,7 +412,7 @@ export default function Docs() {
           <Code>[set 1 tick 1 team mybot bot 0] tick 1</Code>
         </Section>
 
-        <Section id="maps" title="maps">
+        <Section id="maps" title="Maps">
           <Code label="terminal">{`ucbc editor my.map
 ucbc run mybot mybot --map my.map --view
 ucbc run mybot mybot --sets 2 --map a.map --map b.map`}</Code>
@@ -363,7 +424,7 @@ ucbc run mybot mybot --sets 2 --map a.map --map b.map`}</Code>
           </p>
         </Section>
 
-        <Section id="teams" title="teams">
+        <Section id="teams" title="Teams">
           <p>
             Every account starts on a team of its own. To play as a group, one
             of you starts a team on the <Link to="/platform/profile">profile</Link> page

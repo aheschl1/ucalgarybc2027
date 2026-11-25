@@ -18,6 +18,7 @@ export interface Api {
   SetResult: SetResult;
   Submission: Submission;
   TeamCreate: TeamCreate;
+  TeamDetails: TeamDetails;
   TeamElo: TeamElo;
   TeamInfo: TeamInfo;
   TeamJoin: TeamJoin;
@@ -208,6 +209,13 @@ export interface Submission {
 }
 export interface TeamCreate {
   name: string;
+}
+export interface TeamDetails {
+  id: number;
+  name: string;
+  members: string[];
+  elo: number;
+  matches: number;
 }
 /**
  * A team's rating, rounded, and how many matches moved it. Anyone may read it.

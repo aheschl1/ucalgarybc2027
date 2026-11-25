@@ -40,3 +40,10 @@ class TeamJoin(BaseModel):
 
 class TeamRename(BaseModel):
     name: TeamName
+
+class TeamDetails(BaseModel):
+    id: int
+    name: str
+    members: list[str]
+    elo: int
+    matches: int

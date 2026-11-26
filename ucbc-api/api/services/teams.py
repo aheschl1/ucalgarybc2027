@@ -7,10 +7,8 @@ from psycopg.errors import UniqueViolation
 
 from api.db import DBConnection
 from api.errors import Conflict, NotFound
-from api.models.teams import MyTeam, TeamElo
+from api.models.teams import MyTeam, TeamDetails, TeamElo
 from api.models.users import User
-from api.models.teams import TeamDetails
-
 
 
 def new_code() -> str:
@@ -65,18 +63,7 @@ async def rename_team(db: DBConnection, user: User, name: str) -> MyTeam:
         raise Conflict(f"a team is already called {name}") from e
     return await my_team(db, user.team_id)
 
+
 async def get_details(db: DBConnection, team_id: int) -> TeamDetails:
-    team = await db.team_repo.get(team_id)
-    if team is None:
-        raise NotFound(f"no team {team_id}")
-
-    elo = await db.team_repo.get_elo(team_id)
-    assert elo is not None
-
-    return TeamDetails(
-        id=team.id,
-        name=team.name,
-        members=await db.team_repo.members(team_id),
-        elo=elo.elo,
-        matches=elo.matches,
-    )
+    elo = await get_elo(db, team_id)
+    return TeamDetails(**elo.model_dump(), members=await db.team_repo.members(team_id))

@@ -11,7 +11,7 @@ const SECTIONS = [
   ["dinos", "Dinos"],
   ["fossils", "Fossils"],
   ["artifacts", "Artifacts"],
-  ["merge", "Merge and Split"],
+  ["merge", "Merge and split"],
   ["attack", "Attacking"],
   ["vision", "Vision"],
   ["winning", "Winning"],
@@ -76,8 +76,8 @@ export default function Rules() {
           ))}
         </ul>
         <Link to="/docs" className="block rounded-md px-2 py-1 text-muted hover:bg-hover hover:text-fg">
-              Docs →
-            </Link>
+          Docs →
+        </Link>
       </nav>
 
       <JumpBar id="rules-sections" watch={sectionList} sections={SECTIONS} />
@@ -205,7 +205,7 @@ export default function Rules() {
           <p>A level <em>n</em> beacon powers up your dinos of level <em>n</em> and below.</p>
         </Section>
 
-        <Section id="merge" title="Merge and Split">
+        <Section id="merge" title="Merge and split">
           <p>
             <strong>Merge</strong> with a teammate 1 away: you move onto its tile and absorb it.
             Levels add, health adds (up to 50).

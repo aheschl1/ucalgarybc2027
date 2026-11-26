@@ -38,8 +38,10 @@ class TeamCreate(BaseModel):
 class TeamJoin(BaseModel):
     code: str
 
+
 class TeamRename(BaseModel):
     name: TeamName
+
 
 class TeamDetails(BaseModel):
     id: int

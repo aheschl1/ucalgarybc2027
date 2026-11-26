@@ -112,8 +112,8 @@ export default function Docs() {
   const sectionList = useRef<HTMLElement>(null);
 
   return (
-    <main className="docs docs-page mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
-      <nav ref={sectionList} aria-label="Documentation sections" className="self-start text-sm">
+    <main className="docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
+      <nav ref={sectionList} aria-label="Documentation sections" className="text-sm md:sticky md:top-24 md:self-start">
         <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">
           Get started
         </p>

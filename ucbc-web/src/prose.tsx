@@ -66,7 +66,7 @@ export function JumpBar({
     return (
       <button
         type="button"
-        className="fixed top-16 right-4 z-30 rounded-full border border-line bg-bg px-3 py-2 text-xs font-medium shadow-md hover:bg-hover"
+        className="fixed top-16 right-4 z-30 rounded-full border border-line bg-bg px-3 py-2 text-xs font-medium shadow-md hover:bg-hover md:hidden"
         aria-expanded="false"
         onClick={() => setExpanded(true)}
       >
@@ -76,7 +76,7 @@ export function JumpBar({
   }
 
   return (
-    <div className="fixed inset-x-0 top-14 z-30 border-b border-line bg-bg/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6">
+    <div className="fixed inset-x-0 top-14 z-30 border-b border-line bg-bg/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6 md:hidden">
       <div className="mx-auto flex max-w-3xl items-center gap-3">
         <button
           type="button"

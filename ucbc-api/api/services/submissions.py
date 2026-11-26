@@ -70,5 +70,7 @@ async def get_submission(db: DBConnection, id: UUID) -> Submission:
     return submission
 
 
-async def list_submissions(db: DBConnection, user: User, mine: bool) -> list[Submission]:
-    return await db.submission_repo.list_recent(user.team_id if mine else None)
+async def list_submissions(
+    db: DBConnection, user: User, mine: bool, team: int | None = None
+) -> list[Submission]:
+    return await db.submission_repo.list_recent(user.team_id if mine else team)

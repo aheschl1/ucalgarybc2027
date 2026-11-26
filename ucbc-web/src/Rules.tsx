@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Link } from "react-router";
-import { Rule, Section } from "./prose";
+import { JumpBar, Rule, Section } from "./prose";
 import { dino, Sprite, sprites, Tiles } from "./Tiles";
-import { Select } from "./ui";
 
 const SECTIONS = [
   ["overview", "Overview"],
@@ -62,19 +61,6 @@ function Level({ team, level }: { team: "a" | "b"; level: number }) {
 
 export default function Rules() {
   const sectionList = useRef<HTMLElement>(null);
-  const [showJumpBar, setShowJumpBar] = useState(false);
-  const [jumpBarExpanded, setJumpBarExpanded] = useState(true);
-
-  useEffect(() => {
-    const element = sectionList.current;
-    if (!element) return;
-    const observer = new IntersectionObserver((entries) => {
-      const entry = entries[0];
-      if (entry) setShowJumpBar(!entry.isIntersecting);
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <main className="rules docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
@@ -94,51 +80,7 @@ export default function Rules() {
             </Link>
       </nav>
 
-      {showJumpBar && (
-        <div className={jumpBarExpanded
-          ? "fixed inset-x-0 top-14 z-30 border-b border-line bg-bg/95 px-4 py-3 shadow-sm backdrop-blur sm:px-6"
-          : "fixed right-4 top-16 z-30"}>
-          <div className={jumpBarExpanded ? "mx-auto flex max-w-3xl items-center gap-3" : undefined}>
-            {jumpBarExpanded ? (
-              <>
-                <label htmlFor="rules-section" className="shrink-0 text-xs font-medium tracking-wide text-muted uppercase">
-                  Jump to
-                </label>
-                <Select
-                  id="rules-section"
-                  className="w-full max-w-sm"
-                  value=""
-                  onChange={(event) => {
-                    if (event.target.value) window.location.hash = event.target.value;
-                  }}
-                >
-                  <option value="">Select a section...</option>
-                  {SECTIONS.map(([id, title]) => (
-                    <option key={id} value={id}>{title}</option>
-                  ))}
-                </Select>
-                <button
-                  type="button"
-                  className="ml-auto rounded-md px-2 py-1 text-xs text-muted hover:bg-hover hover:text-fg"
-                  aria-expanded="true"
-                  onClick={() => setJumpBarExpanded(false)}
-                >
-                  Hide
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="rounded-full border border-line bg-bg px-3 py-2 text-xs font-medium shadow-md hover:bg-hover"
-                aria-expanded="false"
-                onClick={() => setJumpBarExpanded(true)}
-              >
-                Jump to
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <JumpBar id="rules-sections" watch={sectionList} sections={SECTIONS} />
 
       <article>
         <Section id="overview" title="Overview">

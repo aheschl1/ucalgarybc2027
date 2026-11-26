@@ -38,5 +38,14 @@ class TeamCreate(BaseModel):
 class TeamJoin(BaseModel):
     code: str
 
+
 class TeamRename(BaseModel):
     name: TeamName
+
+
+class TeamDetails(BaseModel):
+    id: int
+    name: str
+    members: list[str]
+    elo: int
+    matches: int

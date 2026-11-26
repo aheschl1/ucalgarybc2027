@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { describe, get, type TeamElo } from "./api";
 import { Card, cx, Empty, ErrorText, Loading, Page, Table } from "./ui";
+import { Link } from "react-router";
 
 /** Every team's rating, highest first. Public; `teamId` marks the viewer's own team. */
 export default function Leaderboard({ teamId }: { teamId?: number }) {
@@ -44,7 +45,12 @@ export default function Leaderboard({ teamId }: { teamId?: number }) {
                     {i + 1}
                   </td>
                   <td className="px-4 py-3 font-medium">
-                    {t.name}
+                    <Link
+                      to={`/teams/${t.id}`}
+                      className="hover:text-accent hover:underline"
+                    >
+                      {t.name}
+                    </Link>
                     {mine && <span className="ml-2 text-xs font-normal text-accent">your team</span>}
                   </td>
                   <td className="w-1/3 px-4 py-3">

@@ -7,7 +7,7 @@ from psycopg.errors import UniqueViolation
 
 from api.db import DBConnection
 from api.errors import Conflict, NotFound
-from api.models.teams import MyTeam, TeamElo
+from api.models.teams import MyTeam, TeamDetails, TeamElo
 from api.models.users import User
 
 
@@ -62,3 +62,8 @@ async def rename_team(db: DBConnection, user: User, name: str) -> MyTeam:
     except UniqueViolation as e:
         raise Conflict(f"a team is already called {name}") from e
     return await my_team(db, user.team_id)
+
+
+async def get_details(db: DBConnection, team_id: int) -> TeamDetails:
+    elo = await get_elo(db, team_id)
+    return TeamDetails(**elo.model_dump(), members=await db.team_repo.members(team_id))

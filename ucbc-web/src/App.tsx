@@ -14,6 +14,7 @@ import Rules from "./Rules";
 import Skins from "./Skins";
 import Tree from "./Tree";
 import Viewer from "./Viewer";
+import TeamView from "./TeamView";
 
 export default function App() {
   // undefined until the API says whether the session cookie is live.
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="docs" element={<Docs />} />
         <Route path="rules" element={<Rules />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
+        <Route path="teams/:teamId" element={<TeamView api={api || null} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route
           path="login"

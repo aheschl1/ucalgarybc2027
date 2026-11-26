@@ -112,6 +112,7 @@ export type {
   MyTeam as Team,
   SetResult,
   Submission,
+  TeamDetails,
   TeamElo,
   User,
 } from "./api.gen";

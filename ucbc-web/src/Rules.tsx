@@ -1,19 +1,20 @@
+import { useRef } from "react";
 import { Link } from "react-router";
-import { Rule, Section } from "./prose";
+import { JumpBar, Rule, Section } from "./prose";
 import { dino, Sprite, sprites, Tiles } from "./Tiles";
 
 const SECTIONS = [
-  ["overview", "overview"],
-  ["board", "the board"],
-  ["turns", "turns"],
-  ["bones", "bones"],
-  ["dinos", "dinos"],
-  ["fossils", "fossils"],
-  ["artifacts", "artifacts"],
-  ["merge", "merge and split"],
-  ["attack", "attacking"],
-  ["vision", "vision"],
-  ["winning", "winning"],
+  ["overview", "Overview"],
+  ["board", "The board"],
+  ["turns", "Turns"],
+  ["bones", "Bones"],
+  ["dinos", "Dinos"],
+  ["fossils", "Fossils"],
+  ["artifacts", "Artifacts"],
+  ["merge", "Merge and split"],
+  ["attack", "Attacking"],
+  ["vision", "Vision"],
+  ["winning", "Winning"],
 ] as const;
 
 const LEGEND = [
@@ -59,9 +60,11 @@ function Level({ team, level }: { team: "a" | "b"; level: number }) {
 }
 
 export default function Rules() {
+  const sectionList = useRef<HTMLElement>(null);
+
   return (
     <main className="docs mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-8 sm:px-6 sm:py-10 md:grid-cols-[11rem_minmax(0,42rem)]">
-      <nav className="text-sm md:sticky md:top-24 md:self-start">
+      <nav ref={sectionList} aria-label="Game rules sections" className="text-sm md:sticky md:top-24 md:self-start">
         <p className="mb-2 text-xs font-medium tracking-wide text-muted uppercase">Game rules</p>
         <ul className="mb-6 flex flex-col gap-0.5">
           {SECTIONS.map(([id, title]) => (
@@ -77,8 +80,10 @@ export default function Rules() {
         </Link>
       </nav>
 
+      <JumpBar id="rules-sections" watch={sectionList} sections={SECTIONS} />
+
       <article>
-        <Section id="overview" title="overview">
+        <Section id="overview" title="Overview">
           <p>
             Two teams each have a lab that spends bones to spawn dinos. Dinos bring fossils home
             to earn more bones, claim artifacts for new powers, merge to grow stronger, and fight.
@@ -99,7 +104,7 @@ export default function Rules() {
           </p>
         </Section>
 
-        <Section id="board" title="the board">
+        <Section id="board" title="The board">
           <p>
             A grid up to 100×100, mirrored so both teams start alike. Each tile holds at most one
             thing.
@@ -118,7 +123,7 @@ export default function Rules() {
           </p>
         </Section>
 
-        <Section id="turns" title="turns">
+        <Section id="turns" title="Turns">
           <p>
             Every tick, each bot takes a turn in the order it was spawned, so a random team's
             lab goes first. Per turn, a bot can:
@@ -132,7 +137,7 @@ export default function Rules() {
           <p className="dim">Extra actions are refused, but your code keeps running.</p>
         </Section>
 
-        <Section id="bones" title="bones">
+        <Section id="bones" title="Bones">
           <p>Bones are shared by the whole team. You start with 50.</p>
           <div className="stats">
             <div>
@@ -154,7 +159,7 @@ export default function Rules() {
           </div>
         </Section>
 
-        <Section id="dinos" title="dinos">
+        <Section id="dinos" title="Dinos">
           <p>
             The lab can spawn a level 1 dino with 10 health on any free tile around it.
           </p>
@@ -164,7 +169,7 @@ export default function Rules() {
           />
         </Section>
 
-        <Section id="fossils" title="fossils">
+        <Section id="fossils" title="Fossils">
           <p>
             Grab a fossil to carry it; a dino holds one thing at a time. Drop it on your lab and
             your income goes up by 1 per tick. If a dino dies, what it held falls where it stood,
@@ -173,7 +178,7 @@ export default function Rules() {
           <Tiles rows={["A  _  .  .  f", "_  _  a1f .  ."]} caption="Bring fossils home." />
         </Section>
 
-        <Section id="artifacts" title="artifacts">
+        <Section id="artifacts" title="Artifacts">
           <p>
             Claim an artifact by placing a beacon on it, for bones. A beacon starts at level 1 with
             high health; spend more bones to level it up. Enemies can attack it, with the same
@@ -200,7 +205,7 @@ export default function Rules() {
           <p>A level <em>n</em> beacon powers up your dinos of level <em>n</em> and below.</p>
         </Section>
 
-        <Section id="merge" title="merge and split">
+        <Section id="merge" title="Merge and split">
           <p>
             <strong>Merge</strong> with a teammate 1 away: you move onto its tile and absorb it.
             Levels add, health adds (up to 50).
@@ -221,7 +226,7 @@ export default function Rules() {
           </div>
         </Section>
 
-        <Section id="attack" title="attacking">
+        <Section id="attack" title="Attacking">
           <p>
             Attack an enemy 1 away for 5 bones. Bigger hits smaller for the level gap squared.
             Equals deal 2. Smaller hits bigger for half that, rounded down. Always at least 1.
@@ -253,7 +258,7 @@ export default function Rules() {
           <Rule title="Labs have 100 health. Lose yours and you lose the game." />
         </Section>
 
-        <Section id="vision" title="vision">
+        <Section id="vision" title="Vision">
           <p>
             A bot sees a square around it: 2 from a lab's edge, 3 for a dino, plus 1 for every 2
             levels after the first, plus any artifact bonus. Looking further raises an error.
@@ -264,7 +269,7 @@ export default function Rules() {
           </p>
         </Section>
 
-        <Section id="winning" title="winning">
+        <Section id="winning" title="Winning">
           <p>Destroy the enemy lab to win at once. Otherwise, after 1000 ticks, the team with:</p>
           <ol className="numbered">
             <li>the most points: 1 per unspent bone, 100 per claimed artifact,</li>

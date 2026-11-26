@@ -1,19 +1,22 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { describe, get, makeApi, type Submission, type TeamDetails } from "./api";
+import {
+  type Api,
+  describe,
+  get,
+  type Submission,
+  type TeamDetails,
+} from "./api";
 import { MatchList } from "./matches";
 import { SubmissionTable } from "./Tree";
-import { Card, Count, Empty, ErrorText, Loading, Page } from "./ui";
+import { Card, Count, Empty, ErrorText, Loading, Page, TextLink } from "./ui";
 
-// Team pages can be opened outside the signed-in platform routes. The API wrapper
-// keeps the shared match list working here; auth failures are shown by the list.
-const api = makeApi(() => {});
-
-export default function TeamView() {
+export default function TeamView({ api }: { api: Api | null }) {
   const { teamId } = useParams();
   const [team, setTeam] = useState<TeamDetails | null>(null);
   const [bots, setBots] = useState<Submission[] | null>(null);
   const [error, setError] = useState("");
+  const [botsError, setBotsError] = useState("");
 
   useEffect(() => {
     if (!teamId) return;
@@ -22,13 +25,14 @@ export default function TeamView() {
     setTeam(null);
     setBots(null);
     setError("");
+    setBotsError("");
     get<TeamDetails>(`/teams/${encodeURIComponent(teamId)}`).then(
       (loaded) => {
         if (!current) return;
         setTeam(loaded);
-        get<Submission[]>("/submissions").then(
-          (all) => current && setBots(all.filter((bot) => bot.team_id === loaded.id)),
-          (err) => current && setError(describe(err)),
+        api?.load<Submission[]>(`/submissions?team=${loaded.id}`).then(
+          (rows) => current && setBots(rows),
+          (err) => current && setBotsError(describe(err)),
         );
       },
       (err) => current && setError(describe(err)),
@@ -36,7 +40,7 @@ export default function TeamView() {
     return () => {
       current = false;
     };
-  }, [teamId]);
+  }, [teamId, api]);
 
   return (
     <Page title={team?.name ?? "Team"}>
@@ -68,9 +72,9 @@ export default function TeamView() {
                   </p>
                   {team.members.length > 0 ? (
                     <ul className="flex flex-wrap gap-1.5">
-                      {team.members.map((member) => (
+                      {team.members.map((member, i) => (
                         <li
-                          key={member}
+                          key={i}
                           className="flex items-center gap-1.5 rounded-full border border-line bg-panel py-0.5 pr-2.5 pl-0.5"
                         >
                           <span className="grid size-5 place-items-center rounded-full bg-hover text-[10px] font-semibold uppercase">
@@ -87,27 +91,45 @@ export default function TeamView() {
               </div>
             </Card>
 
-            <Card title={<>Bots {bots && <Count n={bots.length} />}</>} flush>
-              {error ? (
-                <div className="p-4"><ErrorText>{error}</ErrorText></div>
-              ) : !bots ? (
-                <Loading />
-              ) : bots.length === 0 ? (
-                <Empty>No bots yet</Empty>
-              ) : (
-                <SubmissionTable rows={bots} />
-              )}
-            </Card>
+            {!api ? (
+              <Card title="Bots and matches">
+                <p>
+                  <TextLink to={`/login?next=/teams/${team.id}`}>
+                    Log in
+                  </TextLink>{" "}
+                  to see this team's bots and match history.
+                </p>
+              </Card>
+            ) : (
+              <>
+                <Card
+                  title={<>Bots {bots && <Count n={bots.length} />}</>}
+                  flush
+                >
+                  {botsError ? (
+                    <div className="p-4">
+                      <ErrorText>{botsError}</ErrorText>
+                    </div>
+                  ) : !bots ? (
+                    <Loading />
+                  ) : bots.length === 0 ? (
+                    <Empty>No bots yet</Empty>
+                  ) : (
+                    <SubmissionTable rows={bots} />
+                  )}
+                </Card>
 
-            <Card title="Match history" flush>
-              <MatchList
-                api={api}
-                version={0}
-                query={{ team: team.id }}
-                empty="No matches yet"
-                hint="This team's matches will appear here once played."
-              />
-            </Card>
+                <Card title="Match history" flush>
+                  <MatchList
+                    api={api}
+                    version={0}
+                    query={{ team: team.id }}
+                    empty="No matches yet"
+                    hint="Platform matches, and any against your team, appear here once played."
+                  />
+                </Card>
+              </>
+            )}
           </>
         )}
       </div>

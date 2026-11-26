@@ -57,7 +57,7 @@ export default function App() {
         <Route path="docs" element={<Docs />} />
         <Route path="rules" element={<Rules />} />
         <Route path="leaderboard" element={<Leaderboard teamId={user?.team_id} />} />
-        <Route path="teams/:teamId" element={<TeamView />} />
+        <Route path="teams/:teamId" element={<TeamView api={api || null} />} />
         {/* Logging in swaps these for redirects, which is what lands you on `next`. */}
         <Route
           path="login"
